@@ -47,7 +47,11 @@ static bool sk_ino(FILE* f, SkFILEID* id) {
 
     //TODO: call GetFileInformationByHandleEx on Vista and later with FileIdInfo.
     BY_HANDLE_FILE_INFORMATION info;
+#ifndef RTC_WINRT_FAMILY
     if (0 == GetFileInformationByHandle(file, &info)) {
+#else
+    if (0 == GetFileInformationByHandleEx(file, FILE_INFO_BY_HANDLE_CLASS::FileIdInfo, &info, sizeof(BY_HANDLE_FILE_INFORMATION))) {
+#endif
         return false;
     }
     id->fVolume = info.dwVolumeSerialNumber;
@@ -94,15 +98,24 @@ void* sk_fdmmap(int fileno, size_t* length) {
     if (!SkTFitsIn<size_t>(fileSize.QuadPart)) {
         return nullptr;
     }
-
-    SkAutoWinMMap mmap(CreateFileMapping(file, nullptr, PAGE_READONLY, 0, 0, nullptr));
+#ifndef RTC_WINRT_FAMILY
+    HANDLE fileMapping = CreateFileMapping(file, nullptr, PAGE_READONLY, 0, 0, nullptr);
+#else
+    HANDLE fileMapping = CreateFileMappingFromApp(file, nullptr, PAGE_READONLY, 0, nullptr);
+#endif
+    
+    SkAutoWinMMap mmap(fileMapping);
     if (!mmap.isValid()) {
         //TODO: use SK_TRACEHR(GetLastError(), "Could not create file mapping.") to report.
         return nullptr;
     }
 
     // Eventually call UnmapViewOfFile
+#ifndef RTC_WINRT_FAMILY
     void* addr = MapViewOfFile(mmap, FILE_MAP_READ, 0, 0, 0);
+#else
+    void* addr = MapViewOfFileFromApp(mmap, FILE_MAP_READ, 0, 0);
+#endif
     if (nullptr == addr) {
         //TODO: use SK_TRACEHR(GetLastError(), "Could not map view of file.") to report.
         return nullptr;

@@ -16,7 +16,18 @@
 class AutoLibraryUnload {
 public:
     AutoLibraryUnload(const char* moduleName) {
-        fModule = LoadLibraryA(moduleName);
+#if RTC_WINRT_FAMILY
+      size_t newSize = strlen(moduleName) + 1;
+      wchar_t* wcString = new wchar_t[newSize];
+
+      size_t convertedChars = 0;
+      mbstowcs_s(&convertedChars, wcString, newSize, moduleName, _TRUNCATE);
+
+      fModule = LoadPackagedLibrary(wcString, 0);
+      delete[] wcString;
+#else
+      fModule = LoadLibrary(moduleName);
+#endif
     }
     ~AutoLibraryUnload() {
         if (fModule) {
