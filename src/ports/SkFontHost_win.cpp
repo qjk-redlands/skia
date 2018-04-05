@@ -1068,7 +1068,9 @@ static const uint8_t* getInverseGammaTableClearType() {
     static uint8_t gTableClearType[256];
     once([]{
         UINT level = 0;
-        if (!SystemParametersInfo(SPI_GETFONTSMOOTHINGCONTRAST, 0, &level, 0) || !level) {
+#ifndef RTC_WINRT_FAMILY
+        if (!SystemParametersInfo(SPI_GETFONTSMOOTHINGCONTRAST, 0, &level, 0) || !level)
+#endif
             // can't get the data, so use a default
             level = 1400;
         }
