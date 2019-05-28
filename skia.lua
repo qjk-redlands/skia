@@ -415,7 +415,7 @@ project "skia"
 
   local t_includedirs = {
     -- "../giflib/lib",
-    "../jpeg",
+    "../libjpeg-turbo",
     "../libpng",
     "../zlib",
     "include",
