@@ -315,6 +315,7 @@ project "skia"
   -- Add common Win and WinUWP
 
   local common_win = {
+    "src/core/SkSharedMutex.cpp",
     "src/fonts/SkFontMgr_indirect.cpp",
     "src/ports/SkDebug_win.cpp",
     "src/ports/SkFontMgr_win_dw.cpp",
