@@ -48,13 +48,42 @@ static bool sk_ino(FILE* f, SkFILEID* id) {
         return false;
     }
 
-    //TODO: call GetFileInformationByHandleEx on Vista and later with FileIdInfo.
+#ifdef RTC_WINDOWS_DESKTOP
+    // TODO: call GetFileInformationByHandleEx on Vista and later with FileIdInfo.
     BY_HANDLE_FILE_INFORMATION info;
     if (0 == GetFileInformationByHandle(file, &info)) {
         return false;
     }
     id->fVolume = info.dwVolumeSerialNumber;
     id->fLsbSize = info.nFileIndexLow + (((ULONGLONG)info.nFileIndexHigh) << 32);
+#else  // RTC_WINDOWS_UNIVERSAL
+    FILE_ID_INFO fid_info;
+    if (0 == GetFileInformationByHandleEx(file, FileIdInfo, &fid_info, sizeof(fid_info))) {
+        return false;
+    }
+    id->fVolume = fid_info.VolumeSerialNumber;
+
+    // FileId is 128 bit represented as BYTE[16]
+    ULONGLONG fileIndexHigh = (ULONGLONG)(fid_info.FileId.Identifier[7] |
+                                          ((ULONGLONG)fid_info.FileId.Identifier[6] << 8) |
+                                          ((ULONGLONG)fid_info.FileId.Identifier[5] << 16) |
+                                          ((ULONGLONG)fid_info.FileId.Identifier[4] << 24) |
+                                          ((ULONGLONG)fid_info.FileId.Identifier[3] << 32) |
+                                          ((ULONGLONG)fid_info.FileId.Identifier[2] << 40) |
+                                          ((ULONGLONG)fid_info.FileId.Identifier[1] << 48) |
+                                          ((ULONGLONG)fid_info.FileId.Identifier[0] << 56));
+
+    ULONGLONG fileIndexLow = (ULONGLONG)(fid_info.FileId.Identifier[15] |
+                                         ((ULONGLONG)fid_info.FileId.Identifier[14] << 8) |
+                                         ((ULONGLONG)fid_info.FileId.Identifier[13] << 16) |
+                                         ((ULONGLONG)fid_info.FileId.Identifier[12] << 24) |
+                                         ((ULONGLONG)fid_info.FileId.Identifier[11] << 32) |
+                                         ((ULONGLONG)fid_info.FileId.Identifier[10] << 40) |
+                                         ((ULONGLONG)fid_info.FileId.Identifier[9] << 48) |
+                                         ((ULONGLONG)fid_info.FileId.Identifier[8] << 56));
+
+    id->fLsbSize = fileIndexLow + (fileIndexHigh << 32);
+#endif
     id->fMsbSize = 0;
 
     return true;

@@ -179,7 +179,7 @@ public:
     SkConvertToUTF32() {}
 
     const SkUnichar* convert(const void* text, size_t byteLength, SkTextEncoding encoding) {
-        const SkUnichar* uni;
+        const SkUnichar* uni = nullptr;
         switch (encoding) {
             case SkTextEncoding::kUTF8: {
                 uni = fStorage.reset(byteLength);

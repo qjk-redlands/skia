@@ -37,7 +37,7 @@ void SkTLS::PlatformSetSpecific(void* ptr) {
 
 // Call TLS destructors on thread exit. Code based on Chromium's
 // base/threading/thread_local_storage_win.cc
-#ifdef _WIN64
+#if defined(_WIN64) || defined(_M_ARM) || defined(_M_ARM64)
 
 #pragma comment(linker, "/INCLUDE:_tls_used")
 #pragma comment(linker, "/INCLUDE:skia_tls_callback")
@@ -77,4 +77,4 @@ PIMAGE_TLS_CALLBACK skia_tls_callback = onTLSCallback;
 #endif
 }
 
-#endif//defined(SK_BUILD_FOR_WIN)
+#endif  // defined(SK_BUILD_FOR_WIN)
