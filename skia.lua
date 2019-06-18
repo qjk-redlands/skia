@@ -368,14 +368,6 @@ project "skia"
     "src/utils/mac/SkStream_mac.cpp",
   }
 
-  -- Opts none
-
-  local opts_none = {
-    "src/opts/SkBitmapProcState_opts_none.cpp",
-    "src/opts/SkBlitMask_opts_none.cpp",
-    "src/opts/SkBlitRow_opts_none.cpp",
-  }
-
   -- Opts SSE
 
   local opts_sse = {
@@ -383,24 +375,8 @@ project "skia"
     "src/opts/SkOpts_sse41.cpp",
     "src/opts/SkOpts_sse42.cpp",
     "src/opts/SkOpts_avx.cpp",
+    "src/opts/SkOpts_crc32.cpp",
     "src/opts/SkOpts_hsw.cpp",
-  }
-
-  -- Opts arm
-
-  local opts_arm = {
-    -- "src/opts/SkBitmapProcState_opts_arm.cpp",
-    -- "src/opts/SkBlitMask_opts_arm.cpp",
-    -- "src/opts/SkBlitRow_opts_arm.cpp",
-  }
-
-  -- Opts NEON
-
-  local opts_neon = {
-    -- "src/opts/SkBitmapProcState_arm_neon.cpp",
-    -- "src/opts/SkBitmapProcState_matrixProcs_neon.cpp",
-    -- "src/opts/SkBlitMask_opts_arm_neon.cpp",
-    -- "src/opts/SkBlitRow_opts_arm_neon.cpp",
   }
 
   flags {
@@ -469,7 +445,6 @@ project "skia"
     configuration { "windows" }
 
       defines {
-        "SK_GAMMA_SRGB",
         "SK_CPU_SSE_LEVEL=20",
         "_CRT_SECURE_NO_WARNINGS",
       }
@@ -680,8 +655,8 @@ project "skia"
 
     configuration { "ios_arm64_debug" }
 
-      files {
-        opts_arm,
+      defines {
+        "SK_ARM_HAS_NEON",
       }
 
     -- -------------------------------------------------------------
@@ -696,8 +671,8 @@ project "skia"
 
     configuration { "ios_arm64_release" }
 
-      files {
-        opts_arm,
+      defines {
+        "SK_ARM_HAS_NEON",
       }
 
     -- -------------------------------------------------------------
@@ -781,11 +756,6 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
 
-      files {
-        opts_arm,
-        opts_neon,
-      }
-
     -- -------------------------------------------------------------
     -- configuration { "android_armv7_release" }
     -- -------------------------------------------------------------
@@ -800,11 +770,6 @@ project "skia"
 
       defines {
         "SK_ARM_HAS_NEON",
-      }
-
-      files {
-        opts_arm,
-        opts_neon,
       }
 
     -- -------------------------------------------------------------
@@ -859,11 +824,6 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
 
-      files {
-        opts_arm,
-        opts_neon,
-      }
-
     -- -------------------------------------------------------------
     -- configuration { "android_arm64_release" }
     -- -------------------------------------------------------------
@@ -878,11 +838,6 @@ project "skia"
 
       defines {
         "SK_ARM_HAS_NEON",
-      }
-
-      files {
-        opts_arm,
-        opts_neon,
       }
 
     -- -------------------------------------------------------------
@@ -902,9 +857,7 @@ project "skia"
     configuration { "windows" }
 
       defines {
-        "SK_GAMMA_SRGB",
         "_CRT_SECURE_NO_WARNINGS",
-        "SK_HAS_DWRITE_2_H",
       }
 
       includedirs {
@@ -917,10 +870,8 @@ project "skia"
       }
 
       -- Windows premake doesn't support per architecture files so add all opts and ifdef them in the code
-      -- Neon doesn't compile for arm so use opts_none instead
       files {
         common_win,
-        opts_none,
         opts_sse,
       }
 
