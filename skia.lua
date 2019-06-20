@@ -353,6 +353,7 @@ project "skia"
   local common_android = {
     common_unix,
     "src/core/SkTSearch.cpp",
+    "src/ports/SkDebug_android.cpp",
     "src/ports/SkFontHost_FreeType.cpp",
     "src/ports/SkFontHost_FreeType_common.cpp",
     "src/ports/SkFontMgr_android.cpp",
