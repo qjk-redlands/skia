@@ -380,6 +380,12 @@ project "skia"
     "src/opts/SkOpts_hsw.cpp",
   }
 
+  -- Opts arm64
+
+  local opts_arm = {
+    "src/opts/SkOpts_crc32.cpp",
+  }
+  
   flags {
     "NoPCH",
   }
@@ -659,6 +665,8 @@ project "skia"
       defines {
         "SK_ARM_HAS_NEON",
       }
+      
+      files { opts_arm }
 
     -- -------------------------------------------------------------
     -- configuration { "ios_arm64_release" }
@@ -676,6 +684,8 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
 
+      files { opts_arm }
+      
     -- -------------------------------------------------------------
     -- configuration { "ios_sim64_debug" }
     -- -------------------------------------------------------------
@@ -825,6 +835,8 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
 
+      files { opts_arm }
+      
     -- -------------------------------------------------------------
     -- configuration { "android_arm64_release" }
     -- -------------------------------------------------------------
@@ -841,6 +853,8 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
 
+      files { opts_arm }
+      
     -- -------------------------------------------------------------
   end
 
