@@ -1036,6 +1036,7 @@ HRESULT SkFontMgr_DirectWrite::getByFamilyName(const WCHAR wideFamilyName[],
 }
 
 HRESULT SkFontMgr_DirectWrite::getDefaultFontFamily(IDWriteFontFamily** fontFamily) const {
+#ifdef RTC_WINDOWS_DESKTOP
     NONCLIENTMETRICSW metrics;
     metrics.cbSize = sizeof(metrics);
     if (0 == SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0)) {
@@ -1043,6 +1044,11 @@ HRESULT SkFontMgr_DirectWrite::getDefaultFontFamily(IDWriteFontFamily** fontFami
     }
     HRM(this->getByFamilyName(metrics.lfMessageFont.lfFaceName, fontFamily),
         "Could not create DWrite font family from LOGFONT.");
+#else  // RTC_WINDOWS_UNIVERSAL
+    const wchar_t* default_font_family_name = L"Segoe UI";
+    HRM(this->getByFamilyName(default_font_family_name, fontFamily),
+        "Could not create DWrite font family from LOGFONT.");
+#endif
     return S_OK;
 }
 
