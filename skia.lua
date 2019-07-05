@@ -382,7 +382,7 @@ project "skia"
 
   -- Opts arm64
 
-  local opts_arm = {
+  local opts_arm64 = {
     "src/opts/SkOpts_crc32.cpp",
   }
   
@@ -392,7 +392,6 @@ project "skia"
 
   defines {
     "SK_SUPPORT_GPU=0",
-    "SK_SCALAR_IS_FLOAT",
     "SK_HAS_JPEG_LIBRARY",
     "SK_HAS_PNG_LIBRARY",
   }
@@ -452,18 +451,13 @@ project "skia"
     configuration { "windows" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
         "_CRT_SECURE_NO_WARNINGS",
       }
 
       includedirs {
         "include/utils/win",
         "src/utils/win",
-      }
-
-      buildoptions {
-        "/sdl",
-        "/wd4703",
       }
 
       files {
@@ -536,8 +530,7 @@ project "skia"
     configuration { "linux" }
 
       defines {
-      	"SK_BUILD_FOR_UNIX",
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
       includedirs {
@@ -590,7 +583,7 @@ project "skia"
     configuration { "macosx" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
       files {
@@ -666,7 +659,7 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
       
-      files { opts_arm }
+      files { opts_arm64 }
 
     -- -------------------------------------------------------------
     -- configuration { "ios_arm64_release" }
@@ -684,7 +677,7 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
 
-      files { opts_arm }
+      files { opts_arm64 }
       
     -- -------------------------------------------------------------
     -- configuration { "ios_sim64_debug" }
@@ -699,7 +692,7 @@ project "skia"
     configuration { "ios_sim64_debug" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
       files { opts_sse }
@@ -717,7 +710,7 @@ project "skia"
     configuration { "ios_sim64_release" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
       files { opts_sse }
@@ -737,10 +730,6 @@ project "skia"
     -- project specific configuration settings
 
     configuration { "android*" }
-
-      defines {
-      	"SK_BUILD_FOR_ANDROID",
-      }
 
       files {
         common_android,
@@ -796,7 +785,7 @@ project "skia"
     configuration { "android_x86_debug" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
       files { opts_sse }
@@ -814,7 +803,7 @@ project "skia"
     configuration { "android_x86_release" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
       files { opts_sse }
@@ -835,7 +824,7 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
 
-      files { opts_arm }
+      files { opts_arm64 }
       
     -- -------------------------------------------------------------
     -- configuration { "android_arm64_release" }
@@ -853,7 +842,7 @@ project "skia"
         "SK_ARM_HAS_NEON",
       }
 
-      files { opts_arm }
+      files { opts_arm64 }
       
     -- -------------------------------------------------------------
   end
@@ -880,11 +869,6 @@ project "skia"
         "src/utils/win",
       }
 
-      buildoptions {
-        "/sdl",
-      }
-
-      -- Windows premake doesn't support per architecture files so add all opts and ifdef them in the code
       files {
         common_win,
         opts_sse,
@@ -903,7 +887,7 @@ project "skia"
     configuration { "winuwp_debug", "x32" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
     -- -------------------------------------------------------------
@@ -919,7 +903,7 @@ project "skia"
     configuration { "winuwp_release", "x32" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
     -- -------------------------------------------------------------
@@ -935,7 +919,7 @@ project "skia"
     configuration { "winuwp_debug", "x64" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
     -- -------------------------------------------------------------
@@ -951,7 +935,7 @@ project "skia"
     configuration { "winuwp_release", "x64" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=20",
+        "SK_CPU_SSE_LEVEL=31",
       }
 
     -- -------------------------------------------------------------

@@ -6,6 +6,7 @@
  * found in the LICENSE file.
  */
 
+
 #ifndef SkUserConfig_DEFINED
 #define SkUserConfig_DEFINED
 
@@ -71,6 +72,7 @@
 */
 //#define SK_UINT8_BITFIELD_BENDIAN
 //#define SK_UINT8_BITFIELD_LENDIAN
+
 
 /*  To write debug messages to a console, skia will call SkDebugf(...) following
     printf conventions (e.g. const char* format, ...). If you want to redirect

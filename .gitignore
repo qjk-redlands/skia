@@ -31,7 +31,6 @@ platform_tools/android/apps/*/build
 platform_tools/android/apps/*/src/main/libs
 platform_tools/android/apps/*.hprof
 platform_tools/android/apps/*/.externalNativeBuild
-Makefile
 
 sampleapp_prefs.txt
 /skps
@@ -56,3 +55,39 @@ gl-out
 
 node_modules
 tools/lottiecap/filmstrip.png
+
+# RTC ignores
+# Premake generated files #
+###########################
+*.vcxproj*
+*.sln
+Makefile
+
+# OS generated files #
+######################
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.project
+
+# VS generated files #
+######################
+ipch/
+*.suo
+*.opensdf
+*.sdf
+*.vcxproj
+*.filters
+*.user
+
+# Qt files
+###########################
+*.config
+*.creator
+*.files
+*.includes
+moc/
