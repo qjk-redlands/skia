@@ -390,14 +390,7 @@ project "skia"
     "NoPCH",
   }
 
-  defines {
-    "SK_SUPPORT_GPU=0",
-    "SK_HAS_JPEG_LIBRARY",
-    "SK_HAS_PNG_LIBRARY",
-  }
-
   local t_includedirs = {
-    -- "../giflib/lib",
     "../libjpeg-turbo",
     "../libpng",
     "../zlib",
@@ -451,7 +444,6 @@ project "skia"
     configuration { "windows" }
 
       defines {
-        "SK_CPU_SSE_LEVEL=31",
         "_CRT_SECURE_NO_WARNINGS",
       }
 
@@ -529,10 +521,6 @@ project "skia"
 
     configuration { "linux" }
 
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
-
       includedirs {
         "/usr/include/freetype2",
       }
@@ -581,10 +569,6 @@ project "skia"
     -- project specific configuration settings
 
     configuration { "macosx" }
-
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
 
       files {
         common_cocoa,
@@ -654,10 +638,6 @@ project "skia"
     -- project specific configuration settings
 
     configuration { "ios_arm64_debug" }
-
-      defines {
-        "SK_ARM_HAS_NEON",
-      }
       
       files { opts_arm64 }
 
@@ -673,10 +653,6 @@ project "skia"
 
     configuration { "ios_arm64_release" }
 
-      defines {
-        "SK_ARM_HAS_NEON",
-      }
-
       files { opts_arm64 }
       
     -- -------------------------------------------------------------
@@ -691,10 +667,6 @@ project "skia"
 
     configuration { "ios_sim64_debug" }
 
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
-
       files { opts_sse }
 
     -- -------------------------------------------------------------
@@ -708,10 +680,6 @@ project "skia"
     -- project specific configuration settings
 
     configuration { "ios_sim64_release" }
-
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
 
       files { opts_sse }
 
@@ -750,11 +718,7 @@ project "skia"
 
     -- project specific configuration settings
 
-    configuration { "android_armv7_debug" }
-
-      defines {
-        "SK_ARM_HAS_NEON",
-      }
+    -- configuration { "android_armv7_debug" }
 
     -- -------------------------------------------------------------
     -- configuration { "android_armv7_release" }
@@ -766,11 +730,7 @@ project "skia"
 
     -- project specific configuration settings
 
-    configuration { "android_armv7_release" }
-
-      defines {
-        "SK_ARM_HAS_NEON",
-      }
+    -- configuration { "android_armv7_release" }
 
     -- -------------------------------------------------------------
     -- configuration { "android_x86_debug" }
@@ -783,10 +743,6 @@ project "skia"
     -- project specific configuration settings
 
     configuration { "android_x86_debug" }
-
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
 
       files { opts_sse }
 
@@ -802,10 +758,6 @@ project "skia"
 
     configuration { "android_x86_release" }
 
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
-
       files { opts_sse }
 
     -- -------------------------------------------------------------
@@ -820,10 +772,6 @@ project "skia"
 
     configuration { "android_arm64_debug" }
 
-      defines {
-        "SK_ARM_HAS_NEON",
-      }
-
       files { opts_arm64 }
       
     -- -------------------------------------------------------------
@@ -837,10 +785,6 @@ project "skia"
     -- project specific configuration settings
 
     configuration { "android_arm64_release" }
-
-      defines {
-        "SK_ARM_HAS_NEON",
-      }
 
       files { opts_arm64 }
       
@@ -884,11 +828,7 @@ project "skia"
 
     -- project specific configuration settings
 
-    configuration { "winuwp_debug", "x32" }
-
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
+    -- configuration { "winuwp_debug", "x32" }
 
     -- -------------------------------------------------------------
     -- configuration { "winuwp_release", "x32" }
@@ -900,11 +840,7 @@ project "skia"
 
     -- project specific configuration settings
 
-    configuration { "winuwp_release", "x32" }
-
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
+    -- configuration { "winuwp_release", "x32" }
 
     -- -------------------------------------------------------------
     -- configuration { "winuwp_debug", "x64" }
@@ -916,11 +852,7 @@ project "skia"
 
     -- project specific configuration settings
 
-    configuration { "winuwp_debug", "x64" }
-
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
+    -- configuration { "winuwp_debug", "x64" }
 
     -- -------------------------------------------------------------
     -- configuration { "winuwp_release", "x64" }
@@ -932,11 +864,7 @@ project "skia"
 
     -- project specific configuration settings
 
-    configuration { "winuwp_release", "x64" }
-
-      defines {
-        "SK_CPU_SSE_LEVEL=31",
-      }
+    -- configuration { "winuwp_release", "x64" }
 
     -- -------------------------------------------------------------
     -- configuration { "winuwp_debug", "ARM" }
