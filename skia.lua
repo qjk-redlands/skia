@@ -813,6 +813,34 @@ project "skia"
       files { opts_arm64 }
       
     -- -------------------------------------------------------------
+    -- configuration { "android_x64_debug" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_android_x64_debug.lua")
+
+    -- project specific configuration settings
+
+    configuration { "android_x64_debug" }
+
+      files { opts_sse }
+
+    -- -------------------------------------------------------------
+    -- configuration { "android_x64_release" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_android_x64_release.lua")
+
+    -- project specific configuration settings
+
+    configuration { "android_x64_release" }
+
+      files { opts_sse }
+
+    -- -------------------------------------------------------------
   end
 
   if (_TARGET_IS_WINUWP) then
