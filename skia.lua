@@ -385,7 +385,7 @@ project "skia"
   local opts_arm64 = {
     "src/opts/SkOpts_crc32.cpp",
   }
-  
+
   flags {
     "NoPCH",
   }
@@ -430,7 +430,7 @@ project "skia"
   -- configurations
   -- -------------------------------------------------------------
 
-  if (os.is("windows") and not _TARGET_IS_WINUWP) then
+  if (_PLATFORM_WINDOWS) then
     -- -------------------------------------------------------------
     -- configuration { "windows" }
     -- -------------------------------------------------------------
@@ -508,7 +508,7 @@ project "skia"
     -- -------------------------------------------------------------
   end
 
-  if (os.is("linux") and not _OS_IS_ANDROID) then
+  if (_PLATFORM_LINUX) then
     -- -------------------------------------------------------------
     -- configuration { "linux" }
     -- -------------------------------------------------------------
@@ -581,7 +581,7 @@ project "skia"
     -- -------------------------------------------------------------
   end
 
-  if (os.is("macosx") and not _OS_IS_IOS and not _OS_IS_ANDROID) then
+  if (_PLATFORM_MACOS) then
     -- -------------------------------------------------------------
     -- configuration { "macosx" }
     -- -------------------------------------------------------------
@@ -630,9 +630,117 @@ project "skia"
     -- -------------------------------------------------------------
   end
 
-  if (_OS_IS_IOS) then
+  if (_PLATFORM_COCOA) then
     -- -------------------------------------------------------------
-    -- configuration { "ios" } == _OS_IS_IOS
+    -- configuration { "cocoa*" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_cocoa.lua")
+
+    -- project specific configuration settings
+
+    configuration { "cocoa*" }
+
+      files {
+        common_cocoa,
+      }
+
+      includedirs {
+        "include/utils/mac",
+      }
+
+    -- -------------------------------------------------------------
+    -- configuration { "cocoa_arm64_debug" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_cocoa_arm64_debug.lua")
+
+    -- project specific configuration settings
+
+    configuration { "cocoa_arm64_debug" }
+
+      files { opts_arm64 }
+
+    -- -------------------------------------------------------------
+    -- configuration { "cocoa_arm64_release" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_cocoa_arm64_release.lua")
+
+    -- project specific configuration settings
+
+    configuration { "cocoa_arm64_release" }
+
+      files { opts_arm64 }
+
+    -- -------------------------------------------------------------
+    -- configuration { "cocoa_sim64_debug" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_cocoa_sim64_debug.lua")
+
+    -- project specific configuration settings
+
+    configuration { "cocoa_sim64_debug" }
+
+      files { opts_sse }
+
+    -- -------------------------------------------------------------
+    -- configuration { "cocoa_sim64_release" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_cocoa_sim64_release.lua")
+
+    -- project specific configuration settings
+
+    configuration { "cocoa_sim64_release" }
+
+      files { opts_sse }
+
+    -- -------------------------------------------------------------
+    -- configuration { "cocoa_x64_debug" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_cocoa_x64_debug.lua")
+
+    -- project specific configuration settings
+
+    configuration { "cocoa_x64_debug" }
+
+      files { opts_sse }
+
+    -- -------------------------------------------------------------
+    -- configuration { "cocoa_x64_release" }
+    -- -------------------------------------------------------------
+
+    -- common configuration settings
+
+    dofile (_BUILD_DIR .. "/static_cocoa_x64_release.lua")
+
+    -- project specific configuration settings
+
+    configuration { "cocoa_x64_release" }
+
+      files { opts_sse }
+
+    -- -------------------------------------------------------------
+  end
+
+  if (_PLATFORM_IOS) then
+    -- -------------------------------------------------------------
+    -- configuration { "ios*" }
     -- -------------------------------------------------------------
 
     -- common configuration settings
@@ -662,7 +770,7 @@ project "skia"
     -- project specific configuration settings
 
     configuration { "ios_arm64_debug" }
-      
+
       files { opts_arm64 }
 
     -- -------------------------------------------------------------
@@ -678,7 +786,7 @@ project "skia"
     configuration { "ios_arm64_release" }
 
       files { opts_arm64 }
-      
+
     -- -------------------------------------------------------------
     -- configuration { "ios_sim64_debug" }
     -- -------------------------------------------------------------
@@ -710,9 +818,9 @@ project "skia"
     -- -------------------------------------------------------------
   end
 
-  if (_OS_IS_ANDROID) then
+  if (_PLATFORM_ANDROID) then
     -- -------------------------------------------------------------
-    -- configuration { "android" } == _OS_IS_ANDROID
+    -- configuration { "android*" }
     -- -------------------------------------------------------------
 
     -- common configuration settings
@@ -797,7 +905,7 @@ project "skia"
     configuration { "android_arm64_debug" }
 
       files { opts_arm64 }
-      
+
     -- -------------------------------------------------------------
     -- configuration { "android_arm64_release" }
     -- -------------------------------------------------------------
@@ -811,7 +919,7 @@ project "skia"
     configuration { "android_arm64_release" }
 
       files { opts_arm64 }
-      
+
     -- -------------------------------------------------------------
     -- configuration { "android_x64_debug" }
     -- -------------------------------------------------------------
@@ -843,9 +951,9 @@ project "skia"
     -- -------------------------------------------------------------
   end
 
-  if (_TARGET_IS_WINUWP) then
+  if (_PLATFORM_WINUWP) then
     -- -------------------------------------------------------------
-    -- configuration { "winuwp" } == _TARGET_IS_WINUWP
+    -- configuration { "windows" }
     -- -------------------------------------------------------------
 
     -- common configuration settings
@@ -917,30 +1025,6 @@ project "skia"
     -- project specific configuration settings
 
     -- configuration { "winuwp_release", "x64" }
-
-    -- -------------------------------------------------------------
-    -- configuration { "winuwp_debug", "ARM" }
-    -- -------------------------------------------------------------
-
-    -- common configuration settings
-
-    dofile (_BUILD_DIR .. "/static_winuwp_arm_debug.lua")
-
-    -- project specific configuration settings
-
-    -- configuration { "winuwp_debug", "ARM" }
-
-    -- -------------------------------------------------------------
-    -- configuration { "winuwp_release", "ARM" }
-    -- -------------------------------------------------------------
-
-    -- common configuration settings
-
-    dofile (_BUILD_DIR .. "/static_winuwp_arm_release.lua")
-
-    -- project specific configuration settings
-
-    -- configuration { "winuwp_release", "ARM" }
 
     -- -------------------------------------------------------------
     -- configuration { "winuwp_debug", "ARM64" }
