@@ -691,7 +691,7 @@ project "skia"
 
     configuration { "cocoa_sim64_debug" }
 
-      files { opts_sse }
+      files { opts_arm64 }
 
     -- -------------------------------------------------------------
     -- configuration { "cocoa_sim64_release" }
@@ -705,7 +705,7 @@ project "skia"
 
     configuration { "cocoa_sim64_release" }
 
-      files { opts_sse }
+      files { opts_arm64 }
 
     -- -------------------------------------------------------------
     -- configuration { "cocoa_x64_debug" }
@@ -799,7 +799,7 @@ project "skia"
 
     configuration { "ios_sim64_debug" }
 
-      files { opts_sse }
+      files { opts_arm64 }
 
     -- -------------------------------------------------------------
     -- configuration { "ios_sim64_release" }
@@ -813,7 +813,7 @@ project "skia"
 
     configuration { "ios_sim64_release" }
 
-      files { opts_sse }
+      files { opts_arm64 }
 
     -- -------------------------------------------------------------
   end
