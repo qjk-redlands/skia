@@ -448,10 +448,6 @@ if (_PLATFORM_COCOA) then
   configuration { "*x64*" }
 
   files { opts_sse }
-
-  configuration { "*sim64*" } -- remove once sim64 is simx64
-
-  files { opts_sse }
 end
 
 if (_PLATFORM_IOS) then
@@ -468,10 +464,6 @@ if (_PLATFORM_IOS) then
   files { opts_arm64 }
 
   configuration { "*x64*" }
-
-  files { opts_sse }
-
-  configuration { "*sim64*" } -- remove once sim64 is simx64
 
   files { opts_sse }
 end
