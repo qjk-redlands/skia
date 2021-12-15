@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkRadialGradient.h"
-#include "SkRasterPipeline.h"
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/gradients/SkRadialGradient.h"
 
 namespace {
 
@@ -63,11 +63,16 @@ void SkRadialGradient::appendGradientStages(SkArenaAlloc*, SkRasterPipeline* p,
     p->append(SkRasterPipeline::xy_to_radius);
 }
 
+skvm::F32 SkRadialGradient::transformT(skvm::Builder* p, skvm::Uniforms*,
+                                       skvm::Coord coord, skvm::I32* mask) const {
+    return sqrt(coord.x*coord.x + coord.y*coord.y);
+}
+
 /////////////////////////////////////////////////////////////////////
 
 #if SK_SUPPORT_GPU
 
-#include "gradients/GrGradientShader.h"
+#include "src/gpu/gradients/GrGradientShader.h"
 
 std::unique_ptr<GrFragmentProcessor> SkRadialGradient::asFragmentProcessor(
         const GrFPArgs& args) const {

@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkChecksum.h"
-#include "SkOpts.h"
-#include "SkRandom.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkChecksum.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkOpts.h"
+#include "tests/Test.h"
 
 DEF_TEST(Checksum, r) {
     // Put 128 random bytes into two identical buffers.  Any multiple of 4 will do.
@@ -70,4 +70,21 @@ DEF_TEST(ChecksumCollisions, r) {
 
         REPORTER_ASSERT(r, SkOpts::hash(a, sizeof(a)) != SkOpts::hash(b, sizeof(b)));
     }
+}
+
+DEF_TEST(ChecksumConsistent, r) {
+    // We've decided to make SkOpts::hash() always return consistent results, so spot check a few:
+    uint8_t bytes[256];
+    for (int i = 0; i < 256; i++) {
+        bytes[i] = i;
+    }
+    REPORTER_ASSERT(r, SkOpts::hash(bytes,  0) == 0x00000000, "%08x", SkOpts::hash(bytes,  0));
+    REPORTER_ASSERT(r, SkOpts::hash(bytes,  1) == 0x00000000, "%08x", SkOpts::hash(bytes,  1));
+    REPORTER_ASSERT(r, SkOpts::hash(bytes,  2) == 0xf26b8303, "%08x", SkOpts::hash(bytes,  2));
+    REPORTER_ASSERT(r, SkOpts::hash(bytes,  7) == 0x18678721, "%08x", SkOpts::hash(bytes,  7));
+    REPORTER_ASSERT(r, SkOpts::hash(bytes, 32) == 0x9d1ef96b, "%08x", SkOpts::hash(bytes, 32));
+    REPORTER_ASSERT(r, SkOpts::hash(bytes, 63) == 0xc4b07d3a, "%08x", SkOpts::hash(bytes, 63));
+    REPORTER_ASSERT(r, SkOpts::hash(bytes, 64) == 0x3535a461, "%08x", SkOpts::hash(bytes, 64));
+    REPORTER_ASSERT(r, SkOpts::hash(bytes, 99) == 0x3f98a130, "%08x", SkOpts::hash(bytes, 99));
+    REPORTER_ASSERT(r, SkOpts::hash(bytes,255) == 0x3b9ceab2, "%08x", SkOpts::hash(bytes,255));
 }

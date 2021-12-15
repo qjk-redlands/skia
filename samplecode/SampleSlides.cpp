@@ -4,17 +4,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "SkBlurMask.h"
-#include "SkBlurMaskFilter.h"
-#include "SkCanvas.h"
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
-#include "SkGradientShader.h"
-#include "SkPaint.h"
-#include "SkVertices.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkVertices.h"
+#include "include/effects/SkGradientShader.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkBlurMask.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
 
-#include "ToolUtils.h"
+#include "tools/ToolUtils.h"
 
 #define BG_COLOR    0xFFDDDDDD
 
@@ -22,11 +21,11 @@ typedef void (*SlideProc)(SkCanvas*);
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "Sk1DPathEffect.h"
-#include "Sk2DPathEffect.h"
-#include "SkCornerPathEffect.h"
-#include "SkDashPathEffect.h"
-#include "SkDiscretePathEffect.h"
+#include "include/effects/Sk1DPathEffect.h"
+#include "include/effects/Sk2DPathEffect.h"
+#include "include/effects/SkCornerPathEffect.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "include/effects/SkDiscretePathEffect.h"
 
 static void compose_pe(SkPaint* paint) {
     SkPathEffect* pe = paint->getPathEffect();
@@ -136,9 +135,9 @@ static void patheffect_slide(SkCanvas* canvas) {
 
     path.reset();
     SkRect r = { 0, 0, 250, 120 };
-    path.addOval(r, SkPath::kCW_Direction);
+    path.addOval(r, SkPathDirection::kCW);
     r.inset(50, 50);
-    path.addRect(r, SkPath::kCCW_Direction);
+    path.addRect(r, SkPathDirection::kCCW);
 
     canvas->translate(320, 20);
     for (i = 0; i < SK_ARRAY_COUNT(gPE2); i++) {
@@ -150,7 +149,7 @@ static void patheffect_slide(SkCanvas* canvas) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkGradientShader.h"
+#include "include/effects/SkGradientShader.h"
 
 struct GradData {
     int             fCount;
@@ -236,17 +235,17 @@ static void gradient_slide(SkCanvas* canvas) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "DecodeFile.h"
-#include "SkOSFile.h"
-#include "SkRandom.h"
-#include "SkStream.h"
+#include "include/core/SkStream.h"
+#include "include/utils/SkRandom.h"
+#include "samplecode/DecodeFile.h"
+#include "src/core/SkOSFile.h"
 
 static sk_sp<SkShader> make_shader0(SkIPoint* size) {
     SkBitmap    bm;
 
     decode_file("/skimages/logo.gif", &bm);
     size->set(bm.width(), bm.height());
-    return bm.makeShader();
+    return bm.makeShader(SkSamplingOptions(SkFilterMode::kLinear));
 }
 
 static sk_sp<SkShader> make_shader1(const SkIPoint& size) {
@@ -363,7 +362,6 @@ static void mesh_slide(SkCanvas* canvas) {
 
     SkPaint paint;
     paint.setDither(true);
-    paint.setFilterQuality(kLow_SkFilterQuality);
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(fRecs); i++) {
         auto verts = SkVertices::MakeCopy(fRecs[i].fMode, fRecs[i].fCount,
@@ -390,11 +388,11 @@ static void mesh_slide(SkCanvas* canvas) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkTypeface.h"
+#include "include/core/SkTypeface.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkImageEncoder.h"
+#include "include/core/SkImageEncoder.h"
 
 static const SlideProc gProc[] = {
     patheffect_slide,
@@ -429,34 +427,28 @@ public:
             gProc[i](&canvas);
             canvas.restore();
             SkString str;
-            str.printf("/skimages/slide_" SK_SIZE_T_SPECIFIER ".png", i);
+            str.printf("/skimages/slide_%zu.png", i);
             ToolUtils::EncodeImageToFile(str.c_str(), bm, SkEncodedImageFormat::kPNG, 100);
         }
         this->setBGColor(BG_COLOR);
     }
 
 protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "Slides");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("Slides"); }
 
     void onDrawContent(SkCanvas* canvas) override {
         this->init();
         gProc[fIndex](canvas);
     }
 
-    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned) override {
+    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey) override {
         this->init();
         fIndex = (fIndex + 1) % SK_ARRAY_COUNT(gProc);
         return nullptr;
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////

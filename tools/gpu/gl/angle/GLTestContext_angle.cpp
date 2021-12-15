@@ -5,27 +5,30 @@
  * found in the LICENSE file.
  */
 
-#include "GLTestContext_angle.h"
+#include "tools/gpu/gl/angle/GLTestContext_angle.h"
+
+#include "include/core/SkTime.h"
+#include "include/gpu/gl/GrGLAssembleInterface.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/gl/GrGLDefines.h"
+#include "src/gpu/gl/GrGLUtil.h"
+#include "src/ports/SkOSLibrary.h"
+#include "third_party/externals/angle2/include/platform/Platform.h"
+
+#include <vector>
 
 #define EGL_EGL_PROTOTYPES 1
-
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
-
-#include "gl/GrGLDefines.h"
-#include "gl/GrGLUtil.h"
-
-#include "gl/GrGLInterface.h"
-#include "gl/GrGLAssembleInterface.h"
-#include "../ports/SkOSLibrary.h"
-
-#include <EGL/egl.h>
 
 #define EGL_PLATFORM_ANGLE_ANGLE                0x3202
 #define EGL_PLATFORM_ANGLE_TYPE_ANGLE           0x3203
 #define EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE      0x3207
 #define EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE     0x3208
 #define EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE    0x320D
+
+#define EGL_CONTEXT_OPENGL_BACKWARDS_COMPATIBLE_ANGLE 0x3483
 
 using sk_gpu_test::ANGLEBackend;
 using sk_gpu_test::ANGLEContextVersion;
@@ -48,11 +51,11 @@ std::function<void()> context_restorer() {
 
 static GrGLFuncPtr angle_get_gl_proc(void* ctx, const char name[]) {
     const Libs* libs = reinterpret_cast<const Libs*>(ctx);
-    GrGLFuncPtr proc = (GrGLFuncPtr) GetProcedureAddress(libs->fGLLib, name);
+    GrGLFuncPtr proc = (GrGLFuncPtr) SkGetProcedureAddress(libs->fGLLib, name);
     if (proc) {
         return proc;
     }
-    proc = (GrGLFuncPtr) GetProcedureAddress(libs->fEGLLib, name);
+    proc = (GrGLFuncPtr) SkGetProcedureAddress(libs->fEGLLib, name);
     if (proc) {
         return proc;
     }
@@ -98,9 +101,9 @@ public:
 private:
     void destroyGLContext();
 
+    void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
     std::function<void()> onPlatformGetAutoContextRestore() const override;
-    void onPlatformSwapBuffers() const override;
     GrGLFuncPtr onPlatformGetProcAddress(const char* name) const override;
 
     void*                       fContext;
@@ -108,6 +111,12 @@ private:
     void*                       fSurface;
     ANGLEBackend                fType;
     ANGLEContextVersion         fVersion;
+    bool                        fOwnsDisplay;
+
+    angle::ResetDisplayPlatformFunc fResetPlatform = nullptr;
+
+    PFNEGLCREATEIMAGEKHRPROC    fCreateImage = nullptr;
+    PFNEGLDESTROYIMAGEKHRPROC   fDestroyImage = nullptr;
 
 #ifdef SK_BUILD_FOR_WIN
     HWND                        fWindow;
@@ -118,7 +127,52 @@ private:
 
 #ifdef SK_BUILD_FOR_WIN
 ATOM ANGLEGLContext::gWC = 0;
+
+enum class IsWine { kUnknown, kNo, kYes };
+
+static IsWine is_wine() {
+    HMODULE ntdll = GetModuleHandle("ntdll.dll");
+    if (!ntdll) {
+        SkDebugf("No ntdll.dll on Windows?!\n");
+        return IsWine::kUnknown;
+    }
+    return GetProcAddress(ntdll, "wine_get_version") == nullptr ? IsWine::kNo : IsWine::kYes;
+}
+
 #endif
+
+static const unsigned char* ANGLE_getTraceCategoryEnabledFlag(angle::PlatformMethods* platform,
+                                                              const char* category_group) {
+    return SkEventTracer::GetInstance()->getCategoryGroupEnabled(category_group);
+}
+
+static angle::TraceEventHandle ANGLE_addTraceEvent(angle::PlatformMethods* platform,
+                                                   char phase,
+                                                   const unsigned char* category_group_enabled,
+                                                   const char* name,
+                                                   unsigned long long id,
+                                                   double timestamp,
+                                                   int num_args,
+                                                   const char** arg_names,
+                                                   const unsigned char* arg_types,
+                                                   const unsigned long long* arg_values,
+                                                   unsigned char flags) {
+    static_assert(sizeof(unsigned long long) == sizeof(uint64_t), "Non-64-bit trace event args!");
+    return SkEventTracer::GetInstance()->addTraceEvent(
+            phase, category_group_enabled, name, id, num_args, arg_names, arg_types,
+            reinterpret_cast<const uint64_t*>(arg_values), flags);
+}
+
+static void ANGLE_updateTraceEventDuration(angle::PlatformMethods* platform,
+                                           const unsigned char* category_group_enabled,
+                                           const char* name,
+                                           angle::TraceEventHandle handle) {
+    SkEventTracer::GetInstance()->updateTraceEventDuration(category_group_enabled, name, handle);
+}
+
+static double ANGLE_monotonicallyIncreasingTime(angle::PlatformMethods* platform) {
+    return SkTime::GetSecs();
+}
 
 ANGLEGLContext::ANGLEGLContext(ANGLEBackend type, ANGLEContextVersion version,
                                ANGLEGLContext* shareContext, void* display)
@@ -126,10 +180,19 @@ ANGLEGLContext::ANGLEGLContext(ANGLEBackend type, ANGLEContextVersion version,
     , fDisplay(display)
     , fSurface(EGL_NO_SURFACE)
     , fType(type)
-    , fVersion(version) {
+    , fVersion(version)
+    , fOwnsDisplay(false) {
 #ifdef SK_BUILD_FOR_WIN
     fWindow = nullptr;
     fDeviceContext = nullptr;
+
+    static IsWine gIsWine = is_wine();
+    if (gIsWine == IsWine::kYes && type != ANGLEBackend::kOpenGL) {
+        // D3D backends of ANGLE don't really work well under Wine with our tests and are likely to
+        // crash. This makes it easier to test using the GL ANGLE backend under Wine on Linux
+        // without lots of spurious Wine debug spew and crashes.
+        return;
+    }
 
     if (EGL_NO_DISPLAY == fDisplay) {
         HINSTANCE hInstance = (HINSTANCE)GetModuleHandle(nullptr);
@@ -170,14 +233,34 @@ ANGLEGLContext::ANGLEGLContext(ANGLEBackend type, ANGLEContextVersion version,
         }
 
         fDisplay = get_angle_egl_display(fDeviceContext, type);
+        fOwnsDisplay = true;
     }
 #else
     SkASSERT(EGL_NO_DISPLAY == fDisplay);
     fDisplay = get_angle_egl_display(EGL_DEFAULT_DISPLAY, type);
+    fOwnsDisplay = true;
 #endif
     if (EGL_NO_DISPLAY == fDisplay) {
         SkDebugf("Could not create EGL display!");
         return;
+    }
+
+    // Add ANGLE platform hooks to connect to Skia's tracing implementation
+    angle::GetDisplayPlatformFunc getPlatform = reinterpret_cast<angle::GetDisplayPlatformFunc>(
+            eglGetProcAddress("ANGLEGetDisplayPlatform"));
+    if (getPlatform) {
+        fResetPlatform = reinterpret_cast<angle::ResetDisplayPlatformFunc>(
+                eglGetProcAddress("ANGLEResetDisplayPlatform"));
+        SkASSERT(fResetPlatform);
+
+        angle::PlatformMethods* platformMethods = nullptr;
+        if (getPlatform(fDisplay, angle::g_PlatformMethodNames, angle::g_NumPlatformMethods,
+                        nullptr, &platformMethods)) {
+            platformMethods->addTraceEvent               = ANGLE_addTraceEvent;
+            platformMethods->getTraceCategoryEnabledFlag = ANGLE_getTraceCategoryEnabledFlag;
+            platformMethods->updateTraceEventDuration    = ANGLE_updateTraceEventDuration;
+            platformMethods->monotonicallyIncreasingTime = ANGLE_monotonicallyIncreasingTime;
+        }
     }
 
     EGLint majorVersion;
@@ -207,12 +290,20 @@ ANGLEGLContext::ANGLEGLContext(ANGLEBackend type, ANGLEContextVersion version,
     }
 
     int versionNum = ANGLEContextVersion::kES2 == version ? 2 : 3;
-    const EGLint contextAttribs[] = {
+    std::vector<EGLint> contextAttribs = {
         EGL_CONTEXT_CLIENT_VERSION, versionNum,
-        EGL_NONE
     };
+
+    const char* extensions = eglQueryString(fDisplay, EGL_EXTENSIONS);
+    if (strstr(extensions, "EGL_ANGLE_create_context_backwards_compatible")) {
+        contextAttribs.push_back(EGL_CONTEXT_OPENGL_BACKWARDS_COMPATIBLE_ANGLE);
+        contextAttribs.push_back(EGL_FALSE);
+    }
+
+    contextAttribs.push_back(EGL_NONE);
+
     EGLContext eglShareContext = shareContext ? shareContext->fContext : nullptr;
-    fContext = eglCreateContext(fDisplay, surfaceConfig, eglShareContext, contextAttribs);
+    fContext = eglCreateContext(fDisplay, surfaceConfig, eglShareContext, contextAttribs.data());
     if (EGL_NO_CONTEXT == fContext) {
         SkDebugf("Could not create context!");
         this->destroyGLContext();
@@ -263,6 +354,10 @@ ANGLEGLContext::ANGLEGLContext(ANGLEBackend type, ANGLEContextVersion version,
         break;
     }
 #endif
+    if (strstr(extensions, "EGL_KHR_image")) {
+        fCreateImage = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+        fDestroyImage = (PFNEGLDESTROYIMAGEKHRPROC)eglGetProcAddress("eglDestroyImageKHR");
+    }
 
     this->init(std::move(gl));
 }
@@ -276,24 +371,18 @@ GrEGLImage ANGLEGLContext::texture2DToEGLImage(GrGLuint texID) const {
     if (!this->gl()->hasExtension("EGL_KHR_gl_texture_2D_image")) {
         return GR_EGL_NO_IMAGE;
     }
-    GrEGLImage img;
-    GrEGLint attribs[] = { GR_EGL_GL_TEXTURE_LEVEL, 0,
-                           GR_EGL_IMAGE_PRESERVED, GR_EGL_TRUE,
-                           GR_EGL_NONE };
+    EGLint attribs[] = { GR_EGL_GL_TEXTURE_LEVEL, 0,
+                         GR_EGL_IMAGE_PRESERVED, GR_EGL_TRUE,
+                         GR_EGL_NONE };
     // 64 bit cast is to shut Visual C++ up about casting 32 bit value to a pointer.
     GrEGLClientBuffer clientBuffer = reinterpret_cast<GrEGLClientBuffer>((uint64_t)texID);
-    GR_GL_CALL_RET(this->gl(), img,
-                   EGLCreateImage(fDisplay, fContext, GR_EGL_GL_TEXTURE_2D, clientBuffer,
-                                  attribs));
-    return img;
+    return fCreateImage(fDisplay, fContext, GR_EGL_GL_TEXTURE_2D, clientBuffer, attribs);
 }
 
-void ANGLEGLContext::destroyEGLImage(GrEGLImage image) const {
-    GR_GL_CALL(this->gl(), EGLDestroyImage(fDisplay, image));
-}
+void ANGLEGLContext::destroyEGLImage(GrEGLImage image) const { fDestroyImage(fDisplay, image); }
 
 GrGLuint ANGLEGLContext::eglImageToExternalTexture(GrEGLImage image) const {
-    GrGLClearErr(this->gl());
+    while (this->gl()->fFunctions.fGetError() != GR_GL_NO_ERROR) {}
     if (!this->gl()->hasExtension("GL_OES_EGL_image_external")) {
         return 0;
     }
@@ -309,12 +398,12 @@ GrGLuint ANGLEGLContext::eglImageToExternalTexture(GrEGLImage image) const {
         return 0;
     }
     GR_GL_CALL(this->gl(), BindTexture(GR_GL_TEXTURE_EXTERNAL, texID));
-    if (GR_GL_GET_ERROR(this->gl()) != GR_GL_NO_ERROR) {
+    if (this->gl()->fFunctions.fGetError() != GR_GL_NO_ERROR) {
         GR_GL_CALL(this->gl(), DeleteTextures(1, &texID));
         return 0;
     }
     glEGLImageTargetTexture2D(GR_GL_TEXTURE_EXTERNAL, image);
-    if (GR_GL_GET_ERROR(this->gl()) != GR_GL_NO_ERROR) {
+    if (this->gl()->fFunctions.fGetError() != GR_GL_NO_ERROR) {
         GR_GL_CALL(this->gl(), DeleteTextures(1, &texID));
         return 0;
     }
@@ -349,8 +438,20 @@ void ANGLEGLContext::destroyGLContext() {
             fSurface = EGL_NO_SURFACE;
         }
 
-        eglTerminate(fDisplay);
+        if (fResetPlatform) {
+            fResetPlatform(fDisplay);
+        }
+
+        if (fOwnsDisplay) {
+            // Only terminate the display if we created it. If we were a context created by makeNew,
+            // the parent context might still have work to do on the display. If we terminate now,
+            // that context might be deleted once it no longer becomes current, and we may hit
+            // undefined behavior in this destructor when calling eglDestroy[Context|Surface] on a
+            // terminated display.
+            eglTerminate(fDisplay);
+        }
         fDisplay = EGL_NO_DISPLAY;
+        fOwnsDisplay = false;
     }
 
 #ifdef SK_BUILD_FOR_WIN
@@ -366,6 +467,12 @@ void ANGLEGLContext::destroyGLContext() {
 #endif
 }
 
+void ANGLEGLContext::onPlatformMakeNotCurrent() const {
+    if (!eglMakeCurrent(fDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT)) {
+        SkDebugf("Could not reset the context 0x%x.\n", eglGetError());
+    }
+}
+
 void ANGLEGLContext::onPlatformMakeCurrent() const {
     if (!eglMakeCurrent(fDisplay, fSurface, fSurface, fContext)) {
         SkDebugf("Could not set the context 0x%x.\n", eglGetError());
@@ -377,12 +484,6 @@ std::function<void()> ANGLEGLContext::onPlatformGetAutoContextRestore() const {
         return nullptr;
     }
     return context_restorer();
-}
-
-void ANGLEGLContext::onPlatformSwapBuffers() const {
-    if (!eglSwapBuffers(fDisplay, fSurface)) {
-        SkDebugf("Could not complete eglSwapBuffers.\n");
-    }
 }
 
 GrGLFuncPtr ANGLEGLContext::onPlatformGetProcAddress(const char* name) const {
@@ -397,14 +498,14 @@ sk_sp<const GrGLInterface> CreateANGLEGLInterface() {
     if (nullptr == gLibs.fGLLib) {
         // We load the ANGLE library and never let it go
 #if defined _WIN32
-        gLibs.fGLLib = DynamicLoadLibrary("libGLESv2.dll");
-        gLibs.fEGLLib = DynamicLoadLibrary("libEGL.dll");
+        gLibs.fGLLib = SkLoadDynamicLibrary("libGLESv2.dll");
+        gLibs.fEGLLib = SkLoadDynamicLibrary("libEGL.dll");
 #elif defined SK_BUILD_FOR_MAC
-        gLibs.fGLLib = DynamicLoadLibrary("libGLESv2.dylib");
-        gLibs.fEGLLib = DynamicLoadLibrary("libEGL.dylib");
+        gLibs.fGLLib = SkLoadDynamicLibrary("libGLESv2.dylib");
+        gLibs.fEGLLib = SkLoadDynamicLibrary("libEGL.dylib");
 #else
-        gLibs.fGLLib = DynamicLoadLibrary("libGLESv2.so");
-        gLibs.fEGLLib = DynamicLoadLibrary("libEGL.so");
+        gLibs.fGLLib = SkLoadDynamicLibrary("libGLESv2.so");
+        gLibs.fEGLLib = SkLoadDynamicLibrary("libEGL.so");
 #endif
     }
 
@@ -417,7 +518,15 @@ sk_sp<const GrGLInterface> CreateANGLEGLInterface() {
 }
 
 std::unique_ptr<GLTestContext> MakeANGLETestContext(ANGLEBackend type, ANGLEContextVersion version,
-                                                    GLTestContext* shareContext, void* display){
+                                                    GLTestContext* shareContext, void* display) {
+#if defined(SK_BUILD_FOR_WIN) && defined(_M_ARM64)
+    // Windows-on-ARM only has D3D11. This will fail correctly, but it produces huge amounts of
+    // debug output for every unit test from both ANGLE and our context factory.
+    if (ANGLEBackend::kD3D11 != type) {
+        return nullptr;
+    }
+#endif
+
     ANGLEGLContext* angleShareContext = reinterpret_cast<ANGLEGLContext*>(shareContext);
     std::unique_ptr<GLTestContext> ctx(new ANGLEGLContext(type, version,
                                                           angleShareContext, display));

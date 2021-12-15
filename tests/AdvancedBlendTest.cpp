@@ -5,17 +5,28 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "include/core/SkBlendMode.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/GrTypesPriv.h"
+#include "include/private/SkColorData.h"
+#include "src/gpu/GrBlend.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrPaint.h"
+#include "src/gpu/GrProcessorAnalysis.h"
+#include "src/gpu/GrProcessorSet.h"
+#include "src/gpu/GrUserStencilSettings.h"
+#include "src/gpu/GrXferProcessor.h"
+#include "src/gpu/effects/GrCustomXfermode.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
 
-#include "GrContextPriv.h"
-#include "GrPaint.h"
-#include "GrProcessorSet.h"
-#include "effects/GrCustomXfermode.h"
+#include <utility>
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(AdvancedBlendTest, reporter, ctxInfo) {
     static constexpr auto opaque = GrProcessorAnalysisColor::Opaque::kYes;
     static constexpr auto coverage = GrProcessorAnalysisCoverage::kSingleChannel;
-    const GrCaps& caps = *ctxInfo.grContext()->priv().caps();
+    const GrCaps& caps = *ctxInfo.directContext()->priv().caps();
 
     for (int mode = (int)SkBlendMode::kLastMode; mode > (int)SkBlendMode::kLastCoeffMode; --mode) {
         const SkBlendMode blendMode = (SkBlendMode)mode;
@@ -30,13 +41,12 @@ DEF_GPUTEST_FOR_RENDERING_CONTEXTS(AdvancedBlendTest, reporter, ctxInfo) {
         paint.setXPFactory(xpf);
         GrProcessorSet procs(std::move(paint));
         SkPMColor4f overrideColor;
-        GrProcessorSet::Analysis processorAnalysis =
-                procs.finalize(
-                        opaque, coverage, nullptr, &GrUserStencilSettings::kUnused,
-                        GrFSAAType::kNone, caps, GrClampType::kAuto, &overrideColor);
+        GrProcessorSet::Analysis processorAnalysis = procs.finalize(
+                opaque, coverage, nullptr, &GrUserStencilSettings::kUnused, caps,
+                GrClampType::kAuto, &overrideColor);
 
         if (caps.advancedBlendEquationSupport() &&
-                !caps.isAdvancedBlendEquationBlacklisted(blendEquation)) {
+                !caps.isAdvancedBlendEquationDisabled(blendEquation)) {
             REPORTER_ASSERT(reporter,
                             !(xpfAnalysis & GrXPFactory::AnalysisProperties::kReadsDstInShader));
             if (GrCaps::kAdvancedCoherent_BlendEquationSupport == caps.blendEquationSupport()) {

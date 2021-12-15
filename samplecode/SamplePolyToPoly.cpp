@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkFontMetrics.h"
-#include "SkGraphics.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkString.h"
-#include "SkTextUtils.h"
-#include "SkTime.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTime.h"
+#include "include/utils/SkRandom.h"
+#include "include/utils/SkTextUtils.h"
+#include "samplecode/Sample.h"
 
 class PolyToPolyView : public Sample {
 public:
@@ -50,32 +50,24 @@ public:
 
             (void) m2.setPolyToPoly((const SkPoint*)src1, (SkPoint*)dst1, 4);
 
-            {
-                const SkPoint src[] = {
-                    { SkIntToScalar(1), SkIntToScalar(0) },
-                    { SkIntToScalar(4), SkIntToScalar(7) },
-                    { SkIntToScalar(10), SkIntToScalar(2) }
-                };
-                const SkPoint dst[] = {
-                    { SkIntToScalar(4), SkIntToScalar(2) },
-                    { SkIntToScalar(45), SkIntToScalar(26) },
-                    { SkIntToScalar(32), SkIntToScalar(17) }
-                };
+            const SkPoint src2[] = {
+                { SkIntToScalar(1), SkIntToScalar(0) },
+                { SkIntToScalar(4), SkIntToScalar(7) },
+                { SkIntToScalar(10), SkIntToScalar(2) }
+            };
+            const SkPoint dst2[] = {
+                { SkIntToScalar(4), SkIntToScalar(2) },
+                { SkIntToScalar(45), SkIntToScalar(26) },
+                { SkIntToScalar(32), SkIntToScalar(17) }
+            };
 
-                SkMatrix m0;
-                m0.setPolyToPoly(src, dst, 3);
-            }
+            SkMatrix m0;
+            m0.setPolyToPoly(src2, dst2, 3);
         }
     }
 
 protected:
-    virtual bool onQuery(Sample::Event* evt)  {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "PolyToPolyView");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("PolyToPolyView"); }
 
     static void doDraw(SkCanvas* canvas, SkPaint* paint, const SkFont& font, const int isrc[],
                        const int idst[], int count) {
@@ -111,7 +103,7 @@ protected:
         canvas->restore();
     }
 
-    virtual void onDrawContent(SkCanvas* canvas) {
+    void onDrawContent(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setAntiAlias(true);
         paint.setStrokeWidth(SkIntToScalar(4));
@@ -153,7 +145,7 @@ protected:
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////

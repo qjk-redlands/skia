@@ -32,6 +32,11 @@
     #endif
 #endif
 
+static bool runtime_cpu_detection = true;
+void skcms_DisableRuntimeCPUDetection() {
+    runtime_cpu_detection = false;
+}
+
 // sizeof(x) will return size_t, which is 32-bit on some machines and 64-bit on others.
 // We have better testing on 64-bit machines, so force 32-bit machines to behave like 64-bit.
 //
@@ -48,6 +53,67 @@ static const union {
 } inf_ = { 0x7f800000 };
 #define INFINITY_ inf_.f
 
+#if defined(__clang__) || defined(__GNUC__)
+    #define small_memcpy __builtin_memcpy
+#else
+    #define small_memcpy memcpy
+#endif
+
+static float log2f_(float x) {
+    // The first approximation of log2(x) is its exponent 'e', minus 127.
+    int32_t bits;
+    small_memcpy(&bits, &x, sizeof(bits));
+
+    float e = (float)bits * (1.0f / (1<<23));
+
+    // If we use the mantissa too we can refine the error signficantly.
+    int32_t m_bits = (bits & 0x007fffff) | 0x3f000000;
+    float m;
+    small_memcpy(&m, &m_bits, sizeof(m));
+
+    return (e - 124.225514990f
+              -   1.498030302f*m
+              -   1.725879990f/(0.3520887068f + m));
+}
+static float logf_(float x) {
+    const float ln2 = 0.69314718f;
+    return ln2*log2f_(x);
+}
+
+static float exp2f_(float x) {
+    float fract = x - floorf_(x);
+
+    float fbits = (1.0f * (1<<23)) * (x + 121.274057500f
+                                        -   1.490129070f*fract
+                                        +  27.728023300f/(4.84252568f - fract));
+
+    // Before we cast fbits to int32_t, check for out of range values to pacify UBSAN.
+    // INT_MAX is not exactly representable as a float, so exclude it as effectively infinite.
+    // Negative values are effectively underflow - we'll end up returning a (different) negative
+    // value, which makes no sense. So clamp to zero.
+    if (fbits >= (float)INT_MAX) {
+        return INFINITY_;
+    } else if (fbits < 0) {
+        return 0;
+    }
+
+    int32_t bits = (int32_t)fbits;
+    small_memcpy(&x, &bits, sizeof(x));
+    return x;
+}
+
+// Not static, as it's used by some test tools.
+float powf_(float x, float y) {
+    assert (x >= 0);
+    return (x == 0) || (x == 1) ? x
+                                : exp2f_(log2f_(x) * y);
+}
+
+static float expf_(float x) {
+    const float log2_e = 1.4426950408889634074f;
+    return exp2f_(log2_e * x);
+}
+
 static float fmaxf_(float x, float y) { return x > y ? x : y; }
 static float fminf_(float x, float y) { return x < y ? x : y; }
 
@@ -60,6 +126,109 @@ static float minus_1_ulp(float x) {
     memcpy(&x, &bits, sizeof(bits));
     return x;
 }
+
+// Most transfer functions we work with are sRGBish.
+// For exotic HDR transfer functions, we encode them using a tf.g that makes no sense,
+// and repurpose the other fields to hold the parameters of the HDR functions.
+enum TFKind { Bad, sRGBish, PQish, HLGish, HLGinvish };
+struct TF_PQish  { float A,B,C,D,E,F; };
+struct TF_HLGish { float R,G,a,b,c,K_minus_1; };
+// We didn't originally support a scale factor K for HLG, and instead just stored 0 in
+// the unused `f` field of skcms_TransferFunction for HLGish and HLGInvish transfer functions.
+// By storing f=K-1, those old unusued f=0 values now mean K=1, a noop scale factor.
+
+static float TFKind_marker(TFKind kind) {
+    // We'd use different NaNs, but those aren't guaranteed to be preserved by WASM.
+    return -(float)kind;
+}
+
+static TFKind classify(const skcms_TransferFunction& tf, TF_PQish*   pq = nullptr
+                                                       , TF_HLGish* hlg = nullptr) {
+    if (tf.g < 0 && (int)tf.g == tf.g) {
+        // TODO: soundness checks for PQ/HLG like we do for sRGBish?
+        switch ((int)tf.g) {
+            case -PQish:     if (pq ) { memcpy(pq , &tf.a, sizeof(*pq )); } return PQish;
+            case -HLGish:    if (hlg) { memcpy(hlg, &tf.a, sizeof(*hlg)); } return HLGish;
+            case -HLGinvish: if (hlg) { memcpy(hlg, &tf.a, sizeof(*hlg)); } return HLGinvish;
+        }
+        return Bad;
+    }
+
+    // Basic soundness checks for sRGBish transfer functions.
+    if (isfinitef_(tf.a + tf.b + tf.c + tf.d + tf.e + tf.f + tf.g)
+            // a,c,d,g should be non-negative to make any sense.
+            && tf.a >= 0
+            && tf.c >= 0
+            && tf.d >= 0
+            && tf.g >= 0
+            // Raising a negative value to a fractional tf->g produces complex numbers.
+            && tf.a * tf.d + tf.b >= 0) {
+        return sRGBish;
+    }
+
+    return Bad;
+}
+
+bool skcms_TransferFunction_isSRGBish(const skcms_TransferFunction* tf) {
+    return classify(*tf) == sRGBish;
+}
+bool skcms_TransferFunction_isPQish(const skcms_TransferFunction* tf) {
+    return classify(*tf) == PQish;
+}
+bool skcms_TransferFunction_isHLGish(const skcms_TransferFunction* tf) {
+    return classify(*tf) == HLGish;
+}
+
+bool skcms_TransferFunction_makePQish(skcms_TransferFunction* tf,
+                                      float A, float B, float C,
+                                      float D, float E, float F) {
+    *tf = { TFKind_marker(PQish), A,B,C,D,E,F };
+    assert(skcms_TransferFunction_isPQish(tf));
+    return true;
+}
+
+bool skcms_TransferFunction_makeScaledHLGish(skcms_TransferFunction* tf,
+                                             float K, float R, float G,
+                                             float a, float b, float c) {
+    *tf = { TFKind_marker(HLGish), R,G, a,b,c, K-1.0f };
+    assert(skcms_TransferFunction_isHLGish(tf));
+    return true;
+}
+
+float skcms_TransferFunction_eval(const skcms_TransferFunction* tf, float x) {
+    float sign = x < 0 ? -1.0f : 1.0f;
+    x *= sign;
+
+    TF_PQish  pq;
+    TF_HLGish hlg;
+    switch (classify(*tf, &pq, &hlg)) {
+        case Bad:       break;
+
+        case HLGish: {
+            const float K = hlg.K_minus_1 + 1.0f;
+            return K * sign * (x*hlg.R <= 1 ? powf_(x*hlg.R, hlg.G)
+                                            : expf_((x-hlg.c)*hlg.a) + hlg.b);
+        }
+
+        // skcms_TransferFunction_invert() inverts R, G, and a for HLGinvish so this math is fast.
+        case HLGinvish: {
+            const float K = hlg.K_minus_1 + 1.0f;
+            x /= K;
+            return sign * (x <= 1 ? hlg.R * powf_(x, hlg.G)
+                                  : hlg.a * logf_(x - hlg.b) + hlg.c);
+        }
+
+
+        case sRGBish: return sign * (x < tf->d ?       tf->c * x + tf->f
+                                               : powf_(tf->a * x + tf->b, tf->g) + tf->e);
+
+        case PQish: return sign * powf_(fmaxf_(pq.A + pq.B * powf_(x, pq.C), 0)
+                                            / (pq.D + pq.E * powf_(x, pq.C)),
+                                        pq.F);
+    }
+    return 0;
+}
+
 
 static float eval_curve(const skcms_Curve* curve, float x) {
     if (curve->table_entries == 0) {
@@ -87,7 +256,7 @@ static float eval_curve(const skcms_Curve* curve, float x) {
     return l + (h-l)*t;
 }
 
-static float max_roundtrip_error(const skcms_Curve* curve, const skcms_TransferFunction* inv_tf) {
+float skcms_MaxRoundtripError(const skcms_Curve* curve, const skcms_TransferFunction* inv_tf) {
     uint32_t N = curve->table_entries > 256 ? curve->table_entries : 256;
     const float dx = 1.0f / (N - 1);
     float err = 0;
@@ -100,7 +269,7 @@ static float max_roundtrip_error(const skcms_Curve* curve, const skcms_TransferF
 }
 
 bool skcms_AreApproximateInverses(const skcms_Curve* curve, const skcms_TransferFunction* inv_tf) {
-    return max_roundtrip_error(curve, inv_tf) < (1/512.0f);
+    return skcms_MaxRoundtripError(curve, inv_tf) < (1/512.0f);
 }
 
 // Additional ICC signature values that are only used internally
@@ -119,15 +288,17 @@ enum {
     skcms_Signature_bXYZ = 0x6258595A,
 
     skcms_Signature_A2B0 = 0x41324230,
-    skcms_Signature_A2B1 = 0x41324231,
-    skcms_Signature_mAB  = 0x6D414220,
+    skcms_Signature_B2A0 = 0x42324130,
 
     skcms_Signature_CHAD = 0x63686164,
+    skcms_Signature_WTPT = 0x77747074,
 
     // Type signatures
     skcms_Signature_curv = 0x63757276,
     skcms_Signature_mft1 = 0x6D667431,
     skcms_Signature_mft2 = 0x6D667432,
+    skcms_Signature_mAB  = 0x6D414220,
+    skcms_Signature_mBA  = 0x6D424120,
     skcms_Signature_para = 0x70617261,
     skcms_Signature_sf32 = 0x73663332,
     // XYZ is also a PCS signature, so it's defined in skcms.h
@@ -248,25 +419,17 @@ static bool read_tag_xyz(const skcms_ICCTag* tag, float* x, float* y, float* z) 
     return true;
 }
 
+bool skcms_GetWTPT(const skcms_ICCProfile* profile, float xyz[3]) {
+    skcms_ICCTag tag;
+    return skcms_GetTagBySignature(profile, skcms_Signature_WTPT, &tag) &&
+           read_tag_xyz(&tag, &xyz[0], &xyz[1], &xyz[2]);
+}
+
 static bool read_to_XYZD50(const skcms_ICCTag* rXYZ, const skcms_ICCTag* gXYZ,
                            const skcms_ICCTag* bXYZ, skcms_Matrix3x3* toXYZ) {
     return read_tag_xyz(rXYZ, &toXYZ->vals[0][0], &toXYZ->vals[1][0], &toXYZ->vals[2][0]) &&
            read_tag_xyz(gXYZ, &toXYZ->vals[0][1], &toXYZ->vals[1][1], &toXYZ->vals[2][1]) &&
            read_tag_xyz(bXYZ, &toXYZ->vals[0][2], &toXYZ->vals[1][2], &toXYZ->vals[2][2]);
-}
-
-static bool tf_is_valid(const skcms_TransferFunction* tf) {
-    // Reject obviously malformed inputs
-    if (!isfinitef_(tf->a + tf->b + tf->c + tf->d + tf->e + tf->f + tf->g)) {
-        return false;
-    }
-
-    // All of these parameters should be non-negative
-    if (tf->a < 0 || tf->c < 0 || tf->d < 0 || tf->g < 0) {
-        return false;
-    }
-
-    return true;
 }
 
 typedef struct {
@@ -343,7 +506,7 @@ static bool read_curve_para(const uint8_t* buf, uint32_t size,
             curve->parametric.f = read_big_fixed(paraTag->variable + 24);
             break;
     }
-    return tf_is_valid(&curve->parametric);
+    return skcms_TransferFunction_isSRGBish(&curve->parametric);
 }
 
 typedef struct {
@@ -443,8 +606,7 @@ static bool read_mft_common(const mft_CommonLayout* mftTag, skcms_A2B* a2b) {
     // matrix in skcms_A2B is applied later in the pipe, so supporting this would require another
     // field/flag.
     a2b->matrix_channels = 0;
-
-    a2b->input_channels  = mftTag->input_channels[0];
+    a2b-> input_channels = mftTag-> input_channels[0];
     a2b->output_channels = mftTag->output_channels[0];
 
     // We require exactly three (ie XYZ/Lab/RGB) output channels
@@ -463,88 +625,116 @@ static bool read_mft_common(const mft_CommonLayout* mftTag, skcms_A2B* a2b) {
     if (a2b->grid_points[0] < 2) {
         return false;
     }
-
     return true;
 }
 
-static bool init_a2b_tables(const uint8_t* table_base, uint64_t max_tables_len, uint32_t byte_width,
-                            uint32_t input_table_entries, uint32_t output_table_entries,
-                            skcms_A2B* a2b) {
+// All as the A2B version above, except where noted.
+static bool read_mft_common(const mft_CommonLayout* mftTag, skcms_B2A* b2a) {
+    // Same as A2B.
+    b2a->matrix_channels = 0;
+    b2a-> input_channels = mftTag-> input_channels[0];
+    b2a->output_channels = mftTag->output_channels[0];
+
+
+    // For B2A, exactly 3 input channels (XYZ) and 3 (RGB) or 4 (CMYK) output channels.
+    if (b2a->input_channels != ARRAY_COUNT(b2a->input_curves)) {
+        return false;
+    }
+    if (b2a->output_channels < 3 || b2a->output_channels > ARRAY_COUNT(b2a->output_curves)) {
+        return false;
+    }
+
+    // Same as A2B.
+    for (uint32_t i = 0; i < b2a->input_channels; ++i) {
+        b2a->grid_points[i] = mftTag->grid_points[0];
+    }
+    if (b2a->grid_points[0] < 2) {
+        return false;
+    }
+    return true;
+}
+
+template <typename A2B_or_B2A>
+static bool init_tables(const uint8_t* table_base, uint64_t max_tables_len, uint32_t byte_width,
+                        uint32_t input_table_entries, uint32_t output_table_entries,
+                        A2B_or_B2A* out) {
     // byte_width is 1 or 2, [input|output]_table_entries are in [2, 4096], so no overflow
     uint32_t byte_len_per_input_table  = input_table_entries * byte_width;
     uint32_t byte_len_per_output_table = output_table_entries * byte_width;
 
     // [input|output]_channels are <= 4, so still no overflow
-    uint32_t byte_len_all_input_tables  = a2b->input_channels * byte_len_per_input_table;
-    uint32_t byte_len_all_output_tables = a2b->output_channels * byte_len_per_output_table;
+    uint32_t byte_len_all_input_tables  = out->input_channels * byte_len_per_input_table;
+    uint32_t byte_len_all_output_tables = out->output_channels * byte_len_per_output_table;
 
-    uint64_t grid_size = a2b->output_channels * byte_width;
-    for (uint32_t axis = 0; axis < a2b->input_channels; ++axis) {
-        grid_size *= a2b->grid_points[axis];
+    uint64_t grid_size = out->output_channels * byte_width;
+    for (uint32_t axis = 0; axis < out->input_channels; ++axis) {
+        grid_size *= out->grid_points[axis];
     }
 
     if (max_tables_len < byte_len_all_input_tables + grid_size + byte_len_all_output_tables) {
         return false;
     }
 
-    for (uint32_t i = 0; i < a2b->input_channels; ++i) {
-        a2b->input_curves[i].table_entries = input_table_entries;
+    for (uint32_t i = 0; i < out->input_channels; ++i) {
+        out->input_curves[i].table_entries = input_table_entries;
         if (byte_width == 1) {
-            a2b->input_curves[i].table_8  = table_base + i * byte_len_per_input_table;
-            a2b->input_curves[i].table_16 = nullptr;
+            out->input_curves[i].table_8  = table_base + i * byte_len_per_input_table;
+            out->input_curves[i].table_16 = nullptr;
         } else {
-            a2b->input_curves[i].table_8  = nullptr;
-            a2b->input_curves[i].table_16 = table_base + i * byte_len_per_input_table;
+            out->input_curves[i].table_8  = nullptr;
+            out->input_curves[i].table_16 = table_base + i * byte_len_per_input_table;
         }
     }
 
     if (byte_width == 1) {
-        a2b->grid_8  = table_base + byte_len_all_input_tables;
-        a2b->grid_16 = nullptr;
+        out->grid_8  = table_base + byte_len_all_input_tables;
+        out->grid_16 = nullptr;
     } else {
-        a2b->grid_8  = nullptr;
-        a2b->grid_16 = table_base + byte_len_all_input_tables;
+        out->grid_8  = nullptr;
+        out->grid_16 = table_base + byte_len_all_input_tables;
     }
 
     const uint8_t* output_table_base = table_base + byte_len_all_input_tables + grid_size;
-    for (uint32_t i = 0; i < a2b->output_channels; ++i) {
-        a2b->output_curves[i].table_entries = output_table_entries;
+    for (uint32_t i = 0; i < out->output_channels; ++i) {
+        out->output_curves[i].table_entries = output_table_entries;
         if (byte_width == 1) {
-            a2b->output_curves[i].table_8  = output_table_base + i * byte_len_per_output_table;
-            a2b->output_curves[i].table_16 = nullptr;
+            out->output_curves[i].table_8  = output_table_base + i * byte_len_per_output_table;
+            out->output_curves[i].table_16 = nullptr;
         } else {
-            a2b->output_curves[i].table_8  = nullptr;
-            a2b->output_curves[i].table_16 = output_table_base + i * byte_len_per_output_table;
+            out->output_curves[i].table_8  = nullptr;
+            out->output_curves[i].table_16 = output_table_base + i * byte_len_per_output_table;
         }
     }
 
     return true;
 }
 
-static bool read_tag_mft1(const skcms_ICCTag* tag, skcms_A2B* a2b) {
+template <typename A2B_or_B2A>
+static bool read_tag_mft1(const skcms_ICCTag* tag, A2B_or_B2A* out) {
     if (tag->size < SAFE_FIXED_SIZE(mft1_Layout)) {
         return false;
     }
 
     const mft1_Layout* mftTag = (const mft1_Layout*)tag->buf;
-    if (!read_mft_common(mftTag->common, a2b)) {
+    if (!read_mft_common(mftTag->common, out)) {
         return false;
     }
 
     uint32_t input_table_entries  = 256;
     uint32_t output_table_entries = 256;
 
-    return init_a2b_tables(mftTag->variable, tag->size - SAFE_FIXED_SIZE(mft1_Layout), 1,
-                           input_table_entries, output_table_entries, a2b);
+    return init_tables(mftTag->variable, tag->size - SAFE_FIXED_SIZE(mft1_Layout), 1,
+                       input_table_entries, output_table_entries, out);
 }
 
-static bool read_tag_mft2(const skcms_ICCTag* tag, skcms_A2B* a2b) {
+template <typename A2B_or_B2A>
+static bool read_tag_mft2(const skcms_ICCTag* tag, A2B_or_B2A* out) {
     if (tag->size < SAFE_FIXED_SIZE(mft2_Layout)) {
         return false;
     }
 
     const mft2_Layout* mftTag = (const mft2_Layout*)tag->buf;
-    if (!read_mft_common(mftTag->common, a2b)) {
+    if (!read_mft_common(mftTag->common, out)) {
         return false;
     }
 
@@ -557,8 +747,8 @@ static bool read_tag_mft2(const skcms_ICCTag* tag, skcms_A2B* a2b) {
         return false;
     }
 
-    return init_a2b_tables(mftTag->variable, tag->size - SAFE_FIXED_SIZE(mft2_Layout), 2,
-                           input_table_entries, output_table_entries, a2b);
+    return init_tables(mftTag->variable, tag->size - SAFE_FIXED_SIZE(mft2_Layout), 2,
+                       input_table_entries, output_table_entries, out);
 }
 
 static bool read_curves(const uint8_t* buf, uint32_t size, uint32_t curve_offset,
@@ -588,6 +778,7 @@ static bool read_curves(const uint8_t* buf, uint32_t size, uint32_t curve_offset
     return true;
 }
 
+// mAB and mBA tags use the same encoding, including color lookup tables.
 typedef struct {
     uint8_t type                 [ 4];
     uint8_t reserved_a           [ 4];
@@ -599,21 +790,21 @@ typedef struct {
     uint8_t m_curve_offset       [ 4];
     uint8_t clut_offset          [ 4];
     uint8_t a_curve_offset       [ 4];
-} mAB_Layout;
+} mAB_or_mBA_Layout;
 
 typedef struct {
     uint8_t grid_points          [16];
     uint8_t grid_byte_width      [ 1];
     uint8_t reserved             [ 3];
     uint8_t variable             [1/*variable*/];
-} mABCLUT_Layout;
+} CLUT_Layout;
 
 static bool read_tag_mab(const skcms_ICCTag* tag, skcms_A2B* a2b, bool pcs_is_xyz) {
-    if (tag->size < SAFE_SIZEOF(mAB_Layout)) {
+    if (tag->size < SAFE_SIZEOF(mAB_or_mBA_Layout)) {
         return false;
     }
 
-    const mAB_Layout* mABTag = (const mAB_Layout*)tag->buf;
+    const mAB_or_mBA_Layout* mABTag = (const mAB_or_mBA_Layout*)tag->buf;
 
     a2b->input_channels  = mABTag->input_channels[0];
     a2b->output_channels = mABTag->output_channels[0];
@@ -658,11 +849,11 @@ static bool read_tag_mab(const skcms_ICCTag* tag, skcms_A2B* a2b, bool pcs_is_xy
         if (tag->size < matrix_offset + 12 * SAFE_SIZEOF(uint32_t)) {
             return false;
         }
-        float encoding_factor = pcs_is_xyz ? 65535 / 32768.0f : 1.0f;
+        float encoding_factor = pcs_is_xyz ? (65535 / 32768.0f) : 1.0f;
         const uint8_t* mtx_buf = tag->buf + matrix_offset;
-        a2b->matrix.vals[0][0] = encoding_factor * read_big_fixed(mtx_buf + 0);
-        a2b->matrix.vals[0][1] = encoding_factor * read_big_fixed(mtx_buf + 4);
-        a2b->matrix.vals[0][2] = encoding_factor * read_big_fixed(mtx_buf + 8);
+        a2b->matrix.vals[0][0] = encoding_factor * read_big_fixed(mtx_buf +  0);
+        a2b->matrix.vals[0][1] = encoding_factor * read_big_fixed(mtx_buf +  4);
+        a2b->matrix.vals[0][2] = encoding_factor * read_big_fixed(mtx_buf +  8);
         a2b->matrix.vals[1][0] = encoding_factor * read_big_fixed(mtx_buf + 12);
         a2b->matrix.vals[1][1] = encoding_factor * read_big_fixed(mtx_buf + 16);
         a2b->matrix.vals[1][2] = encoding_factor * read_big_fixed(mtx_buf + 20);
@@ -689,10 +880,10 @@ static bool read_tag_mab(const skcms_ICCTag* tag, skcms_A2B* a2b, bool pcs_is_xy
             return false;
         }
 
-        if (tag->size < clut_offset + SAFE_FIXED_SIZE(mABCLUT_Layout)) {
+        if (tag->size < clut_offset + SAFE_FIXED_SIZE(CLUT_Layout)) {
             return false;
         }
-        const mABCLUT_Layout* clut = (const mABCLUT_Layout*)(tag->buf + clut_offset);
+        const CLUT_Layout* clut = (const CLUT_Layout*)(tag->buf + clut_offset);
 
         if (clut->grid_byte_width[0] == 1) {
             a2b->grid_8  = clut->variable;
@@ -704,7 +895,7 @@ static bool read_tag_mab(const skcms_ICCTag* tag, skcms_A2B* a2b, bool pcs_is_xy
             return false;
         }
 
-        uint64_t grid_size = a2b->output_channels * clut->grid_byte_width[0];
+        uint64_t grid_size = a2b->output_channels * clut->grid_byte_width[0];  // the payload
         for (uint32_t i = 0; i < a2b->input_channels; ++i) {
             a2b->grid_points[i] = clut->grid_points[i];
             // The grid only makes sense with at least two points along each axis
@@ -713,7 +904,7 @@ static bool read_tag_mab(const skcms_ICCTag* tag, skcms_A2B* a2b, bool pcs_is_xy
             }
             grid_size *= a2b->grid_points[i];
         }
-        if (tag->size < clut_offset + SAFE_FIXED_SIZE(mABCLUT_Layout) + grid_size) {
+        if (tag->size < clut_offset + SAFE_FIXED_SIZE(CLUT_Layout) + grid_size) {
             return false;
         }
     } else {
@@ -730,6 +921,130 @@ static bool read_tag_mab(const skcms_ICCTag* tag, skcms_A2B* a2b, bool pcs_is_xy
         a2b->input_channels = 0;
     }
 
+    return true;
+}
+
+// Exactly the same as read_tag_mab(), except where there are comments.
+// TODO: refactor the two to eliminate common code?
+static bool read_tag_mba(const skcms_ICCTag* tag, skcms_B2A* b2a, bool pcs_is_xyz) {
+    if (tag->size < SAFE_SIZEOF(mAB_or_mBA_Layout)) {
+        return false;
+    }
+
+    const mAB_or_mBA_Layout* mBATag = (const mAB_or_mBA_Layout*)tag->buf;
+
+    b2a->input_channels  = mBATag->input_channels[0];
+    b2a->output_channels = mBATag->output_channels[0];
+
+    // Require exactly 3 inputs (XYZ) and 3 (RGB) or 4 (CMYK) outputs.
+    if (b2a->input_channels != ARRAY_COUNT(b2a->input_curves)) {
+        return false;
+    }
+    if (b2a->output_channels < 3 || b2a->output_channels > ARRAY_COUNT(b2a->output_curves)) {
+        return false;
+    }
+
+    uint32_t b_curve_offset = read_big_u32(mBATag->b_curve_offset);
+    uint32_t matrix_offset  = read_big_u32(mBATag->matrix_offset);
+    uint32_t m_curve_offset = read_big_u32(mBATag->m_curve_offset);
+    uint32_t clut_offset    = read_big_u32(mBATag->clut_offset);
+    uint32_t a_curve_offset = read_big_u32(mBATag->a_curve_offset);
+
+    if (0 == b_curve_offset) {
+        return false;
+    }
+
+    // "B" curves are our inputs, not outputs.
+    if (!read_curves(tag->buf, tag->size, b_curve_offset, b2a->input_channels,
+                     b2a->input_curves)) {
+        return false;
+    }
+
+    if (0 != m_curve_offset) {
+        if (0 == matrix_offset) {
+            return false;
+        }
+        // Matrix channels is tied to input_channels (3), not output_channels.
+        b2a->matrix_channels = b2a->input_channels;
+
+        if (!read_curves(tag->buf, tag->size, m_curve_offset, b2a->matrix_channels,
+                         b2a->matrix_curves)) {
+            return false;
+        }
+
+        if (tag->size < matrix_offset + 12 * SAFE_SIZEOF(uint32_t)) {
+            return false;
+        }
+        float encoding_factor = pcs_is_xyz ? (32768 / 65535.0f) : 1.0f;  // TODO: understand
+        const uint8_t* mtx_buf = tag->buf + matrix_offset;
+        b2a->matrix.vals[0][0] = encoding_factor * read_big_fixed(mtx_buf +  0);
+        b2a->matrix.vals[0][1] = encoding_factor * read_big_fixed(mtx_buf +  4);
+        b2a->matrix.vals[0][2] = encoding_factor * read_big_fixed(mtx_buf +  8);
+        b2a->matrix.vals[1][0] = encoding_factor * read_big_fixed(mtx_buf + 12);
+        b2a->matrix.vals[1][1] = encoding_factor * read_big_fixed(mtx_buf + 16);
+        b2a->matrix.vals[1][2] = encoding_factor * read_big_fixed(mtx_buf + 20);
+        b2a->matrix.vals[2][0] = encoding_factor * read_big_fixed(mtx_buf + 24);
+        b2a->matrix.vals[2][1] = encoding_factor * read_big_fixed(mtx_buf + 28);
+        b2a->matrix.vals[2][2] = encoding_factor * read_big_fixed(mtx_buf + 32);
+        b2a->matrix.vals[0][3] = encoding_factor * read_big_fixed(mtx_buf + 36);
+        b2a->matrix.vals[1][3] = encoding_factor * read_big_fixed(mtx_buf + 40);
+        b2a->matrix.vals[2][3] = encoding_factor * read_big_fixed(mtx_buf + 44);
+    } else {
+        if (0 != matrix_offset) {
+            return false;
+        }
+        b2a->matrix_channels = 0;
+    }
+
+    if (0 != a_curve_offset) {
+        if (0 == clut_offset) {
+            return false;
+        }
+
+        // "A" curves are our output, not input.
+        if (!read_curves(tag->buf, tag->size, a_curve_offset, b2a->output_channels,
+                         b2a->output_curves)) {
+            return false;
+        }
+
+        if (tag->size < clut_offset + SAFE_FIXED_SIZE(CLUT_Layout)) {
+            return false;
+        }
+        const CLUT_Layout* clut = (const CLUT_Layout*)(tag->buf + clut_offset);
+
+        if (clut->grid_byte_width[0] == 1) {
+            b2a->grid_8  = clut->variable;
+            b2a->grid_16 = nullptr;
+        } else if (clut->grid_byte_width[0] == 2) {
+            b2a->grid_8  = nullptr;
+            b2a->grid_16 = clut->variable;
+        } else {
+            return false;
+        }
+
+        uint64_t grid_size = b2a->output_channels * clut->grid_byte_width[0];
+        for (uint32_t i = 0; i < b2a->input_channels; ++i) {
+            b2a->grid_points[i] = clut->grid_points[i];
+            if (b2a->grid_points[i] < 2) {
+                return false;
+            }
+            grid_size *= b2a->grid_points[i];
+        }
+        if (tag->size < clut_offset + SAFE_FIXED_SIZE(CLUT_Layout) + grid_size) {
+            return false;
+        }
+    } else {
+        if (0 != clut_offset) {
+            return false;
+        }
+
+        if (b2a->input_channels != b2a->output_channels) {
+            return false;
+        }
+
+        // Zero out *output* channels to skip this stage.
+        b2a->output_channels = 0;
+    }
     return true;
 }
 
@@ -787,50 +1102,69 @@ static int fit_linear(const skcms_Curve* curve, int N, float tol,
     return lin_points;
 }
 
+// If this skcms_Curve holds an identity table, rewrite it as an identity skcms_TransferFunction.
+static void canonicalize_identity(skcms_Curve* curve) {
+    if (curve->table_entries && curve->table_entries <= (uint32_t)INT_MAX) {
+        int N = (int)curve->table_entries;
+
+        float c = 0.0f, d = 0.0f, f = 0.0f;
+        if (N == fit_linear(curve, N, 1.0f/(2*N), &c,&d,&f)
+            && c == 1.0f
+            && f == 0.0f) {
+            curve->table_entries = 0;
+            curve->table_8       = nullptr;
+            curve->table_16      = nullptr;
+            curve->parametric    = skcms_TransferFunction{1,1,0,0,0,0,0};
+        }
+    }
+}
+
 static bool read_a2b(const skcms_ICCTag* tag, skcms_A2B* a2b, bool pcs_is_xyz) {
     bool ok = false;
-    if (tag->type == skcms_Signature_mft1) {
-        ok = read_tag_mft1(tag, a2b);
-    } else if (tag->type == skcms_Signature_mft2) {
-        ok = read_tag_mft2(tag, a2b);
-    } else if (tag->type == skcms_Signature_mAB) {
-        ok = read_tag_mab(tag, a2b, pcs_is_xyz);
-    }
+    if (tag->type == skcms_Signature_mft1) { ok = read_tag_mft1(tag, a2b); }
+    if (tag->type == skcms_Signature_mft2) { ok = read_tag_mft2(tag, a2b); }
+    if (tag->type == skcms_Signature_mAB ) { ok = read_tag_mab(tag, a2b, pcs_is_xyz); }
     if (!ok) {
         return false;
     }
 
-    // Detect and canonicalize identity tables.
-    skcms_Curve* curves[] = {
-        a2b->input_channels  > 0 ? a2b->input_curves  + 0 : nullptr,
-        a2b->input_channels  > 1 ? a2b->input_curves  + 1 : nullptr,
-        a2b->input_channels  > 2 ? a2b->input_curves  + 2 : nullptr,
-        a2b->input_channels  > 3 ? a2b->input_curves  + 3 : nullptr,
-        a2b->matrix_channels > 0 ? a2b->matrix_curves + 0 : nullptr,
-        a2b->matrix_channels > 1 ? a2b->matrix_curves + 1 : nullptr,
-        a2b->matrix_channels > 2 ? a2b->matrix_curves + 2 : nullptr,
-        a2b->output_channels > 0 ? a2b->output_curves + 0 : nullptr,
-        a2b->output_channels > 1 ? a2b->output_curves + 1 : nullptr,
-        a2b->output_channels > 2 ? a2b->output_curves + 2 : nullptr,
-    };
+    if (a2b->input_channels > 0) { canonicalize_identity(a2b->input_curves + 0); }
+    if (a2b->input_channels > 1) { canonicalize_identity(a2b->input_curves + 1); }
+    if (a2b->input_channels > 2) { canonicalize_identity(a2b->input_curves + 2); }
+    if (a2b->input_channels > 3) { canonicalize_identity(a2b->input_curves + 3); }
 
-    for (int i = 0; i < ARRAY_COUNT(curves); i++) {
-        skcms_Curve* curve = curves[i];
+    if (a2b->matrix_channels > 0) { canonicalize_identity(a2b->matrix_curves + 0); }
+    if (a2b->matrix_channels > 1) { canonicalize_identity(a2b->matrix_curves + 1); }
+    if (a2b->matrix_channels > 2) { canonicalize_identity(a2b->matrix_curves + 2); }
 
-        if (curve && curve->table_entries && curve->table_entries <= (uint32_t)INT_MAX) {
-            int N = (int)curve->table_entries;
+    if (a2b->output_channels > 0) { canonicalize_identity(a2b->output_curves + 0); }
+    if (a2b->output_channels > 1) { canonicalize_identity(a2b->output_curves + 1); }
+    if (a2b->output_channels > 2) { canonicalize_identity(a2b->output_curves + 2); }
 
-            float c = 0.0f, d = 0.0f, f = 0.0f;
-            if (N == fit_linear(curve, N, 1.0f/(2*N), &c,&d,&f)
-                && c == 1.0f
-                && f == 0.0f) {
-                curve->table_entries = 0;
-                curve->table_8       = nullptr;
-                curve->table_16      = nullptr;
-                curve->parametric    = skcms_TransferFunction{1,1,0,0,0,0,0};
-            }
-        }
+    return true;
+}
+
+static bool read_b2a(const skcms_ICCTag* tag, skcms_B2A* b2a, bool pcs_is_xyz) {
+    bool ok = false;
+    if (tag->type == skcms_Signature_mft1) { ok = read_tag_mft1(tag, b2a); }
+    if (tag->type == skcms_Signature_mft2) { ok = read_tag_mft2(tag, b2a); }
+    if (tag->type == skcms_Signature_mBA ) { ok = read_tag_mba(tag, b2a, pcs_is_xyz); }
+    if (!ok) {
+        return false;
     }
+
+    if (b2a->input_channels > 0) { canonicalize_identity(b2a->input_curves + 0); }
+    if (b2a->input_channels > 1) { canonicalize_identity(b2a->input_curves + 1); }
+    if (b2a->input_channels > 2) { canonicalize_identity(b2a->input_curves + 2); }
+
+    if (b2a->matrix_channels > 0) { canonicalize_identity(b2a->matrix_curves + 0); }
+    if (b2a->matrix_channels > 1) { canonicalize_identity(b2a->matrix_curves + 1); }
+    if (b2a->matrix_channels > 2) { canonicalize_identity(b2a->matrix_curves + 2); }
+
+    if (b2a->output_channels > 0) { canonicalize_identity(b2a->output_curves + 0); }
+    if (b2a->output_channels > 1) { canonicalize_identity(b2a->output_curves + 1); }
+    if (b2a->output_channels > 2) { canonicalize_identity(b2a->output_curves + 2); }
+    if (b2a->output_channels > 3) { canonicalize_identity(b2a->output_curves + 3); }
 
     return true;
 }
@@ -865,7 +1199,9 @@ static bool usable_as_src(const skcms_ICCProfile* profile) {
        || (profile->has_trc && profile->has_toXYZD50);
 }
 
-bool skcms_Parse(const void* buf, size_t len, skcms_ICCProfile* profile) {
+bool skcms_ParseWithA2BPriority(const void* buf, size_t len,
+                                const int priority[], const int priorities,
+                                skcms_ICCProfile* profile) {
     assert(SAFE_SIZEOF(header_Layout) == 132);
 
     if (!profile) {
@@ -968,20 +1304,36 @@ bool skcms_Parse(const void* buf, size_t len, skcms_ICCProfile* profile) {
         }
     }
 
-    skcms_ICCTag a2b_tag;
-
-    // For now, we're preferring A2B0, like Skia does and the ICC spec tells us to.
-    // TODO: prefer A2B1 (relative colormetric) over A2B0 (perceptual)?
-    // This breaks with the ICC spec, but we think it's a good idea, given that TRC curves
-    // and all our known users are thinking exclusively in terms of relative colormetric.
-    const uint32_t sigs[] = { skcms_Signature_A2B0, skcms_Signature_A2B1 };
-    for (int i = 0; i < ARRAY_COUNT(sigs); i++) {
-        if (skcms_GetTagBySignature(profile, sigs[i], &a2b_tag)) {
-            if (!read_a2b(&a2b_tag, &profile->A2B, pcs_is_xyz)) {
+    for (int i = 0; i < priorities; i++) {
+        // enum { perceptual, relative_colormetric, saturation }
+        if (priority[i] < 0 || priority[i] > 2) {
+            return false;
+        }
+        uint32_t sig = skcms_Signature_A2B0 + static_cast<uint32_t>(priority[i]);
+        skcms_ICCTag tag;
+        if (skcms_GetTagBySignature(profile, sig, &tag)) {
+            if (!read_a2b(&tag, &profile->A2B, pcs_is_xyz)) {
                 // Malformed A2B tag
                 return false;
             }
             profile->has_A2B = true;
+            break;
+        }
+    }
+
+    for (int i = 0; i < priorities; i++) {
+        // enum { perceptual, relative_colormetric, saturation }
+        if (priority[i] < 0 || priority[i] > 2) {
+            return false;
+        }
+        uint32_t sig = skcms_Signature_B2A0 + static_cast<uint32_t>(priority[i]);
+        skcms_ICCTag tag;
+        if (skcms_GetTagBySignature(profile, sig, &tag)) {
+            if (!read_b2a(&tag, &profile->B2A, pcs_is_xyz)) {
+                // Malformed B2A tag
+                return false;
+            }
+            profile->has_B2A = true;
             break;
         }
     }
@@ -1015,7 +1367,7 @@ const skcms_ICCProfile* skcms_sRGB_profile() {
             { 0.013916016f, 0.097076416f, 0.714096069f },
         }},
 
-        false, // has_A2B, followed by a2b itself which we don't care about.
+        false, // has_A2B, followed by A2B itself, which we don't care about.
         {
             0,
             {
@@ -1042,6 +1394,39 @@ const skcms_ICCProfile* skcms_sRGB_profile() {
 
             0,
             {
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+            },
+        },
+
+        false, // has_B2A, followed by B2A itself, which we also don't care about.
+        {
+            0,
+            {
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+            },
+
+            0,
+            {{
+                { 0,0,0,0 },
+                { 0,0,0,0 },
+                { 0,0,0,0 },
+            }},
+            {
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+            },
+
+            0,
+            {0,0,0,0},
+            nullptr,
+            nullptr,
+            {
+                {{0, {0,0, 0,0,0,0,0}}},
                 {{0, {0,0, 0,0,0,0,0}}},
                 {{0, {0,0, 0,0,0,0,0}}},
                 {{0, {0,0, 0,0,0,0,0}}},
@@ -1075,7 +1460,7 @@ const skcms_ICCProfile* skcms_XYZD50_profile() {
             { 0,0,1 },
         }},
 
-        false, // has_A2B, followed by a2b itself which we don't care about.
+        false, // has_A2B, followed by A2B itself, which we don't care about.
         {
             0,
             {
@@ -1102,6 +1487,39 @@ const skcms_ICCProfile* skcms_XYZD50_profile() {
 
             0,
             {
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+            },
+        },
+
+        false, // has_B2A, followed by B2A itself, which we also don't care about.
+        {
+            0,
+            {
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+            },
+
+            0,
+            {{
+                { 0,0,0,0 },
+                { 0,0,0,0 },
+                { 0,0,0,0 },
+            }},
+            {
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+                {{0, {0,0, 0,0,0,0,0}}},
+            },
+
+            0,
+            {0,0,0,0},
+            nullptr,
+            nullptr,
+            {
+                {{0, {0,0, 0,0,0,0,0}}},
                 {{0, {0,0, 0,0,0,0,0}}},
                 {{0, {0,0, 0,0,0,0,0}}},
                 {{0, {0,0, 0,0,0,0,0}}},
@@ -1162,7 +1580,10 @@ bool skcms_ApproximatelyEqualProfiles(const skcms_ICCProfile* A, const skcms_ICC
     // skcms_252_random_bytes are 252 of a random shuffle of all possible bytes.
     // 252 is evenly divisible by 3 and 4.  Only 192, 10, 241, and 43 are missing.
 
-    if (A->data_color_space != B->data_color_space) {
+    // We want to allow otherwise equivalent profiles tagged as grayscale and RGB
+    // to be treated as equal.  But CMYK profiles are a totally different ballgame.
+    const auto CMYK = skcms_Signature_CMYK;
+    if ((A->data_color_space == CMYK) != (B->data_color_space == CMYK)) {
         return false;
     }
 
@@ -1228,6 +1649,47 @@ static skcms_Vector3 mv_mul(const skcms_Matrix3x3* m, const skcms_Vector3* v) {
     return dst;
 }
 
+bool skcms_AdaptToXYZD50(float wx, float wy,
+                         skcms_Matrix3x3* toXYZD50) {
+    if (!is_zero_to_one(wx) || !is_zero_to_one(wy) ||
+        !toXYZD50) {
+        return false;
+    }
+
+    // Assumes that Y is 1.0f.
+    skcms_Vector3 wXYZ = { { wx / wy, 1, (1 - wx - wy) / wy } };
+
+    // Now convert toXYZ matrix to toXYZD50.
+    skcms_Vector3 wXYZD50 = { { 0.96422f, 1.0f, 0.82521f } };
+
+    // Calculate the chromatic adaptation matrix.  We will use the Bradford method, thus
+    // the matrices below.  The Bradford method is used by Adobe and is widely considered
+    // to be the best.
+    skcms_Matrix3x3 xyz_to_lms = {{
+        {  0.8951f,  0.2664f, -0.1614f },
+        { -0.7502f,  1.7135f,  0.0367f },
+        {  0.0389f, -0.0685f,  1.0296f },
+    }};
+    skcms_Matrix3x3 lms_to_xyz = {{
+        {  0.9869929f, -0.1470543f, 0.1599627f },
+        {  0.4323053f,  0.5183603f, 0.0492912f },
+        { -0.0085287f,  0.0400428f, 0.9684867f },
+    }};
+
+    skcms_Vector3 srcCone = mv_mul(&xyz_to_lms, &wXYZ);
+    skcms_Vector3 dstCone = mv_mul(&xyz_to_lms, &wXYZD50);
+
+    *toXYZD50 = {{
+        { dstCone.vals[0] / srcCone.vals[0], 0, 0 },
+        { 0, dstCone.vals[1] / srcCone.vals[1], 0 },
+        { 0, 0, dstCone.vals[2] / srcCone.vals[2] },
+    }};
+    *toXYZD50 = skcms_Matrix3x3_concat(toXYZD50, &xyz_to_lms);
+    *toXYZD50 = skcms_Matrix3x3_concat(&lms_to_xyz, toXYZD50);
+
+    return true;
+}
+
 bool skcms_PrimariesToXYZD50(float rx, float ry,
                              float gx, float gy,
                              float bx, float by,
@@ -1263,33 +1725,10 @@ bool skcms_PrimariesToXYZD50(float rx, float ry,
     }};
     toXYZ = skcms_Matrix3x3_concat(&primaries, &toXYZ);
 
-    // Now convert toXYZ matrix to toXYZD50.
-    skcms_Vector3 wXYZD50 = { { 0.96422f, 1.0f, 0.82521f } };
-
-    // Calculate the chromatic adaptation matrix.  We will use the Bradford method, thus
-    // the matrices below.  The Bradford method is used by Adobe and is widely considered
-    // to be the best.
-    skcms_Matrix3x3 xyz_to_lms = {{
-        {  0.8951f,  0.2664f, -0.1614f },
-        { -0.7502f,  1.7135f,  0.0367f },
-        {  0.0389f, -0.0685f,  1.0296f },
-    }};
-    skcms_Matrix3x3 lms_to_xyz = {{
-        {  0.9869929f, -0.1470543f, 0.1599627f },
-        {  0.4323053f,  0.5183603f, 0.0492912f },
-        { -0.0085287f,  0.0400428f, 0.9684867f },
-    }};
-
-    skcms_Vector3 srcCone = mv_mul(&xyz_to_lms, &wXYZ);
-    skcms_Vector3 dstCone = mv_mul(&xyz_to_lms, &wXYZD50);
-
-    skcms_Matrix3x3 DXtoD50 = {{
-        { dstCone.vals[0] / srcCone.vals[0], 0, 0 },
-        { 0, dstCone.vals[1] / srcCone.vals[1], 0 },
-        { 0, 0, dstCone.vals[2] / srcCone.vals[2] },
-    }};
-    DXtoD50 = skcms_Matrix3x3_concat(&DXtoD50, &xyz_to_lms);
-    DXtoD50 = skcms_Matrix3x3_concat(&lms_to_xyz, &DXtoD50);
+    skcms_Matrix3x3 DXtoD50;
+    if (!skcms_AdaptToXYZD50(wx, wy, &DXtoD50)) {
+        return false;
+    }
 
     *toXYZD50 = skcms_Matrix3x3_concat(&DXtoD50, &toXYZ);
     return true;
@@ -1364,65 +1803,35 @@ skcms_Matrix3x3 skcms_Matrix3x3_concat(const skcms_Matrix3x3* A, const skcms_Mat
     return m;
 }
 
-#if defined(__clang__) || defined(__GNUC__)
-    #define small_memcpy __builtin_memcpy
-#else
-    #define small_memcpy memcpy
-#endif
-
-static float log2f_(float x) {
-    // The first approximation of log2(x) is its exponent 'e', minus 127.
-    int32_t bits;
-    small_memcpy(&bits, &x, sizeof(bits));
-
-    float e = (float)bits * (1.0f / (1<<23));
-
-    // If we use the mantissa too we can refine the error signficantly.
-    int32_t m_bits = (bits & 0x007fffff) | 0x3f000000;
-    float m;
-    small_memcpy(&m, &m_bits, sizeof(m));
-
-    return (e - 124.225514990f
-              -   1.498030302f*m
-              -   1.725879990f/(0.3520887068f + m));
-}
-
-static float exp2f_(float x) {
-    float fract = x - floorf_(x);
-
-    float fbits = (1.0f * (1<<23)) * (x + 121.274057500f
-                                        -   1.490129070f*fract
-                                        +  27.728023300f/(4.84252568f - fract));
-    if (fbits > INT_MAX) {
-        return INFINITY_;
-    } else if (fbits < INT_MIN) {
-        return -INFINITY_;
-    }
-    int32_t bits = (int32_t)fbits;
-    small_memcpy(&x, &bits, sizeof(x));
-    return x;
-}
-
-float powf_(float x, float y) {
-    return (x == 0) || (x == 1) ? x
-                                : exp2f_(log2f_(x) * y);
-}
-
-float skcms_TransferFunction_eval(const skcms_TransferFunction* tf, float x) {
-    float sign = x < 0 ? -1.0f : 1.0f;
-    x *= sign;
-
-    return sign * (x < tf->d ? tf->c * x + tf->f
-                             : powf_(tf->a * x + tf->b, tf->g) + tf->e);
-}
-
 #if defined(__clang__)
-    [[clang::no_sanitize("float-divide-by-zero")]]  // Checked for by tf_is_valid() on the way out.
+    [[clang::no_sanitize("float-divide-by-zero")]]  // Checked for by classify() on the way out.
 #endif
 bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_TransferFunction* dst) {
-    if (!tf_is_valid(src)) {
-        return false;
+    TF_PQish  pq;
+    TF_HLGish hlg;
+    switch (classify(*src, &pq, &hlg)) {
+        case Bad: return false;
+        case sRGBish: break;  // handled below
+
+        case PQish:
+            *dst = { TFKind_marker(PQish), -pq.A,  pq.D, 1.0f/pq.F
+                                         ,  pq.B, -pq.E, 1.0f/pq.C};
+            return true;
+
+        case HLGish:
+            *dst = { TFKind_marker(HLGinvish), 1.0f/hlg.R, 1.0f/hlg.G
+                                             , 1.0f/hlg.a, hlg.b, hlg.c
+                                             , hlg.K_minus_1 };
+            return true;
+
+        case HLGinvish:
+            *dst = { TFKind_marker(HLGish), 1.0f/hlg.R, 1.0f/hlg.G
+                                          , 1.0f/hlg.a, hlg.b, hlg.c
+                                          , hlg.K_minus_1 };
+            return true;
     }
+
+    assert (classify(*src) == sRGBish);
 
     // We're inverting this function, solving for x in terms of y.
     //   y = (cx + f)         x < d
@@ -1468,15 +1877,46 @@ bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_Tran
     inv.b = -k * src->e;
     inv.e = -src->b / src->a;
 
+    // We need to enforce the same constraints here that we do when fitting a curve,
+    // a >= 0 and ad+b >= 0.  These constraints are checked by classify(), so they're true
+    // of the source function if we're here.
+
+    // Just like when fitting the curve, there's really no way to rescue a < 0.
+    if (inv.a < 0) {
+        return false;
+    }
+    // On the other hand we can rescue an ad+b that's gone slightly negative here.
+    if (inv.a * inv.d + inv.b < 0) {
+        inv.b = -inv.a * inv.d;
+    }
+
+    // That should usually make classify(inv) == sRGBish true, but there are a couple situations
+    // where we might still fail here, like non-finite parameter values.
+    if (classify(inv) != sRGBish) {
+        return false;
+    }
+
+    assert (inv.a >= 0);
+    assert (inv.a * inv.d + inv.b >= 0);
+
     // Now in principle we're done.
-    // But to preserve the valuable invariant inv(src(1.0f)) == 1.0f,
-    // we'll tweak e.  These two values should be close to each other,
-    // just down to numerical precision issues, especially from powf_.
-    float s = powf_(src->a + src->b, src->g) + src->e;
-    inv.e = 1.0f - powf_(inv.a * s + inv.b, inv.g);
+    // But to preserve the valuable invariant inv(src(1.0f)) == 1.0f, we'll tweak
+    // e or f of the inverse, depending on which segment contains src(1.0f).
+    float s = skcms_TransferFunction_eval(src, 1.0f);
+    if (!isfinitef_(s)) {
+        return false;
+    }
+
+    float sign = s < 0 ? -1.0f : 1.0f;
+    s *= sign;
+    if (s < inv.d) {
+        inv.f = 1.0f - sign * inv.c * s;
+    } else {
+        inv.e = 1.0f - sign * powf_(inv.a * s + inv.b, inv.g);
+    }
 
     *dst = inv;
-    return tf_is_valid(dst);
+    return classify(*dst) == sRGBish;
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ //
@@ -1521,11 +1961,10 @@ bool skcms_TransferFunction_invert(const skcms_TransferFunction* src, skcms_Tran
 static float rg_nonlinear(float x,
                           const skcms_Curve* curve,
                           const skcms_TransferFunction* tf,
-                          const float P[3],
                           float dfdP[3]) {
     const float y = eval_curve(curve, x);
 
-    const float g = P[0],  a = P[1],  b = P[2],
+    const float g = tf->g, a = tf->a, b = tf->b,
                 c = tf->c, d = tf->d, f = tf->f;
 
     const float Y = fmaxf_(a*y + b, 0.0f),
@@ -1533,8 +1972,8 @@ static float rg_nonlinear(float x,
     assert (D >= 0);
 
     // The gradient.
-    dfdP[0] = 0.69314718f*log2f_(Y)*powf_(Y, g)
-            - 0.69314718f*log2f_(D)*powf_(D, g);
+    dfdP[0] = logf_(Y)*powf_(Y, g)
+            - logf_(D)*powf_(D, g);
     dfdP[1] = y*g*powf_(Y, g-1)
             - d*g*powf_(D, g-1);
     dfdP[2] =   g*powf_(Y, g-1)
@@ -1548,10 +1987,11 @@ static float rg_nonlinear(float x,
 }
 
 static bool gauss_newton_step(const skcms_Curve* curve,
-                              const skcms_TransferFunction* tf,
-                              float P[3],
+                                    skcms_TransferFunction* tf,
                               float x0, float dx, int N) {
     // We'll sample x from the range [x0,x1] (both inclusive) N times with even spacing.
+    //
+    // Let P = [ tf->g, tf->a, tf->b ] (the three terms that we're adjusting).
     //
     // We want to do P' = P + (Jf^T Jf)^-1 Jf^T r(P),
     //   where r(P) is the residual vector
@@ -1594,7 +2034,7 @@ static bool gauss_newton_step(const skcms_Curve* curve,
         float x = x0 + i*dx;
 
         float dfdP[3] = {0,0,0};
-        float resid = rg_nonlinear(x,curve,tf,P, dfdP);
+        float resid = rg_nonlinear(x,curve,tf, dfdP);
 
         for (int r = 0; r < 3; r++) {
             for (int c = 0; c < 3; c++) {
@@ -1621,54 +2061,85 @@ static bool gauss_newton_step(const skcms_Curve* curve,
 
     // 4) multiply inverse lhs by rhs
     skcms_Vector3 dP = mv_mul(&lhs_inv, &rhs);
-    P[0] += dP.vals[0];
-    P[1] += dP.vals[1];
-    P[2] += dP.vals[2];
-    return isfinitef_(P[0]) && isfinitef_(P[1]) && isfinitef_(P[2]);
+    tf->g += dP.vals[0];
+    tf->a += dP.vals[1];
+    tf->b += dP.vals[2];
+    return isfinitef_(tf->g) && isfinitef_(tf->a) && isfinitef_(tf->b);
 }
 
+static float max_roundtrip_error_checked(const skcms_Curve* curve,
+                                         const skcms_TransferFunction* tf_inv) {
+    skcms_TransferFunction tf;
+    if (!skcms_TransferFunction_invert(tf_inv, &tf) || sRGBish != classify(tf)) {
+        return INFINITY_;
+    }
+
+    skcms_TransferFunction tf_inv_again;
+    if (!skcms_TransferFunction_invert(&tf, &tf_inv_again)) {
+        return INFINITY_;
+    }
+
+    return skcms_MaxRoundtripError(curve, &tf_inv_again);
+}
 
 // Fit the points in [L,N) to the non-linear piece of tf, or return false if we can't.
 static bool fit_nonlinear(const skcms_Curve* curve, int L, int N, skcms_TransferFunction* tf) {
-    float P[3] = { tf->g, tf->a, tf->b };
+    // This enforces a few constraints that are not modeled in gauss_newton_step()'s optimization.
+    auto fixup_tf = [tf]() {
+        // a must be non-negative. That ensures the function is monotonically increasing.
+        // We don't really know how to fix up a if it goes negative.
+        if (tf->a < 0) {
+            return false;
+        }
+        // ad+b must be non-negative. That ensures we don't end up with complex numbers in powf.
+        // We feel just barely not uneasy enough to tweak b so ad+b is zero in this case.
+        if (tf->a * tf->d + tf->b < 0) {
+            tf->b = -tf->a * tf->d;
+        }
+        assert (tf->a >= 0 &&
+                tf->a * tf->d + tf->b >= 0);
+
+        // cd+f must be ~= (ad+b)^g+e. That ensures the function is continuous. We keep e as a free
+        // parameter so we can guarantee this.
+        tf->e =   tf->c*tf->d + tf->f
+          - powf_(tf->a*tf->d + tf->b, tf->g);
+
+        return true;
+    };
+
+    if (!fixup_tf()) {
+        return false;
+    }
 
     // No matter where we start, dx should always represent N even steps from 0 to 1.
     const float dx = 1.0f / (N-1);
 
-    for (int j = 0; j < 3/*TODO: tune*/; j++) {
-        // These extra constraints a >= 0 and ad+b >= 0 are not modeled in the optimization.
-        // We don't really know how to fix up a if it goes negative.
-        if (P[1] < 0) {
-            return false;
-        }
-        // If ad+b goes negative, we feel just barely not uneasy enough to tweak b so ad+b is zero.
-        if (P[1] * tf->d + P[2] < 0) {
-            P[2] = -P[1] * tf->d;
-        }
-        assert (P[1] >= 0 &&
-                P[1] * tf->d + P[2] >= 0);
+    skcms_TransferFunction best_tf = *tf;
+    float best_max_error = INFINITY_;
 
-        if (!gauss_newton_step(curve, tf,
-                               P,
-                               L*dx, dx, N-L)) {
-            return false;
+    // Need this or several curves get worse... *sigh*
+    float init_error = max_roundtrip_error_checked(curve, tf);
+    if (init_error < best_max_error) {
+        best_max_error = init_error;
+        best_tf = *tf;
+    }
+
+    // As far as we can tell, 1 Gauss-Newton step won't converge, and 3 steps is no better than 2.
+    for (int j = 0; j < 8; j++) {
+        if (!gauss_newton_step(curve, tf, L*dx, dx, N-L) || !fixup_tf()) {
+            *tf = best_tf;
+            return isfinitef_(best_max_error);
+        }
+
+        float max_error = max_roundtrip_error_checked(curve, tf);
+        if (max_error < best_max_error) {
+            best_max_error = max_error;
+            best_tf = *tf;
         }
     }
 
-    // We need to apply our fixups one last time
-    if (P[1] < 0) {
-        return false;
-    }
-    if (P[1] * tf->d + P[2] < 0) {
-        P[2] = -P[1] * tf->d;
-    }
-
-    tf->g = P[0];
-    tf->a = P[1];
-    tf->b = P[2];
-    tf->e =   tf->c*tf->d + tf->f
-      - powf_(tf->a*tf->d + tf->b, tf->g);
-    return true;
+    *tf = best_tf;
+    return isfinitef_(best_max_error);
 }
 
 bool skcms_ApproximateCurve(const skcms_Curve* curve,
@@ -1735,9 +2206,19 @@ bool skcms_ApproximateCurve(const skcms_Curve* curve,
             }
 
             // We fit tf_inv, so calculate tf to keep in sync.
+            // fit_nonlinear() should guarantee invertibility.
             if (!skcms_TransferFunction_invert(&tf_inv, &tf)) {
+                assert(false);
                 continue;
             }
+        }
+
+        // We'd better have a sane, sRGB-ish TF by now.
+        // Other non-Bad TFs would be fine, but we know we've only ever tried to fit sRGBish;
+        // anything else is just some accident of math and the way we pun tf.g as a type flag.
+        // fit_nonlinear() should guarantee this, but the special cases may fail this test.
+        if (sRGBish != classify(tf)) {
+            continue;
         }
 
         // We find our error by roundtripping the table through tf_inv.
@@ -1747,11 +2228,13 @@ bool skcms_ApproximateCurve(const skcms_Curve* curve,
         //
         // We've kept tf and tf_inv in sync above, but we can't guarantee that tf is
         // invertible, so re-verify that here (and use the new inverse for testing).
+        // fit_nonlinear() should guarantee this, but the special cases that don't use
+        // it may fail this test.
         if (!skcms_TransferFunction_invert(&tf, &tf_inv)) {
             continue;
         }
 
-        float err = max_roundtrip_error(curve, &tf_inv);
+        float err = skcms_MaxRoundtripError(curve, &tf_inv);
         if (*max_error > err) {
             *max_error = err;
             *approx    = tf;
@@ -1788,19 +2271,37 @@ typedef enum {
     Op_unpremul,
     Op_matrix_3x3,
     Op_matrix_3x4,
+
     Op_lab_to_xyz,
+    Op_xyz_to_lab,
 
     Op_tf_r,
     Op_tf_g,
     Op_tf_b,
     Op_tf_a,
 
+    Op_pq_r,
+    Op_pq_g,
+    Op_pq_b,
+    Op_pq_a,
+
+    Op_hlg_r,
+    Op_hlg_g,
+    Op_hlg_b,
+    Op_hlg_a,
+
+    Op_hlginv_r,
+    Op_hlginv_g,
+    Op_hlginv_b,
+    Op_hlginv_a,
+
     Op_table_r,
     Op_table_g,
     Op_table_b,
     Op_table_a,
 
-    Op_clut,
+    Op_clut_A2B,
+    Op_clut_B2A,
 
     Op_store_a8,
     Op_store_g8,
@@ -1836,37 +2337,24 @@ namespace baseline {
 #if defined(SKCMS_PORTABLE) || !(defined(__clang__) || defined(__GNUC__)) \
                             || (defined(__EMSCRIPTEN_major__) && !defined(__wasm_simd128__))
     #define N 1
-    using F   = float;
-    using U64 = uint64_t;
-    using U32 = uint32_t;
-    using I32 = int32_t;
-    using U16 = uint16_t;
-    using U8  = uint8_t;
-
+    template <typename T> using V = T;
+    using Color = float;
 #elif defined(__AVX512F__)
     #define N 16
-    using   F = Vec<N,float>;
-    using I32 = Vec<N,int32_t>;
-    using U64 = Vec<N,uint64_t>;
-    using U32 = Vec<N,uint32_t>;
-    using U16 = Vec<N,uint16_t>;
-    using  U8 = Vec<N,uint8_t>;
+    template <typename T> using V = Vec<N,T>;
+    using Color = float;
 #elif defined(__AVX__)
     #define N 8
-    using   F = Vec<N,float>;
-    using I32 = Vec<N,int32_t>;
-    using U64 = Vec<N,uint64_t>;
-    using U32 = Vec<N,uint32_t>;
-    using U16 = Vec<N,uint16_t>;
-    using  U8 = Vec<N,uint8_t>;
+    template <typename T> using V = Vec<N,T>;
+    using Color = float;
+#elif defined(__ARM_FEATURE_FP16_VECTOR_ARITHMETIC) && defined(SKCMS_OPT_INTO_NEON_FP16)
+    #define N 8
+    template <typename T> using V = Vec<N,T>;
+    using Color = _Float16;
 #else
     #define N 4
-    using   F = Vec<N,float>;
-    using I32 = Vec<N,int32_t>;
-    using U64 = Vec<N,uint64_t>;
-    using U32 = Vec<N,uint32_t>;
-    using U16 = Vec<N,uint16_t>;
-    using  U8 = Vec<N,uint8_t>;
+    template <typename T> using V = Vec<N,T>;
+    using Color = float;
 #endif
 
     #include "src/Transform_inl.h"
@@ -1875,6 +2363,7 @@ namespace baseline {
 
 // Now, instantiate any other versions of run_program() we may want for runtime detection.
 #if !defined(SKCMS_PORTABLE) &&                           \
+    !defined(SKCMS_NO_RUNTIME_CPU_DETECTION) &&           \
         (( defined(__clang__) && __clang_major__ >= 5) || \
          (!defined(__clang__) && defined(__GNUC__)))      \
      && defined(__x86_64__)
@@ -1892,12 +2381,8 @@ namespace baseline {
             #define USING_AVX_F16C
             #define USING_AVX2
             #define N 8
-            using   F = Vec<N,float>;
-            using I32 = Vec<N,int32_t>;
-            using U64 = Vec<N,uint64_t>;
-            using U32 = Vec<N,uint32_t>;
-            using U16 = Vec<N,uint16_t>;
-            using  U8 = Vec<N,uint8_t>;
+            template <typename T> using V = Vec<N,T>;
+            using Color = float;
 
             #include "src/Transform_inl.h"
 
@@ -1925,12 +2410,8 @@ namespace baseline {
         namespace skx {
             #define USING_AVX512F
             #define N 16
-            using   F = Vec<N,float>;
-            using I32 = Vec<N,int32_t>;
-            using U64 = Vec<N,uint64_t>;
-            using U32 = Vec<N,uint32_t>;
-            using U16 = Vec<N,uint16_t>;
-            using  U8 = Vec<N,uint8_t>;
+            template <typename T> using V = Vec<N,T>;
+            using Color = float;
 
             #include "src/Transform_inl.h"
 
@@ -1951,6 +2432,9 @@ namespace baseline {
         enum class CpuType { None, HSW, SKX };
         static CpuType cpu_type() {
             static const CpuType type = []{
+                if (!runtime_cpu_detection) {
+                    return CpuType::None;
+                }
                 // See http://www.sandpile.org/x86/cpuid.htm
 
                 // First, a basic cpuid(1) lets us check prerequisites for HSW, SKX.
@@ -2001,33 +2485,39 @@ namespace baseline {
 
 #endif
 
-static bool is_identity_tf(const skcms_TransferFunction* tf) {
-    return tf->g == 1 && tf->a == 1
-        && tf->b == 0 && tf->c == 0 && tf->d == 0 && tf->e == 0 && tf->f == 0;
-}
-
 typedef struct {
     Op          op;
     const void* arg;
 } OpAndArg;
 
 static OpAndArg select_curve_op(const skcms_Curve* curve, int channel) {
-    static const struct { Op parametric, table; } ops[] = {
-        { Op_tf_r, Op_table_r },
-        { Op_tf_g, Op_table_g },
-        { Op_tf_b, Op_table_b },
-        { Op_tf_a, Op_table_a },
+    static const struct { Op sRGBish, PQish, HLGish, HLGinvish, table; } ops[] = {
+        { Op_tf_r, Op_pq_r, Op_hlg_r, Op_hlginv_r, Op_table_r },
+        { Op_tf_g, Op_pq_g, Op_hlg_g, Op_hlginv_g, Op_table_g },
+        { Op_tf_b, Op_pq_b, Op_hlg_b, Op_hlginv_b, Op_table_b },
+        { Op_tf_a, Op_pq_a, Op_hlg_a, Op_hlginv_a, Op_table_a },
     };
-
-    const OpAndArg noop = { Op_load_a8/*doesn't matter*/, nullptr };
+    const auto& op = ops[channel];
 
     if (curve->table_entries == 0) {
-        return is_identity_tf(&curve->parametric)
-            ? noop
-            : OpAndArg{ ops[channel].parametric, &curve->parametric };
-    }
+        const OpAndArg noop = { Op_load_a8/*doesn't matter*/, nullptr };
 
-    return OpAndArg{ ops[channel].table, curve };
+        const skcms_TransferFunction& tf = curve->parametric;
+
+        if (tf.g == 1 && tf.a == 1 &&
+            tf.b == 0 && tf.c == 0 && tf.d == 0 && tf.e == 0 && tf.f == 0) {
+            return noop;
+        }
+
+        switch (classify(tf)) {
+            case Bad:        return noop;
+            case sRGBish:    return OpAndArg{op.sRGBish,   &tf};
+            case PQish:      return OpAndArg{op.PQish,     &tf};
+            case HLGish:     return OpAndArg{op.HLGish,    &tf};
+            case HLGinvish:  return OpAndArg{op.HLGinvish, &tf};
+        }
+    }
+    return OpAndArg{op.table, curve};
 }
 
 static size_t bytes_per_pixel(skcms_PixelFormat fmt) {
@@ -2039,6 +2529,7 @@ static size_t bytes_per_pixel(skcms_PixelFormat fmt) {
         case skcms_PixelFormat_RGB_565            >> 1: return  2;
         case skcms_PixelFormat_RGB_888            >> 1: return  3;
         case skcms_PixelFormat_RGBA_8888          >> 1: return  4;
+        case skcms_PixelFormat_RGBA_8888_sRGB     >> 1: return  4;
         case skcms_PixelFormat_RGBA_1010102       >> 1: return  4;
         case skcms_PixelFormat_RGB_161616LE       >> 1: return  6;
         case skcms_PixelFormat_RGBA_16161616LE    >> 1: return  8;
@@ -2060,8 +2551,9 @@ static bool prep_for_destination(const skcms_ICCProfile* profile,
                                  skcms_TransferFunction* invR,
                                  skcms_TransferFunction* invG,
                                  skcms_TransferFunction* invB) {
-    // We only support destinations with parametric transfer functions
-    // and with gamuts that can be transformed from XYZD50.
+    // skcms_Transform() supports B2A destinations...
+    if (profile->has_B2A) { return true; }
+    // ...and destinations with parametric transfer functions and an XYZD50 gamut matrix.
     return profile->has_trc
         && profile->has_toXYZD50
         && profile->trc[0].table_entries == 0
@@ -2129,7 +2621,12 @@ bool skcms_TransformWithPalette(const void*             src,
     Op*          ops  = program;
     const void** args = arguments;
 
-    skcms_TransferFunction inv_dst_tf_r, inv_dst_tf_g, inv_dst_tf_b;
+    // These are always parametric curves of some sort.
+    skcms_Curve dst_curves[3];
+    dst_curves[0].table_entries =
+    dst_curves[1].table_entries =
+    dst_curves[2].table_entries = 0;
+
     skcms_Matrix3x3        from_xyz;
 
     switch (srcFmt >> 1) {
@@ -2155,6 +2652,12 @@ bool skcms_TransformWithPalette(const void*             src,
         case skcms_PixelFormat_RGBA_8888_Palette8 >> 1: *ops++  = Op_load_8888_palette8;
                                                         *args++ = palette;
                                                         break;
+        case skcms_PixelFormat_RGBA_8888_sRGB >> 1:
+            *ops++ = Op_load_8888;
+            *ops++ = Op_tf_r;       *args++ = skcms_sRGB_TransferFunction();
+            *ops++ = Op_tf_g;       *args++ = skcms_sRGB_TransferFunction();
+            *ops++ = Op_tf_b;       *args++ = skcms_sRGB_TransferFunction();
+            break;
     }
     if (srcFmt == skcms_PixelFormat_RGB_hhh_Norm ||
         srcFmt == skcms_PixelFormat_RGBA_hhhh_Norm) {
@@ -2189,7 +2692,10 @@ bool skcms_TransformWithPalette(const void*             src,
     if (dstProfile != srcProfile) {
 
         if (!prep_for_destination(dstProfile,
-                                  &from_xyz, &inv_dst_tf_r, &inv_dst_tf_b, &inv_dst_tf_g)) {
+                                  &from_xyz,
+                                  &dst_curves[0].parametric,
+                                  &dst_curves[1].parametric,
+                                  &dst_curves[2].parametric)) {
             return false;
         }
 
@@ -2202,8 +2708,8 @@ bool skcms_TransformWithPalette(const void*             src,
                         *args++ = oa.arg;
                     }
                 }
-                *ops++ = Op_clamp;
-                *ops++ = Op_clut;
+                *ops++  = Op_clamp;
+                *ops++  = Op_clut_A2B;
                 *args++ = &srcProfile->A2B;
             }
 
@@ -2253,32 +2759,96 @@ bool skcms_TransformWithPalette(const void*             src,
             return false;
         }
 
-        // A2B sources should already be in XYZD50 at this point.
-        // Others still need to be transformed using their toXYZD50 matrix.
-        // N.B. There are profiles that contain both A2B tags and toXYZD50 matrices.
-        // If we use the A2B tags, we need to ignore the XYZD50 matrix entirely.
+        // A2B sources are in XYZD50 by now, but TRC sources are still in their original gamut.
         assert (srcProfile->has_A2B || srcProfile->has_toXYZD50);
-        static const skcms_Matrix3x3 I = {{
-            { 1.0f, 0.0f, 0.0f },
-            { 0.0f, 1.0f, 0.0f },
-            { 0.0f, 0.0f, 1.0f },
-        }};
-        const skcms_Matrix3x3* to_xyz = srcProfile->has_A2B ? &I : &srcProfile->toXYZD50;
 
-        // There's a chance the source and destination gamuts are identical,
-        // in which case we can skip the gamut transform.
-        if (0 != memcmp(&dstProfile->toXYZD50, to_xyz, sizeof(skcms_Matrix3x3))) {
-            // Concat the entire gamut transform into from_xyz,
-            // now slightly misnamed but it's a handy spot to stash the result.
-            from_xyz = skcms_Matrix3x3_concat(&from_xyz, to_xyz);
-            *ops++  = Op_matrix_3x3;
-            *args++ = &from_xyz;
+        if (dstProfile->has_B2A) {
+            // B2A needs its input in XYZD50, so transform TRC sources now.
+            if (!srcProfile->has_A2B) {
+                *ops++  = Op_matrix_3x3;
+                *args++ = &srcProfile->toXYZD50;
+            }
+
+            if (dstProfile->pcs == skcms_Signature_Lab) {
+                *ops++ = Op_xyz_to_lab;
+            }
+
+            if (dstProfile->B2A.input_channels == 3) {
+                for (int i = 0; i < 3; i++) {
+                    OpAndArg oa = select_curve_op(&dstProfile->B2A.input_curves[i], i);
+                    if (oa.arg) {
+                        *ops++  = oa.op;
+                        *args++ = oa.arg;
+                    }
+                }
+            }
+
+            if (dstProfile->B2A.matrix_channels == 3) {
+                static const skcms_Matrix3x4 I = {{
+                    {1,0,0,0},
+                    {0,1,0,0},
+                    {0,0,1,0},
+                }};
+                if (0 != memcmp(&I, &dstProfile->B2A.matrix, sizeof(I))) {
+                    *ops++  = Op_matrix_3x4;
+                    *args++ = &dstProfile->B2A.matrix;
+                }
+
+                for (int i = 0; i < 3; i++) {
+                    OpAndArg oa = select_curve_op(&dstProfile->B2A.matrix_curves[i], i);
+                    if (oa.arg) {
+                        *ops++  = oa.op;
+                        *args++ = oa.arg;
+                    }
+                }
+            }
+
+            if (dstProfile->B2A.output_channels) {
+                *ops++  = Op_clamp;
+                *ops++  = Op_clut_B2A;
+                *args++ = &dstProfile->B2A;
+                for (int i = 0; i < (int)dstProfile->B2A.output_channels; i++) {
+                    OpAndArg oa = select_curve_op(&dstProfile->B2A.output_curves[i], i);
+                    if (oa.arg) {
+                        *ops++  = oa.op;
+                        *args++ = oa.arg;
+                    }
+                }
+            }
+        } else {
+            // This is a TRC destination.
+            // We'll concat any src->xyz matrix with our xyz->dst matrix into one src->dst matrix.
+            // (A2B sources are already in XYZD50, making that src->xyz matrix I.)
+            static const skcms_Matrix3x3 I = {{
+                { 1.0f, 0.0f, 0.0f },
+                { 0.0f, 1.0f, 0.0f },
+                { 0.0f, 0.0f, 1.0f },
+            }};
+            const skcms_Matrix3x3* to_xyz = srcProfile->has_A2B ? &I : &srcProfile->toXYZD50;
+
+            // There's a chance the source and destination gamuts are identical,
+            // in which case we can skip the gamut transform.
+            if (0 != memcmp(&dstProfile->toXYZD50, to_xyz, sizeof(skcms_Matrix3x3))) {
+                // Concat the entire gamut transform into from_xyz,
+                // now slightly misnamed but it's a handy spot to stash the result.
+                from_xyz = skcms_Matrix3x3_concat(&from_xyz, to_xyz);
+                *ops++  = Op_matrix_3x3;
+                *args++ = &from_xyz;
+            }
+
+            // Encode back to dst RGB using its parametric transfer functions.
+            for (int i = 0; i < 3; i++) {
+                OpAndArg oa = select_curve_op(dst_curves+i, i);
+                if (oa.arg) {
+                    assert (oa.op != Op_table_r &&
+                            oa.op != Op_table_g &&
+                            oa.op != Op_table_b &&
+                            oa.op != Op_table_a);
+                    *ops++  = oa.op;
+                    *args++ = oa.arg;
+                }
+            }
         }
-
-        // Encode back to dst RGB using its parametric transfer functions.
-        if (!is_identity_tf(&inv_dst_tf_r)) { *ops++ = Op_tf_r; *args++ = &inv_dst_tf_r; }
-        if (!is_identity_tf(&inv_dst_tf_g)) { *ops++ = Op_tf_g; *args++ = &inv_dst_tf_g; }
-        if (!is_identity_tf(&inv_dst_tf_b)) { *ops++ = Op_tf_b; *args++ = &inv_dst_tf_b; }
     }
 
     // Clamp here before premul to make sure we're clamping to normalized values _and_ gamut,
@@ -2289,6 +2859,16 @@ bool skcms_TransformWithPalette(const void*             src,
     if (dstFmt < skcms_PixelFormat_RGB_hhh) {
         *ops++ = Op_clamp;
     }
+
+    if (dstProfile->data_color_space == skcms_Signature_CMYK) {
+        // Photoshop creates CMYK images as inverse CMYK.
+        // These happen to be the only ones we've _ever_ seen.
+        *ops++ = Op_invert;
+
+        // CMYK has no alpha channel, so make sure dstAlpha is a no-op.
+        dstAlpha = skcms_AlphaFormat_Unpremul;
+    }
+
     if (dstAlpha == skcms_AlphaFormat_Opaque) {
         *ops++ = Op_force_opaque;
     } else if (dstAlpha == skcms_AlphaFormat_PremulAsEncoded) {
@@ -2316,6 +2896,13 @@ bool skcms_TransformWithPalette(const void*             src,
         case skcms_PixelFormat_RGBA_hhhh       >> 1: *ops++ = Op_store_hhhh;       break;
         case skcms_PixelFormat_RGB_fff         >> 1: *ops++ = Op_store_fff;        break;
         case skcms_PixelFormat_RGBA_ffff       >> 1: *ops++ = Op_store_ffff;       break;
+
+        case skcms_PixelFormat_RGBA_8888_sRGB >> 1:
+            *ops++ = Op_tf_r;       *args++ = skcms_sRGB_Inverse_TransferFunction();
+            *ops++ = Op_tf_g;       *args++ = skcms_sRGB_Inverse_TransferFunction();
+            *ops++ = Op_tf_b;       *args++ = skcms_sRGB_Inverse_TransferFunction();
+            *ops++ = Op_store_8888;
+            break;
     }
 
     auto run = baseline::run_program;
@@ -2348,44 +2935,48 @@ static void assert_usable_as_destination(const skcms_ICCProfile* profile) {
 }
 
 bool skcms_MakeUsableAsDestination(skcms_ICCProfile* profile) {
-    skcms_Matrix3x3 fromXYZD50;
-    if (!profile->has_trc || !profile->has_toXYZD50
-        || !skcms_Matrix3x3_invert(&profile->toXYZD50, &fromXYZD50)) {
-        return false;
-    }
-
-    skcms_TransferFunction tf[3];
-    for (int i = 0; i < 3; i++) {
-        skcms_TransferFunction inv;
-        if (profile->trc[i].table_entries == 0
-            && skcms_TransferFunction_invert(&profile->trc[i].parametric, &inv)) {
-            tf[i] = profile->trc[i].parametric;
-            continue;
-        }
-
-        float max_error;
-        // Parametric curves from skcms_ApproximateCurve() are guaranteed to be invertible.
-        if (!skcms_ApproximateCurve(&profile->trc[i], &tf[i], &max_error)) {
+    if (!profile->has_B2A) {
+        skcms_Matrix3x3 fromXYZD50;
+        if (!profile->has_trc || !profile->has_toXYZD50
+            || !skcms_Matrix3x3_invert(&profile->toXYZD50, &fromXYZD50)) {
             return false;
         }
-    }
 
-    for (int i = 0; i < 3; ++i) {
-        profile->trc[i].table_entries = 0;
-        profile->trc[i].parametric = tf[i];
-    }
+        skcms_TransferFunction tf[3];
+        for (int i = 0; i < 3; i++) {
+            skcms_TransferFunction inv;
+            if (profile->trc[i].table_entries == 0
+                && skcms_TransferFunction_invert(&profile->trc[i].parametric, &inv)) {
+                tf[i] = profile->trc[i].parametric;
+                continue;
+            }
 
+            float max_error;
+            // Parametric curves from skcms_ApproximateCurve() are guaranteed to be invertible.
+            if (!skcms_ApproximateCurve(&profile->trc[i], &tf[i], &max_error)) {
+                return false;
+            }
+        }
+
+        for (int i = 0; i < 3; ++i) {
+            profile->trc[i].table_entries = 0;
+            profile->trc[i].parametric = tf[i];
+        }
+    }
     assert_usable_as_destination(profile);
     return true;
 }
 
 bool skcms_MakeUsableAsDestinationWithSingleCurve(skcms_ICCProfile* profile) {
-    // Operate on a copy of profile, so we can choose the best TF for the original curves
+    // Call skcms_MakeUsableAsDestination() with B2A disabled;
+    // on success that'll return a TRC/XYZ profile with three skcms_TransferFunctions.
     skcms_ICCProfile result = *profile;
+    result.has_B2A = false;
     if (!skcms_MakeUsableAsDestination(&result)) {
         return false;
     }
 
+    // Of the three, pick the transfer function that best fits the other two.
     int best_tf = 0;
     float min_max_error = INFINITY_;
     for (int i = 0; i < 3; i++) {
@@ -2396,7 +2987,7 @@ bool skcms_MakeUsableAsDestinationWithSingleCurve(skcms_ICCProfile* profile) {
 
         float err = 0;
         for (int j = 0; j < 3; ++j) {
-            err = fmaxf_(err, max_roundtrip_error(&profile->trc[j], &inv));
+            err = fmaxf_(err, skcms_MaxRoundtripError(&profile->trc[j], &inv));
         }
         if (min_max_error > err) {
             min_max_error = err;

@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRandom.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathBuilder.h"
+#include "include/utils/SkRandom.h"
+#include "samplecode/Sample.h"
 
 // Generates y values for the chart plots.
 static void gen_data(SkScalar yAvg, SkScalar ySpread, int count, SkTDArray<SkScalar>* dataPts) {
@@ -30,9 +30,7 @@ static void gen_paths(const SkTDArray<SkScalar>& topData,
                       SkScalar yBase,
                       SkScalar xLeft, SkScalar xDelta,
                       int leftShift,
-                      SkPath* plot, SkPath* fill) {
-    plot->rewind();
-    fill->rewind();
+                      SkPathBuilder* plot, SkPathBuilder* fill) {
     plot->incReserve(topData.count());
     if (nullptr == bottomData) {
         fill->incReserve(topData.count() + 2);
@@ -81,20 +79,14 @@ static void gen_paths(const SkTDArray<SkScalar>& topData,
 // A set of scrolling line plots with the area between each plot filled. Stresses out GPU path
 // filling
 class ChartView : public Sample {
-public:
-    ChartView() {
-        fShift = 0;
-        fSize.set(-1, -1);
-    }
+    inline static constexpr int kNumGraphs = 5;
+    inline static constexpr int kPixelsPerTick = 3;
+    inline static constexpr int kShiftPerFrame = 1;
+    int                 fShift = 0;
+    SkISize             fSize = {-1, -1};
+    SkTDArray<SkScalar> fData[kNumGraphs];
 
-protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "Chart");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("Chart"); }
 
     void onDrawContent(SkCanvas* canvas) override {
         bool sizeChanged = false;
@@ -108,7 +100,7 @@ protected:
         SkScalar height = SkIntToScalar(fSize.fHeight);
 
         if (sizeChanged) {
-            int dataPointCount = SkMax32(fSize.fWidth / kPixelsPerTick + 1, 2);
+            int dataPointCount = std::max(fSize.fWidth / kPixelsPerTick + 1, 2);
 
             for (int i = 0; i < kNumGraphs; ++i) {
                 SkScalar y = (kNumGraphs - i) * (height - ySpread) / (kNumGraphs + 1);
@@ -127,9 +119,6 @@ protected:
             }
         }
 
-        SkPath plotPath;
-        SkPath fillPath;
-
         static const SkScalar kStrokeWidth = SkIntToScalar(2);
         SkPaint plotPaint;
         SkPaint fillPaint;
@@ -141,7 +130,9 @@ protected:
         fillPaint.setAntiAlias(true);
         fillPaint.setStyle(SkPaint::kFill_Style);
 
+        SkPathBuilder plotPath, fillPath;
         SkTDArray<SkScalar>* prevData = nullptr;
+
         for (int i = 0; i < kNumGraphs; ++i) {
             gen_paths(fData[i],
                       prevData,
@@ -154,29 +145,16 @@ protected:
 
             // Make the fills partially transparent
             fillPaint.setColor((gColors[i] & 0x00ffffff) | 0x80000000);
-            canvas->drawPath(fillPath, fillPaint);
+            canvas->drawPath(fillPath.detach(), fillPaint);
 
             plotPaint.setColor(gColors[i]);
-            canvas->drawPath(plotPath, plotPaint);
+            canvas->drawPath(plotPath.detach(), plotPaint);
 
             prevData = fData + i;
         }
 
         fShift += kShiftPerFrame;
     }
-
-private:
-    enum {
-        kNumGraphs = 5,
-        kPixelsPerTick = 3,
-        kShiftPerFrame = 1,
-    };
-    int                 fShift;
-    SkISize             fSize;
-    SkTDArray<SkScalar> fData[kNumGraphs];
-    typedef Sample INHERITED;
 };
-
-//////////////////////////////////////////////////////////////////////////////
 
 DEF_SAMPLE( return new ChartView(); )

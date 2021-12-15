@@ -5,12 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkGeometry.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkPoint.h"
-#include "SkRandom.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkGeometry.h"
 
 #include <math.h>
 
@@ -19,10 +25,10 @@ namespace skiagm {
 // Slices paths into sliver-size contours shaped like ice cream cones.
 class MandolineSlicer {
 public:
-    static constexpr int kDefaultSubdivisions = 10;
+    inline static constexpr int kDefaultSubdivisions = 10;
 
     MandolineSlicer(SkPoint anchorPt) {
-        fPath.setFillType(SkPath::kEvenOdd_FillType);
+        fPath.setFillType(SkPathFillType::kEvenOdd);
         fPath.setIsVolatile(true);
         this->reset(anchorPt);
     }
@@ -192,4 +198,4 @@ protected:
 
 DEF_GM(return new SliverPathsGM;)
 
-}
+}  // namespace skiagm

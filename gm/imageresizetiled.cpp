@@ -5,10 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "SkImageFilter.h"
-#include "SkRandom.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkImageFilters.h"
+#include "tools/ToolUtils.h"
 
 #define WIDTH 640
 #define HEIGHT 480
@@ -19,8 +27,8 @@ DEF_SIMPLE_GM(imageresizetiled, canvas, WIDTH, HEIGHT) {
         SkPaint paint;
         SkMatrix matrix;
         matrix.setScale(RESIZE_FACTOR, RESIZE_FACTOR);
-        paint.setImageFilter(SkImageFilter::MakeMatrixFilter(matrix,
-                                                             kNone_SkFilterQuality,
+        paint.setImageFilter(SkImageFilters::MatrixTransform(matrix,
+                                                             SkSamplingOptions(),
                                                              nullptr));
 
         SkFont         font(ToolUtils::create_portable_typeface(), 100);

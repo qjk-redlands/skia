@@ -5,12 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkClipOpPriv.h"
-#include "SkColorFilter.h"
-#include "SkMaskFilter.h"
-#include "SkPaint.h"
-#include "SkRRect.h"
+#include "gm/gm.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkBlurTypes.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
 
 namespace skiagm {
 
@@ -43,9 +50,7 @@ protected:
         canvas->scale(kScale, kScale);
 
         canvas->save();
-            SkRect clipRect1 = SkRect::MakeLTRB(0, 0,
-                                                SkIntToScalar(kWidth), SkIntToScalar(kHeight));
-
+            SkRect clipRect1 = SkRect::MakeLTRB(0, 0, kWidth, kHeight);
             canvas->clipRect(clipRect1);
 
             canvas->save();
@@ -57,7 +62,7 @@ protected:
 
                     SkRect clipRect2 = SkRect::MakeLTRB(8, 8, 288, 288);
                     SkRRect clipRRect = SkRRect::MakeOval(clipRect2);
-                    canvas->clipRRect(clipRRect, kDifference_SkClipOp, true);
+                    canvas->clipRRect(clipRRect, SkClipOp::kDifference, true);
 
                     SkRect r = SkRect::MakeLTRB(4, 4, 292, 292);
                     SkRRect rr = SkRRect::MakeOval(r);
@@ -67,8 +72,7 @@ protected:
                     paint.setMaskFilter(SkMaskFilter::MakeBlur(
                                             kNormal_SkBlurStyle,
                                             1.366025f));
-                    paint.setColorFilter(SkColorFilters::Blend(SK_ColorRED,
-                                                                   SkBlendMode::kSrcIn));
+                    paint.setColorFilter(SkColorFilters::Blend(SK_ColorRED, SkBlendMode::kSrcIn));
                     paint.setAntiAlias(true);
 
                     canvas->drawRRect(rr, paint);
@@ -79,13 +83,13 @@ protected:
     }
 
 private:
-    static constexpr int kWidth = 1164;
-    static constexpr int kHeight = 802;
+    inline static constexpr int kWidth = 1164;
+    inline static constexpr int kHeight = 802;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new BlurredClippedCircleGM;)
-}
+}  // namespace skiagm

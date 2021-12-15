@@ -15,7 +15,12 @@ def bytes_from_file(f, chunksize=8192):
     chunk = f.read(chunksize)
     if chunk:
       for b in chunk:
-        yield ord(b)
+        if isinstance(b, str):
+          # python 2
+          yield ord(b)
+        else:
+          # python 3
+          yield b
     else:
       break
 
@@ -39,7 +44,8 @@ extern "C" SkEmbeddedHeader const NAME;''')
   args = parser.parse_args()
 
   out = args.output.write;
-  out('#include "SkTypes.h"\n')
+  out('#include <stddef.h>\n')
+  out('#include <stdint.h>\n')
 
   # Write the resources.
   index = 0

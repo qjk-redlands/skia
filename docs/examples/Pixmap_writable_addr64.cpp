@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=de14d8d30e4a7b6462103d0e0dd96b0b
 REG_FIDDLE(Pixmap_writable_addr64, 256, 40, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -12,9 +12,9 @@ void draw(SkCanvas* canvas) {
     SkBitmap bitmap;
     canvas->scale(10, 10);
     bitmap.installPixels(pixmap);
-    canvas->drawBitmap(bitmap, 0, 0);
+    canvas->drawImage(bitmap.asImage(), 0, 0);
     *pixmap.writable_addr64(1, 1) |= 0x00ff000000000000LL;
     bitmap.installPixels(pixmap);
-    canvas->drawBitmap(bitmap, 10, 0);
+    canvas->drawImage(bitmap.asImage(), 10, 0);
 }
 }  // END FIDDLE

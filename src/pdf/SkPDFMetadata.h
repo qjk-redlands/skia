@@ -8,9 +8,9 @@
 #ifndef SkPDFMetadata_DEFINED
 #define SkPDFMetadata_DEFINED
 
-#include "SkPDFDocument.h"
-#include "SkPDFTypes.h"
-#include "SkUUID.h"
+#include "include/docs/SkPDFDocument.h"
+#include "src/pdf/SkPDFTypes.h"
+#include "src/pdf/SkUUID.h"
 
 class SkPDFObject;
 
@@ -25,5 +25,5 @@ SkPDFIndirectReference MakeXMPObject(const SkPDF::Metadata& metadata,
                                      const SkUUID& doc,
                                      const SkUUID& instance,
                                      SkPDFDocument*);
-}
+}  // namespace SkPDFMetadata
 #endif  // SkPDFMetadata_DEFINED

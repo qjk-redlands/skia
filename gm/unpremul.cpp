@@ -5,8 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkColor.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+
+#include <string.h>
 
 DEF_SIMPLE_GM(unpremul, canvas, 200, 200) {
     const SkColor color = 0xbf400000;
@@ -61,7 +70,7 @@ DEF_SIMPLE_GM(unpremul, canvas, 200, 200) {
         bm.allocPixels(SkImageInfo::Make(100,100, kRGBA_8888_SkColorType, kUnpremul_SkAlphaType));
         bm.eraseColor(color);
 
-        canvas->drawBitmap(bm, 0,0, &paint);
+        canvas->drawImage(bm.asImage(), 0,0, SkSamplingOptions(), &paint);
         grade(50,150);
     }
 

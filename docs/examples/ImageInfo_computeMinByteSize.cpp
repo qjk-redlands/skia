@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=fc18640fdde437cb35338aed7c68d399
 REG_FIDDLE(ImageInfo_computeMinByteSize, 256, 130, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -14,6 +14,6 @@ void draw(SkCanvas* canvas) {
     bitmap.eraseColor(SK_ColorRED);
     canvas->scale(50, 50);
     canvas->rotate(8);
-    canvas->drawBitmap(bitmap, 2, 0);
+    canvas->drawImage(bitmap.asImage(), 2, 0);
 }
 }  // END FIDDLE

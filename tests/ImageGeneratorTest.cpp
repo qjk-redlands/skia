@@ -5,19 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "SkData.h"
-#include "SkCanvas.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
 
-#include "SkGraphics.h"
-#include "SkImageGenerator.h"
-#include "SkImageInfoPriv.h"
-#include "SkYUVAIndex.h"
-#include "Test.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkImageGenerator.h"
+#include "include/private/SkImageInfoPriv.h"
+#include "tests/Test.h"
 
 #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-    #include "SkImageGeneratorCG.h"
+    #include "include/ports/SkImageGeneratorCG.h"
 #elif defined(SK_BUILD_FOR_WIN)
-    #include "SkImageGeneratorWIC.h"
+    #include "include/ports/SkImageGeneratorWIC.h"
 #endif
 
 static bool gMyFactoryWasCalled;
@@ -62,33 +61,19 @@ public:
 
 DEF_TEST(ImageGenerator, reporter) {
     MyImageGenerator ig;
-    SkYUVASizeInfo sizeInfo;
-    sizeInfo.fSizes[0] = SkISize::Make(200, 200);
-    sizeInfo.fSizes[1] = SkISize::Make(100, 100);
-    sizeInfo.fSizes[2] = SkISize::Make( 50,  50);
-    sizeInfo.fSizes[3] = SkISize::Make( 25,  25);
-    sizeInfo.fWidthBytes[0] = 0;
-    sizeInfo.fWidthBytes[1] = 0;
-    sizeInfo.fWidthBytes[2] = 0;
-    sizeInfo.fWidthBytes[3] = 0;
-    void* planes[4] = { nullptr };
-    SkYUVAIndex yuvaIndices[4];
-    SkYUVColorSpace colorSpace;
+    SkYUVAPixmapInfo yuvaPixmapInfo;
 
     // Check that the YUV decoding API does not cause any crashes
-    ig.queryYUVA8(&sizeInfo, yuvaIndices, nullptr);
-    ig.queryYUVA8(&sizeInfo, yuvaIndices, &colorSpace);
-    sizeInfo.fWidthBytes[0] = 250;
-    sizeInfo.fWidthBytes[1] = 250;
-    sizeInfo.fWidthBytes[2] = 250;
-    sizeInfo.fWidthBytes[3] = 250;
-    yuvaIndices[0] = { 0, SkColorChannel::kR };
-    yuvaIndices[1] = { 1, SkColorChannel::kR };
-    yuvaIndices[2] = { 2, SkColorChannel::kR };
-    yuvaIndices[3] = { 3, SkColorChannel::kR };
-    int dummy;
-    planes[0] = planes[1] = planes[2] = planes[3] = &dummy;
-    ig.getYUVA8Planes(sizeInfo, yuvaIndices, planes);
+    ig.queryYUVAInfo(SkYUVAPixmapInfo::SupportedDataTypes::All(), &yuvaPixmapInfo);
+    SkYUVAInfo yuvaInfo({250, 250},
+                        SkYUVAInfo::PlaneConfig::kY_UV,
+                        SkYUVAInfo::Subsampling::k420,
+                        kJPEG_Full_SkYUVColorSpace);
+    yuvaPixmapInfo = SkYUVAPixmapInfo(yuvaInfo,
+                                      SkYUVAPixmapInfo::DataType::kUnorm8,
+                                      /*rowBytes[]*/ nullptr);
+    SkYUVAPixmaps yuvaPixmaps = SkYUVAPixmaps::Allocate(yuvaPixmapInfo);
+    ig.getYUVAPlanes(yuvaPixmaps);
 
     // Suppressed due to https://code.google.com/p/skia/issues/detail?id=4339
     if (false) {
@@ -96,8 +81,8 @@ DEF_TEST(ImageGenerator, reporter) {
     }
 }
 
-#include "SkAutoMalloc.h"
-#include "SkPictureRecorder.h"
+#include "include/core/SkPictureRecorder.h"
+#include "src/core/SkAutoMalloc.h"
 
 static sk_sp<SkPicture> make_picture() {
     SkPictureRecorder recorder;

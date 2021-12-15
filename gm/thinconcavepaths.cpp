@@ -5,9 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkScalar.h"
 
 namespace {
 // Test thin stroked rect (stroked "by hand", not by stroking).
@@ -131,7 +133,7 @@ void draw_small_i(SkCanvas* canvas, const SkPaint& paint, SkScalar width) {
 
 
 
-};
+}  // namespace
 
 DEF_SIMPLE_GM(thinconcavepaths, canvas, 550, 400) {
     SkPaint paint;

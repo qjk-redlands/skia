@@ -8,22 +8,22 @@
 #ifndef TestSVGTypeface_DEFINED
 #define TestSVGTypeface_DEFINED
 
-#include "SkFontArguments.h"
-#include "SkFontMetrics.h"
-#include "SkMutex.h"
-#include "SkPaint.h"
-#include "SkPathOps.h"
-#include "SkPoint.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkScalar.h"
-#include "SkSpan.h"
-#include "SkStream.h"
-#include "SkString.h"
-#include "SkTArray.h"
-#include "SkTHash.h"
-#include "SkTypeface.h"
-#include "SkTypes.h"
+#include "include/core/SkFontArguments.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/pathops/SkPathOps.h"
+#include "include/private/SkMutex.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTHash.h"
 
 #include <memory>
 
@@ -39,6 +39,8 @@ class SkWStream;
 struct SkAdvancedTypefaceMetrics;
 struct SkScalerContextEffects;
 struct SkScalerContextRec;
+
+#ifdef SK_ENABLE_SVG
 
 struct SkSVGTestTypefaceGlyphData {
     const char* fSvgResourcePath;
@@ -80,10 +82,10 @@ public:
 protected:
     void exportTtxCommon(SkWStream*, const char* type, const SkTArray<GlyfInfo>* = nullptr) const;
 
-    SkScalerContext*                           onCreateScalerContext(const SkScalerContextEffects&,
-                                                                     const SkDescriptor* desc) const override;
-    void                                       onFilterRec(SkScalerContextRec* rec) const override;
-    void                                       getGlyphToUnicodeMap(SkUnichar*) const override;
+    std::unique_ptr<SkScalerContext> onCreateScalerContext(const SkScalerContextEffects&,
+                                                           const SkDescriptor* desc) const override;
+    void onFilterRec(SkScalerContextRec* rec) const override;
+    void getGlyphToUnicodeMap(SkUnichar*) const override;
     std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override;
 
     std::unique_ptr<SkStreamAsset> onOpenStream(int* ttcIndex) const override { return nullptr; }
@@ -96,12 +98,17 @@ protected:
 
     void onCharsToGlyphs(const SkUnichar* chars, int count, SkGlyphID glyphs[]) const override;
 
+    void getPostScriptGlyphNames(SkString*) const override {}
+
     int onCountGlyphs() const override { return fGlyphCount; }
 
     int onGetUPEM() const override { return fUpem; }
 
-    void                          onGetFamilyName(SkString* familyName) const override;
+    void onGetFamilyName(SkString* familyName) const override;
+    bool onGetPostScriptName(SkString*) const override;
     SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const override;
+
+    bool onGlyphMaskNeedsCurrentColor() const override { return false; }
 
     int onGetVariationDesignPosition(SkFontArguments::VariationPosition::Coordinate coordinates[],
                                      int coordinateCount) const override {
@@ -154,4 +161,6 @@ private:
     friend class SkTestSVGScalerContext;
 };
 
-#endif
+#endif // SK_ENABLE_SVG
+
+#endif // TestSVGTypeface_DEFINED

@@ -8,9 +8,9 @@
 #ifndef GrMockBuffer_DEFINED
 #define GrMockBuffer_DEFINED
 
-#include "GrCaps.h"
-#include "GrGpuBuffer.h"
-#include "GrMockGpu.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrGpuBuffer.h"
+#include "src/gpu/mock/GrMockGpu.h"
 
 class GrMockBuffer : public GrGpuBuffer {
 public:
@@ -29,7 +29,7 @@ private:
     void onUnmap() override { sk_free(fMapPtr); }
     bool onUpdateData(const void* src, size_t srcSizeInBytes) override { return true; }
 
-    typedef GrGpuBuffer INHERITED;
+    using INHERITED = GrGpuBuffer;
 };
 
 #endif

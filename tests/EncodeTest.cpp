@@ -5,19 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "Resources.h"
-#include "Test.h"
+#include "tests/Test.h"
+#include "tools/Resources.h"
 
-#include "SkBitmap.h"
-#include "SkColorPriv.h"
-#include "SkEncodedImageFormat.h"
-#include "SkImage.h"
-#include "SkJpegEncoder.h"
-#include "SkPngEncoder.h"
-#include "SkStream.h"
-#include "SkWebpEncoder.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkEncodedImageFormat.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkSurface.h"
+#include "include/encode/SkJpegEncoder.h"
+#include "include/encode/SkPngEncoder.h"
+#include "include/encode/SkWebpEncoder.h"
+#include "include/private/SkImageInfoPriv.h"
 
-#include "png.h"
+#include <png.h>
 
 #include <algorithm>
 #include <string>
@@ -134,6 +137,44 @@ static inline bool almost_equals(const SkBitmap& a, const SkBitmap& b, int toler
     }
 
     return true;
+}
+
+DEF_TEST(Encode_JPG, r) {
+    auto image = GetResourceAsImage("images/mandrill_128.png");
+    if (!image) {
+        return;
+    }
+
+    for (auto ct : { kRGBA_8888_SkColorType,
+                     kBGRA_8888_SkColorType,
+                     kRGB_565_SkColorType,
+                     kARGB_4444_SkColorType,
+                     kGray_8_SkColorType,
+                     kRGBA_F16_SkColorType }) {
+        for (auto at : { kPremul_SkAlphaType, kUnpremul_SkAlphaType, kOpaque_SkAlphaType }) {
+            auto info = SkImageInfo::Make(image->width(), image->height(), ct, at);
+            auto surface = SkSurface::MakeRaster(info);
+            auto canvas = surface->getCanvas();
+            canvas->drawImage(image, 0, 0);
+
+            SkBitmap bm;
+            bm.allocPixels(info);
+            if (!surface->makeImageSnapshot()->readPixels(nullptr, bm.pixmap(), 0, 0)) {
+                ERRORF(r, "failed to readPixels! ct: %i\tat: %i\n", ct, at);
+                continue;
+            }
+            for (auto alphaOption : { SkJpegEncoder::AlphaOption::kIgnore,
+                                      SkJpegEncoder::AlphaOption::kBlendOnBlack }) {
+                SkJpegEncoder::Options opts;
+                opts.fAlphaOption = alphaOption;
+                SkNullWStream ignored;
+                if (!SkJpegEncoder::Encode(&ignored, bm.pixmap(), opts)) {
+                    REPORTER_ASSERT(r, ct == kARGB_4444_SkColorType
+                                    && alphaOption == SkJpegEncoder::AlphaOption::kBlendOnBlack);
+                }
+            }
+        }
+    }
 }
 
 DEF_TEST(Encode_JpegDownsample, r) {
@@ -390,4 +431,27 @@ DEF_TEST(Encode_WebpOptions, r) {
     REPORTER_ASSERT(r, almost_equals(bm0, bm1, 0));
     REPORTER_ASSERT(r, almost_equals(bm0, bm2, 90));
     REPORTER_ASSERT(r, almost_equals(bm2, bm3, 50));
+}
+
+DEF_TEST(Encode_Alpha, r) {
+    // These formats have no sensible way to encode alpha images.
+    for (auto format : { SkEncodedImageFormat::kJPEG,
+                         SkEncodedImageFormat::kPNG,
+                         SkEncodedImageFormat::kWEBP }) {
+        for (int ctAsInt = kUnknown_SkColorType + 1; ctAsInt <= kLastEnum_SkColorType; ctAsInt++) {
+            auto ct = static_cast<SkColorType>(ctAsInt);
+            // Non-alpha-only colortypes are tested elsewhere.
+            if (!SkColorTypeIsAlphaOnly(ct)) continue;
+            SkBitmap bm;
+            bm.allocPixels(SkImageInfo::Make(10, 10, ct, kPremul_SkAlphaType));
+            sk_bzero(bm.getPixels(), bm.computeByteSize());
+            auto data = SkEncodeBitmap(bm, format, 100);
+            if (format == SkEncodedImageFormat::kPNG && ct == kAlpha_8_SkColorType) {
+                // We support encoding alpha8 to png with our own private meaning.
+                REPORTER_ASSERT(r, data != nullptr);
+            } else {
+                REPORTER_ASSERT(r, data == nullptr);
+            }
+        }
+    }
 }

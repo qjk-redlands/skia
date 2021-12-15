@@ -4,21 +4,24 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkArenaAlloc.h"
-#include "SkBlendModePriv.h"
-#include "SkBlurDrawLooper.h"
-#include "SkColorSpacePriv.h"
-#include "SkMaskFilter.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkMaskFilterBase.h"
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
-#include "SkLayerDrawLooper.h"
-#include "SkString.h"
-#include "SkStringUtils.h"
-#include "SkUnPreMultiply.h"
-#include "SkXfermodePriv.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkString.h"
+#include "include/core/SkUnPreMultiply.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkBlendModePriv.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkMaskFilterBase.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkStringUtils.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/core/SkXfermodePriv.h"
+
+#ifdef SK_SUPPORT_LEGACY_DRAWLOOPER
+
+#include "include/effects/SkBlurDrawLooper.h"
+#include "include/effects/SkLayerDrawLooper.h"
 
 SkLayerDrawLooper::LayerInfo::LayerInfo() {
     fPaintBits = 0;                     // ignore our paint fields
@@ -42,8 +45,7 @@ SkLayerDrawLooper::~SkLayerDrawLooper() {
 }
 
 SkLayerDrawLooper::Context*
-SkLayerDrawLooper::makeContext(SkCanvas* canvas, SkArenaAlloc* alloc) const {
-    canvas->save();
+SkLayerDrawLooper::makeContext(SkArenaAlloc* alloc) const {
     return alloc->make<LayerDrawLooperContext>(this);
 }
 
@@ -61,7 +63,7 @@ static SkColor4f xferColor(const SkColor4f& src, const SkColor4f& dst, SkBlendMo
     }
 }
 
-// Even with kEntirePaint_Bits, we always ensure that the master paint's
+// Even with kEntirePaint_Bits, we always ensure that the base paint's
 // text-encoding is respected, since that controls how we interpret the
 // text/length parameters of a draw[Pos]Text call.
 void SkLayerDrawLooper::LayerDrawLooperContext::ApplyInfo(
@@ -115,7 +117,7 @@ void SkLayerDrawLooper::LayerDrawLooperContext::ApplyInfo(
         dst->setColorFilter(src.refColorFilter());
     }
     if (bits & kXfermode_Bit) {
-        dst->setBlendMode(src.getBlendMode());
+        dst->setBlender(src.refBlender());
     }
 
     // we don't override these
@@ -130,35 +132,21 @@ void SkLayerDrawLooper::LayerDrawLooperContext::ApplyInfo(
 #endif
 }
 
-// Should we add this to canvas?
-static void postTranslate(SkCanvas* canvas, SkScalar dx, SkScalar dy) {
-    SkMatrix m = canvas->getTotalMatrix();
-    m.postTranslate(dx, dy);
-    canvas->setMatrix(m);
-}
-
 SkLayerDrawLooper::LayerDrawLooperContext::LayerDrawLooperContext(
         const SkLayerDrawLooper* looper) : fCurrRec(looper->fRecs) {}
 
-bool SkLayerDrawLooper::LayerDrawLooperContext::next(SkCanvas* canvas,
-                                                     SkPaint* paint) {
-    canvas->restore();
+bool SkLayerDrawLooper::LayerDrawLooperContext::next(Info* info, SkPaint* paint) {
     if (nullptr == fCurrRec) {
         return false;
     }
 
     ApplyInfo(paint, fCurrRec->fPaint, fCurrRec->fInfo);
 
-    canvas->save();
-    if (fCurrRec->fInfo.fPostTranslate) {
-        postTranslate(canvas, fCurrRec->fInfo.fOffset.fX,
-                      fCurrRec->fInfo.fOffset.fY);
-    } else {
-        canvas->translate(fCurrRec->fInfo.fOffset.fX,
-                          fCurrRec->fInfo.fOffset.fY);
+    if (info) {
+        info->fTranslate = fCurrRec->fInfo.fOffset;
+        info->fApplyPostCTM = fCurrRec->fInfo.fPostTranslate;
     }
     fCurrRec = fCurrRec->fNext;
-
     return true;
 }
 
@@ -228,6 +216,11 @@ void SkLayerDrawLooper::flatten(SkWriteBuffer& buffer) const {
 sk_sp<SkFlattenable> SkLayerDrawLooper::CreateProc(SkReadBuffer& buffer) {
     int count = buffer.readInt();
 
+#if defined(SK_BUILD_FOR_FUZZER)
+    if (count > 100) {
+        count = 100;
+    }
+#endif
     Builder builder;
     for (int i = 0; i < count; i++) {
         LayerInfo info;
@@ -238,7 +231,7 @@ sk_sp<SkFlattenable> SkLayerDrawLooper::CreateProc(SkReadBuffer& buffer) {
         info.fColorMode = (SkBlendMode)buffer.readInt();
         buffer.readPoint(&info.fOffset);
         info.fPostTranslate = buffer.readBool();
-        buffer.readPaint(builder.addLayerOnTop(info), nullptr);
+        *builder.addLayerOnTop(info) = buffer.readPaint();
         if (!buffer.isValid()) {
             return nullptr;
         }
@@ -341,3 +334,5 @@ sk_sp<SkDrawLooper> SkBlurDrawLooper::Make(SkColor4f color, SkColorSpace* cs,
 
     return builder.detach();
 }
+
+#endif

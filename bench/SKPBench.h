@@ -8,10 +8,10 @@
 #ifndef SKPBench_DEFINED
 #define SKPBench_DEFINED
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkPicture.h"
-#include "SkTDArray.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPicture.h"
+#include "include/private/SkTDArray.h"
 
 class SkSurface;
 
@@ -21,7 +21,7 @@ class SkSurface;
 class SKPBench : public Benchmark {
 public:
     SKPBench(const char* name, const SkPicture*, const SkIRect& devClip, SkScalar scale,
-             bool useMultiPictureDraw, bool doLooping);
+             bool doLooping);
     ~SKPBench() override;
 
     int calculateLoops(int defaultLoops) const override {
@@ -29,6 +29,7 @@ public:
     }
 
     void getGpuStats(SkCanvas*, SkTArray<SkString>* keys, SkTArray<double>* values) override;
+    bool getDMSAAStats(GrRecordingContext*) override;
 
 protected:
     const char* onGetName() override;
@@ -53,13 +54,12 @@ private:
     SkString fName;
     SkString fUniqueName;
 
-    const bool fUseMultiPictureDraw;
     SkTArray<sk_sp<SkSurface>> fSurfaces;   // for MultiPictureDraw
     SkTDArray<SkIRect> fTileRects;     // for MultiPictureDraw
 
     const bool fDoLooping;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 #endif

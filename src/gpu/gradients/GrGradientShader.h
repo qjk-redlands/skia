@@ -8,16 +8,16 @@
 #ifndef GrGradientShader_DEFINE
 #define GrGradientShader_DEFINE
 
-#include "GrFPArgs.h"
-#include "GrFragmentProcessor.h"
-#include "SkGradientShaderPriv.h"
-#include "SkLinearGradient.h"
-#include "SkRadialGradient.h"
-#include "SkSweepGradient.h"
-#include "SkTwoPointConicalGradient.h"
+#include "src/gpu/GrFPArgs.h"
+#include "src/gpu/GrFragmentProcessor.h"
+#include "src/shaders/gradients/SkGradientShaderPriv.h"
+#include "src/shaders/gradients/SkLinearGradient.h"
+#include "src/shaders/gradients/SkRadialGradient.h"
+#include "src/shaders/gradients/SkSweepGradient.h"
+#include "src/shaders/gradients/SkTwoPointConicalGradient.h"
 
 #if GR_TEST_UTILS
-#include "SkRandom.h"
+#include "include/utils/SkRandom.h"
 #endif
 
 namespace GrGradientShader {
@@ -41,11 +41,11 @@ namespace GrGradientShader {
         the gradient factory. (The constructor may decide not to use stops, in which case fStops
         will be nullptr). */
     struct RandomParams {
-        static constexpr int kMaxRandomGradientColors = 5;
+        inline static constexpr int kMaxRandomGradientColors = 5;
 
         // Should be of similar magnitude to the draw area of the tests so that the gradient
         // sampling is done at an appropriate scale.
-        static constexpr SkScalar kGradientScale = 256.0f;
+        inline static constexpr SkScalar kGradientScale = 256.0f;
 
         RandomParams(SkRandom* r);
 
@@ -60,6 +60,6 @@ namespace GrGradientShader {
     };
 #endif
 
-}
+}  // namespace GrGradientShader
 
 #endif // GrGradientShader_DEFINE

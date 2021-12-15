@@ -5,28 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkFont.h"
-#include "SkPath.h"
-#include "SkClipOpPriv.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPath.h"
+#include "samplecode/Sample.h"
 
 class ComplexClipView : public Sample {
-public:
-    ComplexClipView() {
+    void onOnceBeforeDraw() override {
         this->setBGColor(0xFFA0DDA0);
     }
 
-protected:
-    virtual bool onQuery(Sample::Event* evt) {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "ComplexClip");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("ComplexClip"); }
 
-    virtual void onDrawContent(SkCanvas* canvas) {
+    void onDrawContent(SkCanvas* canvas) override {
         SkPath path;
         path.moveTo(SkIntToScalar(0),   SkIntToScalar(50));
         path.quadTo(SkIntToScalar(0),   SkIntToScalar(0),   SkIntToScalar(50),  SkIntToScalar(0));
@@ -42,7 +33,7 @@ protected:
         path.quadTo(SkIntToScalar(150), SkIntToScalar(150), SkIntToScalar(125), SkIntToScalar(150));
         path.lineTo(SkIntToScalar(50),  SkIntToScalar(150));
         path.close();
-        path.setFillType(SkPath::kEvenOdd_FillType);
+        path.setFillType(SkPathFillType::kEvenOdd);
         SkColor pathColor = SK_ColorBLACK;
         SkPaint pathPaint;
         pathPaint.setAntiAlias(true);
@@ -86,11 +77,8 @@ protected:
             SkClipOp    fOp;
             const char* fName;
         } gOps[] = { //extra spaces in names for measureText
-            {kIntersect_SkClipOp,         "Isect "},
-            {kDifference_SkClipOp,        "Diff " },
-            {kUnion_SkClipOp,             "Union "},
-            {kXOR_SkClipOp,               "Xor "  },
-            {kReverseDifference_SkClipOp, "RDiff "}
+            {SkClipOp::kIntersect,         "Isect "},
+            {SkClipOp::kDifference,        "Diff " },
         };
 
         canvas->translate(0, SkIntToScalar(40));
@@ -107,8 +95,8 @@ protected:
                 }
                 canvas->save();
                     // set clip
-                    clipA.setFillType(invA ? SkPath::kInverseEvenOdd_FillType :
-                                             SkPath::kEvenOdd_FillType);
+                    clipA.setFillType(invA ? SkPathFillType::kInverseEvenOdd :
+                                             SkPathFillType::kEvenOdd);
                     canvas->clipPath(clipA);
                     canvas->clipPath(clipB, gOps[op].fOp);
 
@@ -129,25 +117,20 @@ protected:
                 SkScalar txtX = SkIntToScalar(55);
                 paint.setColor(colorA);
                 const char* aTxt = invA ? "InverseA " : "A ";
-                canvas->drawSimpleText(aTxt, strlen(aTxt), kUTF8_SkTextEncoding, txtX, SkIntToScalar(220), font, paint);
-                txtX += font.measureText(aTxt, strlen(aTxt), kUTF8_SkTextEncoding);
+                canvas->drawSimpleText(aTxt, strlen(aTxt), SkTextEncoding::kUTF8, txtX, SkIntToScalar(220), font, paint);
+                txtX += font.measureText(aTxt, strlen(aTxt), SkTextEncoding::kUTF8);
                 paint.setColor(SK_ColorBLACK);
-                canvas->drawSimpleText(gOps[op].fName, strlen(gOps[op].fName), kUTF8_SkTextEncoding,
+                canvas->drawSimpleText(gOps[op].fName, strlen(gOps[op].fName), SkTextEncoding::kUTF8,
                                     txtX, 220, font, paint);
-                txtX += font.measureText(gOps[op].fName, strlen(gOps[op].fName), kUTF8_SkTextEncoding);
+                txtX += font.measureText(gOps[op].fName, strlen(gOps[op].fName), SkTextEncoding::kUTF8);
                 paint.setColor(colorB);
-                canvas->drawSimpleText("B", 1, kUTF8_SkTextEncoding, txtX, 220, font, paint);
+                canvas->drawSimpleText("B", 1, SkTextEncoding::kUTF8, txtX, 220, font, paint);
 
                 canvas->translate(SkIntToScalar(250),0);
             }
         }
         canvas->restore();
     }
-
-private:
-    typedef Sample INHERITED;
 };
-
-//////////////////////////////////////////////////////////////////////////////
 
 DEF_SAMPLE( return new ComplexClipView(); )

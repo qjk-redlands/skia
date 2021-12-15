@@ -5,27 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "GrContext.h"
-#include "SkRefCnt.h"
-#include "gl/GrGLFunctions.h"
-#include "gl/GrGLInterface.h"
-#include "gl/GLTestContext.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/gl/GrGLFunctions.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "tools/gpu/gl/GLTestContext.h"
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 
 #include <sstream>
 
-// create_grcontext implementation for EGL.
-sk_sp<GrContext> create_grcontext(std::ostringstream& driverinfo,
-                                  std::unique_ptr<sk_gpu_test::GLTestContext>* glContext) {
-    // We are leaking tc, but that's OK because fiddle is a short lived proces.
+// create_direct_context implementation for EGL.
+sk_sp<GrDirectContext> create_direct_context(
+        std::ostringstream& driverinfo,
+        std::unique_ptr<sk_gpu_test::GLTestContext>* glContext) {
     glContext->reset(sk_gpu_test::CreatePlatformGLTestContext(kGLES_GrGLStandard));
     if (!glContext) {
         return nullptr;
     }
     (*glContext)->makeCurrent();
-    sk_sp<GrContext> result = (*glContext)->makeGrContext(GrContextOptions());
+    sk_sp<GrDirectContext> result = (*glContext)->makeContext(GrContextOptions());
     if (!result) {
         glContext->reset();
         return nullptr;

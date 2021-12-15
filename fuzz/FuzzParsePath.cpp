@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Fuzz.h"
-#include "SkString.h"
-#include "SkParsePath.h"
+#include "fuzz/Fuzz.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkParsePath.h"
 
 #include <stdlib.h>
 
@@ -75,9 +75,9 @@ static void add_comma(Fuzz* fuzz, SkString* atom) {
 
 SkString MakeRandomParsePathPiece(Fuzz* fuzz) {
     SkString atom;
-    uint8_t index;
-    fuzz->nextRange(&index, 0, (int) SK_ARRAY_COUNT(gLegal) - 1);
-    const Legal& legal = gLegal[index];
+    uint8_t legalIndex;
+    fuzz->nextRange(&legalIndex, 0, (int) SK_ARRAY_COUNT(gLegal) - 1);
+    const Legal& legal = gLegal[legalIndex];
     gEasy ? atom.append("\n") : add_white(fuzz, &atom);
     bool b;
     fuzz->next(&b);

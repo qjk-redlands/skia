@@ -5,19 +5,35 @@
  * found in the LICENSE file.
  */
 
-#include "GrVkAMDMemoryAllocator.h"
+#include "src/gpu/vk/GrVkAMDMemoryAllocator.h"
 
-#include "GrVkInterface.h"
-#include "GrVkMemory.h"
-#include "GrVkUtil.h"
+#include "include/gpu/vk/GrVkExtensions.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/vk/GrVkInterface.h"
+#include "src/gpu/vk/GrVkMemory.h"
+#include "src/gpu/vk/GrVkUtil.h"
 
-GrVkAMDMemoryAllocator::GrVkAMDMemoryAllocator(VkPhysicalDevice physicalDevice,
-                                               VkDevice device,
-                                               sk_sp<const GrVkInterface> interface)
-        : fAllocator(VK_NULL_HANDLE)
-        , fInterface(std::move(interface))
-        , fDevice(device) {
-#define GR_COPY_FUNCTION(NAME) functions.vk##NAME = fInterface->fFunctions.f##NAME
+#ifndef SK_USE_VMA
+sk_sp<GrVkMemoryAllocator> GrVkAMDMemoryAllocator::Make(VkInstance instance,
+                                                        VkPhysicalDevice physicalDevice,
+                                                        VkDevice device,
+                                                        uint32_t physicalDeviceVersion,
+                                                        const GrVkExtensions* extensions,
+                                                        sk_sp<const GrVkInterface> interface,
+                                                        const GrVkCaps* caps) {
+    return nullptr;
+}
+#else
+
+sk_sp<GrVkMemoryAllocator> GrVkAMDMemoryAllocator::Make(VkInstance instance,
+                                                        VkPhysicalDevice physicalDevice,
+                                                        VkDevice device,
+                                                        uint32_t physicalDeviceVersion,
+                                                        const GrVkExtensions* extensions,
+                                                        sk_sp<const GrVkInterface> interface,
+                                                        const GrVkCaps* caps) {
+#define GR_COPY_FUNCTION(NAME) functions.vk##NAME = interface->fFunctions.f##NAME
+#define GR_COPY_FUNCTION_KHR(NAME) functions.vk##NAME##KHR = interface->fFunctions.f##NAME
 
     VmaVulkanFunctions functions;
     GR_COPY_FUNCTION(GetPhysicalDeviceProperties);
@@ -26,6 +42,8 @@ GrVkAMDMemoryAllocator::GrVkAMDMemoryAllocator(VkPhysicalDevice physicalDevice,
     GR_COPY_FUNCTION(FreeMemory);
     GR_COPY_FUNCTION(MapMemory);
     GR_COPY_FUNCTION(UnmapMemory);
+    GR_COPY_FUNCTION(FlushMappedMemoryRanges);
+    GR_COPY_FUNCTION(InvalidateMappedMemoryRanges);
     GR_COPY_FUNCTION(BindBufferMemory);
     GR_COPY_FUNCTION(BindImageMemory);
     GR_COPY_FUNCTION(GetBufferMemoryRequirements);
@@ -34,35 +52,59 @@ GrVkAMDMemoryAllocator::GrVkAMDMemoryAllocator(VkPhysicalDevice physicalDevice,
     GR_COPY_FUNCTION(DestroyBuffer);
     GR_COPY_FUNCTION(CreateImage);
     GR_COPY_FUNCTION(DestroyImage);
-
-    // Skia current doesn't support VK_KHR_dedicated_allocation
-    functions.vkGetBufferMemoryRequirements2KHR = nullptr;
-    functions.vkGetImageMemoryRequirements2KHR = nullptr;
+    GR_COPY_FUNCTION(CmdCopyBuffer);
+    GR_COPY_FUNCTION_KHR(GetBufferMemoryRequirements2);
+    GR_COPY_FUNCTION_KHR(GetImageMemoryRequirements2);
+    GR_COPY_FUNCTION_KHR(BindBufferMemory2);
+    GR_COPY_FUNCTION_KHR(BindImageMemory2);
+    GR_COPY_FUNCTION_KHR(GetPhysicalDeviceMemoryProperties2);
 
     VmaAllocatorCreateInfo info;
-    info.flags = 0;
+    info.flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT;
+    if (physicalDeviceVersion >= VK_MAKE_VERSION(1, 1, 0) ||
+        (extensions->hasExtension(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, 1) &&
+         extensions->hasExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, 1))) {
+        info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
+    }
+
     info.physicalDevice = physicalDevice;
     info.device = device;
-    // Manually testing runs of dm using 64 here instead of the default 256 shows less memory usage
-    // on average. Also dm seems to run faster using 64 so it doesn't seem to be trading off speed
-    // for memory.
-    info.preferredLargeHeapBlockSize = 64*1024*1024;
+    // 4MB was picked for the size here by looking at memory usage of Android apps and runs of DM.
+    // It seems to be a good compromise of not wasting unused allocated space and not making too
+    // many small allocations. The AMD allocator will start making blocks at 1/8 the max size and
+    // builds up block size as needed before capping at the max set here.
+    info.preferredLargeHeapBlockSize = 4*1024*1024;
     info.pAllocationCallbacks = nullptr;
     info.pDeviceMemoryCallbacks = nullptr;
     info.frameInUseCount = 0;
     info.pHeapSizeLimit = nullptr;
     info.pVulkanFunctions = &functions;
+    info.pRecordSettings = nullptr;
+    info.instance = instance;
+    info.vulkanApiVersion = physicalDeviceVersion;
 
-    vmaCreateAllocator(&info, &fAllocator);
+    VmaAllocator allocator;
+    vmaCreateAllocator(&info, &allocator);
+
+    return sk_sp<GrVkAMDMemoryAllocator>(new GrVkAMDMemoryAllocator(
+            allocator, std::move(interface), caps->mustUseCoherentHostVisibleMemory()));
 }
+
+GrVkAMDMemoryAllocator::GrVkAMDMemoryAllocator(VmaAllocator allocator,
+                                               sk_sp<const GrVkInterface> interface,
+                                               bool mustUseCoherentHostVisibleMemory)
+        : fAllocator(allocator)
+        , fInterface(std::move(interface))
+        , fMustUseCoherentHostVisibleMemory(mustUseCoherentHostVisibleMemory) {}
 
 GrVkAMDMemoryAllocator::~GrVkAMDMemoryAllocator() {
     vmaDestroyAllocator(fAllocator);
     fAllocator = VK_NULL_HANDLE;
 }
 
-bool GrVkAMDMemoryAllocator::allocateMemoryForImage(VkImage image, AllocationPropertyFlags flags,
-                                                    GrVkBackendMemory* backendMemory) {
+VkResult GrVkAMDMemoryAllocator::allocateImageMemory(VkImage image, AllocationPropertyFlags flags,
+                                                     GrVkBackendMemory* backendMemory) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     VmaAllocationCreateInfo info;
     info.flags = 0;
     info.usage = VMA_MEMORY_USAGE_UNKNOWN;
@@ -77,21 +119,25 @@ bool GrVkAMDMemoryAllocator::allocateMemoryForImage(VkImage image, AllocationPro
     }
 
     if (AllocationPropertyFlags::kLazyAllocation & flags) {
-        info.preferredFlags |= VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
+        info.requiredFlags |= VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
+    }
+
+    if (AllocationPropertyFlags::kProtected & flags) {
+        info.requiredFlags |= VK_MEMORY_PROPERTY_PROTECTED_BIT;
     }
 
     VmaAllocation allocation;
     VkResult result = vmaAllocateMemoryForImage(fAllocator, image, &info, &allocation, nullptr);
-    if (VK_SUCCESS != result) {
-        return false;
+    if (VK_SUCCESS == result) {
+        *backendMemory = (GrVkBackendMemory)allocation;
     }
-    *backendMemory = (GrVkBackendMemory)allocation;
-    return true;
+    return result;
 }
 
-bool GrVkAMDMemoryAllocator::allocateMemoryForBuffer(VkBuffer buffer, BufferUsage usage,
-                                                     AllocationPropertyFlags flags,
-                                                     GrVkBackendMemory* backendMemory) {
+VkResult GrVkAMDMemoryAllocator::allocateBufferMemory(VkBuffer buffer, BufferUsage usage,
+                                                      AllocationPropertyFlags flags,
+                                                      GrVkBackendMemory* backendMemory) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     VmaAllocationCreateInfo info;
     info.flags = 0;
     info.usage = VMA_MEMORY_USAGE_UNKNOWN;
@@ -104,22 +150,36 @@ bool GrVkAMDMemoryAllocator::allocateMemoryForBuffer(VkBuffer buffer, BufferUsag
             info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             info.preferredFlags = 0;
             break;
-        case BufferUsage::kCpuOnly:
-            info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                 VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-            info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-            break;
         case BufferUsage::kCpuWritesGpuReads:
-            // First attempt to try memory is also cached
-            info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                 VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            // When doing cpu writes and gpu reads the general rule of thumb is to use coherent
+            // memory. Though this depends on the fact that we are not doing any cpu reads and the
+            // cpu writes are sequential. For sparse writes we'd want cpu cached memory, however we
+            // don't do these types of writes in Skia.
+            //
+            // TODO: In the future there may be times where specific types of memory could benefit
+            // from a coherent and cached memory. Typically these allow for the gpu to read cpu
+            // writes from the cache without needing to flush the writes throughout the cache. The
+            // reverse is not true and GPU writes tend to invalidate the cache regardless. Also
+            // these gpu cache read access are typically lower bandwidth than non-cached memory.
+            // For now Skia doesn't really have a need or want of this type of memory. But if we
+            // ever do we could pass in an AllocationPropertyFlag that requests the cached property.
+            info.requiredFlags =
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
             info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             break;
-        case BufferUsage::kGpuWritesCpuReads:
-            info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            info.preferredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                                  VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+        case BufferUsage::kTransfersFromCpuToGpu:
+            info.requiredFlags =
+                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
             break;
+        case BufferUsage::kTransfersFromGpuToCpu:
+            info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+            info.preferredFlags = VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            break;
+    }
+
+    if (fMustUseCoherentHostVisibleMemory &&
+        (info.requiredFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+        info.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     }
 
     if (AllocationPropertyFlags::kDedicatedAllocation & flags) {
@@ -137,22 +197,15 @@ bool GrVkAMDMemoryAllocator::allocateMemoryForBuffer(VkBuffer buffer, BufferUsag
 
     VmaAllocation allocation;
     VkResult result = vmaAllocateMemoryForBuffer(fAllocator, buffer, &info, &allocation, nullptr);
-    if (VK_SUCCESS != result) {
-        if (usage == BufferUsage::kCpuWritesGpuReads) {
-            // We try again but this time drop the requirement for cached
-            info.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            result = vmaAllocateMemoryForBuffer(fAllocator, buffer, &info, &allocation, nullptr);
-        }
-    }
-    if (VK_SUCCESS != result) {
-        return false;
+    if (VK_SUCCESS == result) {
+        *backendMemory = (GrVkBackendMemory)allocation;
     }
 
-    *backendMemory = (GrVkBackendMemory)allocation;
-    return true;
+    return result;
 }
 
 void GrVkAMDMemoryAllocator::freeMemory(const GrVkBackendMemory& memoryHandle) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
     vmaFreeMemory(fAllocator, allocation);
 }
@@ -173,79 +226,41 @@ void GrVkAMDMemoryAllocator::getAllocInfo(const GrVkBackendMemory& memoryHandle,
     if (!SkToBool(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT & memFlags)) {
         flags |= GrVkAlloc::kNoncoherent_Flag;
     }
+    if (VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT & memFlags) {
+        flags |= GrVkAlloc::kLazilyAllocated_Flag;
+    }
 
     alloc->fMemory        = vmaInfo.deviceMemory;
     alloc->fOffset        = vmaInfo.offset;
     alloc->fSize          = vmaInfo.size;
     alloc->fFlags         = flags;
     alloc->fBackendMemory = memoryHandle;
-
-    // TODO: Remove this hack once the AMD allocator is able to handle the alignment of noncoherent
-    // memory itself.
-    if (!SkToBool(VK_MEMORY_PROPERTY_HOST_COHERENT_BIT & memFlags)) {
-        // This is a hack to say that the allocation size is actually larger than it is. This is to
-        // make sure when we are flushing and invalidating noncoherent memory we have a size that is
-        // aligned to the nonCoherentAtomSize. This is safe for three reasons. First the total size
-        // of the VkDeviceMemory we allocate will always be a multple of the max possible alignment
-        // (currently 256). Second all sub allocations are alignmed with an offset of 256. And
-        // finally the allocator we are using always maps the entire VkDeviceMemory so the range
-        // we'll be flushing/invalidating will be mapped. So our new fake allocation size will
-        // always fit into the VkDeviceMemory, will never push it into another suballocation, and
-        // will always be mapped when map is called.
-        const VkPhysicalDeviceProperties* devProps;
-        vmaGetPhysicalDeviceProperties(fAllocator, &devProps);
-        VkDeviceSize alignment = devProps->limits.nonCoherentAtomSize;
-
-        alloc->fSize = (alloc->fSize + alignment - 1) & ~(alignment -1);
-    }
 }
 
-void* GrVkAMDMemoryAllocator::mapMemory(const GrVkBackendMemory& memoryHandle) {
+VkResult GrVkAMDMemoryAllocator::mapMemory(const GrVkBackendMemory& memoryHandle, void** data) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
-    void* mapPtr;
-    vmaMapMemory(fAllocator, allocation, &mapPtr);
-    return mapPtr;
+    return vmaMapMemory(fAllocator, allocation, data);
 }
 
 void GrVkAMDMemoryAllocator::unmapMemory(const GrVkBackendMemory& memoryHandle) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
     const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
     vmaUnmapMemory(fAllocator, allocation);
 }
 
-void GrVkAMDMemoryAllocator::flushMappedMemory(const GrVkBackendMemory& memoryHandle,
-                                               VkDeviceSize offset, VkDeviceSize size) {
-    GrVkAlloc info;
-    this->getAllocInfo(memoryHandle, &info);
-
-    if (GrVkAlloc::kNoncoherent_Flag & info.fFlags) {
-        // We need to store the nonCoherentAtomSize for non-coherent flush/invalidate alignment.
-        const VkPhysicalDeviceProperties* physDevProps;
-        vmaGetPhysicalDeviceProperties(fAllocator, &physDevProps);
-        VkDeviceSize alignment = physDevProps->limits.nonCoherentAtomSize;
-
-        VkMappedMemoryRange mappedMemoryRange;
-        GrVkMemory::GetNonCoherentMappedMemoryRange(info, offset, size, alignment,
-                                                    &mappedMemoryRange);
-        GR_VK_CALL(fInterface, FlushMappedMemoryRanges(fDevice, 1, &mappedMemoryRange));
-    }
+VkResult GrVkAMDMemoryAllocator::flushMemory(const GrVkBackendMemory& memoryHandle,
+                                             VkDeviceSize offset, VkDeviceSize size) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+    const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
+    return vmaFlushAllocation(fAllocator, allocation, offset, size);
 }
 
-void GrVkAMDMemoryAllocator::invalidateMappedMemory(const GrVkBackendMemory& memoryHandle,
-                                                    VkDeviceSize offset, VkDeviceSize size) {
-    GrVkAlloc info;
-    this->getAllocInfo(memoryHandle, &info);
-
-    if (GrVkAlloc::kNoncoherent_Flag & info.fFlags) {
-        // We need to store the nonCoherentAtomSize for non-coherent flush/invalidate alignment.
-        const VkPhysicalDeviceProperties* physDevProps;
-        vmaGetPhysicalDeviceProperties(fAllocator, &physDevProps);
-        VkDeviceSize alignment = physDevProps->limits.nonCoherentAtomSize;
-
-        VkMappedMemoryRange mappedMemoryRange;
-        GrVkMemory::GetNonCoherentMappedMemoryRange(info, offset, size, alignment,
-                                                    &mappedMemoryRange);
-        GR_VK_CALL(fInterface, InvalidateMappedMemoryRanges(fDevice, 1, &mappedMemoryRange));
-    }
+VkResult GrVkAMDMemoryAllocator::invalidateMemory(const GrVkBackendMemory& memoryHandle,
+                                                  VkDeviceSize offset, VkDeviceSize size) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+    const VmaAllocation allocation = (const VmaAllocation)memoryHandle;
+    return vmaInvalidateAllocation(fAllocator, allocation, offset, size);
 }
 
 uint64_t GrVkAMDMemoryAllocator::totalUsedMemory() const {
@@ -260,3 +275,4 @@ uint64_t GrVkAMDMemoryAllocator::totalAllocatedMemory() const {
     return stats.total.usedBytes + stats.total.unusedBytes;
 }
 
+#endif // SK_USE_VMA

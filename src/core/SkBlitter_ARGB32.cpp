@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkColorData.h"
-#include "SkCoreBlitters.h"
-#include "SkShader.h"
-#include "SkUtils.h"
-#include "SkXfermodePriv.h"
-#include "SkVx.h"
+#include "include/core/SkShader.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkVx.h"
+#include "src/core/SkCoreBlitters.h"
+#include "src/core/SkOpts.h"
+#include "src/core/SkXfermodePriv.h"
 
 static inline int upscale_31_to_32(int value) {
     SkASSERT((unsigned)value <= 31);
@@ -769,7 +769,7 @@ void SkARGB32_Blitter::blitAntiV2(int x, int y, U8CPU a0, U8CPU a1) {
 #define SK_BLITBWMASK_BLIT8(mask, dst)      solid_8_pixels(mask, dst, color)
 #define SK_BLITBWMASK_GETADDR               writable_addr32
 #define SK_BLITBWMASK_DEVTYPE               uint32_t
-#include "SkBlitBWMaskTemplate.h"
+#include "src/core/SkBlitBWMaskTemplate.h"
 
 #define blend_8_pixels(mask, dst, sc, dst_scale)                            \
     do {                                                                    \
@@ -788,7 +788,7 @@ void SkARGB32_Blitter::blitAntiV2(int x, int y, U8CPU a0, U8CPU a1) {
 #define SK_BLITBWMASK_BLIT8(mask, dst)      blend_8_pixels(mask, dst, sc, dst_scale)
 #define SK_BLITBWMASK_GETADDR               writable_addr32
 #define SK_BLITBWMASK_DEVTYPE               uint32_t
-#include "SkBlitBWMaskTemplate.h"
+#include "src/core/SkBlitBWMaskTemplate.h"
 
 void SkARGB32_Blitter::blitMask(const SkMask& mask, const SkIRect& clip) {
     SkASSERT(mask.fBounds.contains(clip));
@@ -884,9 +884,13 @@ void SkARGB32_Blitter::blitRect(int x, int y, int width, int height) {
     uint32_t    color = fPMColor;
     size_t      rowBytes = fDevice.rowBytes();
 
-    while (--height >= 0) {
-        SkBlitRow::Color32(device, device, width, color);
-        device = (uint32_t*)((char*)device + rowBytes);
+    if (SkGetPackedA32(fPMColor) == 0xFF) {
+        SkOpts::rect_memset32(device, color, width, rowBytes, height);
+    } else {
+        while (height --> 0) {
+            SkBlitRow::Color32(device, device, width, color);
+            device = (uint32_t*)((char*)device + rowBytes);
+        }
     }
 }
 
@@ -963,7 +967,7 @@ SkARGB32_Shader_Blitter::SkARGB32_Shader_Blitter(const SkPixmap& device,
 {
     fBuffer = (SkPMColor*)sk_malloc_throw(device.width() * (sizeof(SkPMColor)));
 
-    fXfermode = SkXfermode::Peek(paint.getBlendMode());
+    fXfermode = SkXfermode::Peek(paint.getBlendMode_or(SkBlendMode::kSrcOver));
 
     int flags = 0;
     if (!(shaderContext->getFlags() & SkShaderBase::kOpaqueAlpha_Flag)) {
@@ -980,7 +984,7 @@ SkARGB32_Shader_Blitter::SkARGB32_Shader_Blitter(const SkPixmap& device,
             fShadeDirectlyIntoDevice = true;
         }
     } else {
-        if (SkBlendMode::kSrc == paint.getBlendMode()) {
+        if (SkBlendMode::kSrc == paint.asBlendMode()) {
             fShadeDirectlyIntoDevice = true;
             fProc32Blend = blend_srcmode;
         }
@@ -1152,7 +1156,6 @@ void SkARGB32_Shader_Blitter::blitAntiH(int x, int y, const SkAlpha antialias[],
     }
 }
 
-#ifndef SK_SUPPORT_LEGACY_A8_MASKBLITTER
 using U32  = skvx::Vec< 4, uint32_t>;
 using U8x4 = skvx::Vec<16, uint8_t>;
 using U8   = skvx::Vec< 4, uint8_t>;
@@ -1180,42 +1183,22 @@ static void drive(SkPMColor* dst, const SkPMColor* src, const uint8_t* cov, int 
         cov++;
     }
 }
-#endif
 
 static void blend_row_A8(SkPMColor* dst, const void* mask, const SkPMColor* src, int n) {
     auto cov = (const uint8_t*)mask;
-
-#ifdef SK_SUPPORT_LEGACY_A8_MASKBLITTER
-    for (int i = 0; i < n; ++i) {
-        if (cov[i]) {
-            dst[i] = SkBlendARGB32(src[i], dst[i], cov[i]);
-        }
-    }
-#else
     drive(dst, src, cov, n, [](U8x4 d, U8x4 s, U8x4 c) {
         U8x4 s_aa  = skvx::approx_scale(s, c),
              alpha = skvx::shuffle<3,3,3,3, 7,7,7,7, 11,11,11,11, 15,15,15,15>(s_aa);
         return s_aa + skvx::approx_scale(d, 255 - alpha);
     });
-#endif
 }
 
 static void blend_row_A8_opaque(SkPMColor* dst, const void* mask, const SkPMColor* src, int n) {
     auto cov = (const uint8_t*)mask;
-
-#ifdef SK_SUPPORT_LEGACY_A8_MASKBLITTER
-    for (int i = 0; i < n; ++i) {
-        if (int c = cov[i]) {
-            c += (c >> 7);
-            dst[i] = SkAlphaMulQ(src[i], c) + SkAlphaMulQ(dst[i], 256 - c);
-        }
-    }
-#else
     drive(dst, src, cov, n, [](U8x4 d, U8x4 s, U8x4 c) {
         return skvx::div255( skvx::cast<uint16_t>(s) * skvx::cast<uint16_t>(  c  )
                            + skvx::cast<uint16_t>(d) * skvx::cast<uint16_t>(255-c));
     });
-#endif
 }
 
 static void blend_row_lcd16(SkPMColor* dst, const void* vmask, const SkPMColor* src, int n) {

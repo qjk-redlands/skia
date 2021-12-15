@@ -8,8 +8,8 @@
 #ifndef SkTDPQueue_DEFINED
 #define SkTDPQueue_DEFINED
 
-#include "SkTDArray.h"
-#include "SkTSort.h"
+#include "include/private/SkTDArray.h"
+#include "src/core/SkTSort.h"
 
 #include <utility>
 
@@ -111,7 +111,7 @@ public:
      */
     void sort() {
         if (fArray.count() > 1) {
-            SkTQSort<T>(fArray.begin(), fArray.end() - 1, LESS);
+            SkTQSort<T>(fArray.begin(), fArray.end(), LESS);
             for (int i = 0; i < fArray.count(); i++) {
                 this->setIndex(i);
             }

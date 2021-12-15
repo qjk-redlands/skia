@@ -5,10 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlurImageFilter.h"
-#include "SkRandom.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkImageFilters.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 // TODO deprecate imageblur
 
@@ -40,7 +47,7 @@ DEF_SIMPLE_GM(imageblur2, canvas, kWidth, kHeight) {
             SkScalar sigmaY = kBlurSigmas[y];
 
             SkPaint paint;
-            paint.setImageFilter(SkBlurImageFilter::Make(sigmaX, sigmaY, nullptr));
+            paint.setImageFilter(SkImageFilters::Blur(sigmaX, sigmaY, nullptr));
             canvas->saveLayer(nullptr, &paint);
 
             SkRandom rand;

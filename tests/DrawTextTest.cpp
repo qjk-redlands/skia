@@ -5,23 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkDashPathEffect.h"
-#include "SkMatrix.h"
-#include "SkPaint.h"
-#include "SkPathEffect.h"
-#include "SkPoint.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkScalar.h"
-#include "SkSurface.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "tests/Test.h"
 
 #include <cmath>
-#include <SkFont.h>
 
 static const SkColor bgColor = SK_ColorWHITE;
 
@@ -159,4 +161,20 @@ DEF_TEST(DrawText_weirdMatricies, r) {
         canvas->setMatrix(mat);
         canvas->drawString("Hamburgefons", 10, 10, font, SkPaint());
     }
+}
+
+// This produces no glyphs, and is to check that buffers from previous draws don't get
+// reused.
+DEF_TEST(DrawText_noglyphs, r) {
+    auto surface = SkSurface::MakeRasterN32Premul(100,100);
+    auto canvas = surface->getCanvas();
+    auto text = "Hamburgfons";
+    {
+        // scoped to ensure blob is deleted.
+        auto blob = SkTextBlob::MakeFromText(text, strlen(text), SkFont());
+        canvas->drawTextBlob(blob, 10, 10, SkPaint());
+    }
+    canvas->drawString(
+            "\x0d\xf3\xf2\xf2\xe9\x0d\x0d\x0d\x05\x0d\x0d\xe3\xe3\xe3\xe3\xe3\xe3\xe3\xe3\xe3",
+            10, 20, SkFont(), SkPaint());
 }

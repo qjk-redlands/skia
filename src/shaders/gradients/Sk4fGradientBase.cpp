@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "Sk4fGradientBase.h"
-#include "SkPaint.h"
+#include "include/core/SkPaint.h"
+#include "src/shaders/gradients/Sk4fGradientBase.h"
 #include <functional>
 
 namespace {
@@ -54,7 +54,7 @@ public:
 
             const SkScalar currPos = fShader.fOrigPos[curr];
             if (currPos != prevPos) {
-                SkASSERT((currPos - prevPos > 0) == (fAdvance > 0));
+                SkASSERT((currPos > prevPos) == (fAdvance > 0));
                 func(colors[prev], colors[curr], prevPos, currPos);
             }
 
@@ -291,7 +291,7 @@ GradientShaderBase4fContext::GradientShaderBase4fContext(const SkGradientShaderB
                                                          const ContextRec& rec)
     : INHERITED(shader, rec)
     , fFlags(this->INHERITED::getFlags())
-    , fDither(rec.fPaint->isDither())
+    , fDither(rec.fPaintDither)
 {
     const SkMatrix& inverse = this->getTotalInverse();
     fDstToPos.setConcat(shader.fPtsToUnit, inverse);

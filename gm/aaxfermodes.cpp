@@ -5,12 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "SkColorPriv.h"
-#include "SkPath.h"
-#include "SkShader.h"
-#include "SkTextUtils.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkTextUtils.h"
+#include "tools/ToolUtils.h"
 
 enum {
     kXfermodeCount = (int)SkBlendMode::kLastMode + 1 + 1,   // extra for arith
@@ -79,16 +89,18 @@ protected:
             {radius, 0},
             {0, 1.33f * radius}
         };
-        fOval.moveTo(pts[0]);
-        fOval.quadTo(pts[1], pts[2]);
-        fOval.quadTo(pts[3], pts[0]);
+        fOval = SkPathBuilder().moveTo(pts[0])
+                               .quadTo(pts[1], pts[2])
+                               .quadTo(pts[3], pts[0])
+                               .detach();
 
-        fConcave.moveTo(-radius, 0);
-        fConcave.quadTo(0, 0, 0, -radius);
-        fConcave.quadTo(0, 0, radius, 0);
-        fConcave.quadTo(0, 0, 0, radius);
-        fConcave.quadTo(0, 0, -radius, 0);
-        fConcave.close();
+        fConcave = SkPathBuilder().moveTo(-radius, 0)
+                                  .quadTo(0, 0, 0, -radius)
+                                  .quadTo(0, 0, radius, 0)
+                                  .quadTo(0, 0, 0, radius)
+                                  .quadTo(0, 0, -radius, 0)
+                                  .close()
+                                  .detach();
     }
 
     void draw_pass(SkCanvas* canvas, DrawingPass drawingPass) {
@@ -203,9 +215,9 @@ protected:
 
         if (mode == SkBlendMode::kPlus) {
             // Check for overflow, otherwise we might get confusing AA artifacts.
-            int maxSum = SkTMax(SkTMax(SkColorGetA(kBGColor) + SkColorGetA(color),
+            int maxSum = std::max(std::max(SkColorGetA(kBGColor) + SkColorGetA(color),
                                        SkColorGetR(kBGColor) + SkColorGetR(color)),
-                                SkTMax(SkColorGetG(kBGColor) + SkColorGetG(color),
+                                std::max(SkColorGetG(kBGColor) + SkColorGetG(color),
                                        SkColorGetB(kBGColor) + SkColorGetB(color)));
 
             if (maxSum > 255) {
@@ -268,6 +280,6 @@ private:
     SkPath    fOval;
     SkPath    fConcave;
 
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 DEF_GM( return new AAXfermodesGM; )

@@ -5,41 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkMathPriv.h"
-#include "SkFixed.h"
-#include "SkFloatBits.h"
-#include "SkFloatingPoint.h"
-#include "SkSafeMath.h"
-#include "SkScalar.h"
-
-#define sub_shift(zeros, x, n)  \
-    zeros -= n;                 \
-    x >>= n
-
-int SkCLZ_portable(uint32_t x) {
-    if (x == 0) {
-        return 32;
-    }
-
-    int zeros = 31;
-    if (x & 0xFFFF0000) {
-        sub_shift(zeros, x, 16);
-    }
-    if (x & 0xFF00) {
-        sub_shift(zeros, x, 8);
-    }
-    if (x & 0xF0) {
-        sub_shift(zeros, x, 4);
-    }
-    if (x & 0xC) {
-        sub_shift(zeros, x, 2);
-    }
-    if (x & 0x2) {
-        sub_shift(zeros, x, 1);
-    }
-
-    return zeros;
-}
+#include "include/core/SkScalar.h"
+#include "include/private/SkFixed.h"
+#include "include/private/SkFloatBits.h"
+#include "include/private/SkFloatingPoint.h"
+#include "src/core/SkMathPriv.h"
+#include "src/core/SkSafeMath.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 

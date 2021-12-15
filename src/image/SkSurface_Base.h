@@ -8,19 +8,39 @@
 #ifndef SkSurface_Base_DEFINED
 #define SkSurface_Base_DEFINED
 
-#include "SkCanvas.h"
-#include "SkImagePriv.h"
-#include "SkSurface.h"
-#include "SkSurfacePriv.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkDeferredDisplayList.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkImagePriv.h"
+#include "src/core/SkSurfacePriv.h"
 
 class SkSurface_Base : public SkSurface {
 public:
     SkSurface_Base(int width, int height, const SkSurfaceProps*);
     SkSurface_Base(const SkImageInfo&, const SkSurfaceProps*);
-    virtual ~SkSurface_Base();
+    ~SkSurface_Base() override;
 
+    virtual GrRecordingContext* onGetRecordingContext();
+
+#if SK_SUPPORT_GPU
     virtual GrBackendTexture onGetBackendTexture(BackendHandleAccess);
     virtual GrBackendRenderTarget onGetBackendRenderTarget(BackendHandleAccess);
+    virtual bool onReplaceBackendTexture(const GrBackendTexture&,
+                                         GrSurfaceOrigin,
+                                         ContentChangeMode,
+                                         TextureReleaseProc,
+                                         ReleaseContext);
+
+    /**
+     * Issue any pending surface IO to the current backend 3D API and resolve any surface MSAA.
+     * Inserts the requested number of semaphores for the gpu to signal when work is complete on the
+     * gpu and inits the array of GrBackendSemaphores with the signaled semaphores.
+     */
+    virtual GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo&,
+                                          const GrBackendSurfaceMutableState*) {
+        return GrSemaphoresSubmitted::kNo;
+    }
+#endif
 
     /**
      *  Allocate a canvas that will draw into this surface. We will cache this
@@ -46,6 +66,27 @@ public:
     virtual void onWritePixels(const SkPixmap&, int x, int y) = 0;
 
     /**
+     * Default implementation does a rescale/read and then calls the callback.
+     */
+    virtual void onAsyncRescaleAndReadPixels(const SkImageInfo&,
+                                             const SkIRect& srcRect,
+                                             RescaleGamma,
+                                             RescaleMode,
+                                             ReadPixelsCallback,
+                                             ReadPixelsContext);
+    /**
+     * Default implementation does a rescale/read/yuv conversion and then calls the callback.
+     */
+    virtual void onAsyncRescaleAndReadPixelsYUV420(SkYUVColorSpace,
+                                                   sk_sp<SkColorSpace> dstColorSpace,
+                                                   const SkIRect& srcRect,
+                                                   const SkISize& dstSize,
+                                                   RescaleGamma,
+                                                   RescaleMode,
+                                                   ReadPixelsCallback,
+                                                   ReadPixelsContext);
+
+    /**
      *  Default implementation:
      *
      *  image = this->newImageSnapshot();
@@ -54,7 +95,7 @@ public:
      *      image->unref();
      *  }
      */
-    virtual void onDraw(SkCanvas*, SkScalar x, SkScalar y, const SkPaint*);
+    virtual void onDraw(SkCanvas*, SkScalar x, SkScalar y, const SkSamplingOptions&,const SkPaint*);
 
     /**
      * Called as a performance hint when the Surface is allowed to make it's contents
@@ -66,8 +107,10 @@ public:
      *  If the surface is about to change, we call this so that our subclass
      *  can optionally fork their backend (copy-on-write) in case it was
      *  being shared with the cachedImage.
+     *
+     *  Returns false if the backing cannot be un-shared.
      */
-    virtual void onCopyOnWrite(ContentChangeMode) = 0;
+    virtual bool SK_WARN_UNUSED_RESULT onCopyOnWrite(ContentChangeMode) = 0;
 
     /**
      *  Signal the surface to remind its backing store that it's mutable again.
@@ -76,25 +119,20 @@ public:
     virtual void onRestoreBackingMutability() {}
 
     /**
-     * Issue any pending surface IO to the current backend 3D API and resolve any surface MSAA.
-     * Inserts the requested number of semaphores for the gpu to signal when work is complete on the
-     * gpu and inits the array of GrBackendSemaphores with the signaled semaphores.
-     */
-    virtual GrSemaphoresSubmitted onFlush(BackendSurfaceAccess access, const GrFlushInfo&) {
-        return GrSemaphoresSubmitted::kNo;
-    }
-
-    /**
      * Caused the current backend 3D API to wait on the passed in semaphores before executing new
      * commands on the gpu. Any previously submitting commands will not be blocked by these
      * semaphores.
      */
-    virtual bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores) {
+    virtual bool onWait(int numSemaphores, const GrBackendSemaphore* waitSemaphores,
+                        bool deleteSemaphoresAfterWait) {
         return false;
     }
 
     virtual bool onCharacterize(SkSurfaceCharacterization*) const { return false; }
-    virtual bool onDraw(const SkDeferredDisplayList*) { return false; }
+    virtual bool onIsCompatible(const SkSurfaceCharacterization&) const { return false; }
+    virtual bool onDraw(sk_sp<const SkDeferredDisplayList>, SkIPoint offset) {
+        return false;
+    }
 
     inline SkCanvas* getCachedCanvas();
     inline sk_sp<SkImage> refCachedImage();
@@ -108,7 +146,8 @@ private:
     std::unique_ptr<SkCanvas>   fCachedCanvas;
     sk_sp<SkImage>              fCachedImage;
 
-    void aboutToDraw(ContentChangeMode mode);
+    // Returns false if drawing should not take place (allocation failure).
+    bool SK_WARN_UNUSED_RESULT aboutToDraw(ContentChangeMode mode);
 
     // Returns true if there is an outstanding image-snapshot, indicating that a call to aboutToDraw
     // would trigger a copy-on-write.
@@ -117,7 +156,7 @@ private:
     friend class SkCanvas;
     friend class SkSurface;
 
-    typedef SkSurface INHERITED;
+    using INHERITED = SkSurface;
 };
 
 SkCanvas* SkSurface_Base::getCachedCanvas() {

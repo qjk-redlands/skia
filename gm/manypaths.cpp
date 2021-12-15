@@ -5,11 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "SkRRect.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 namespace skiagm {
 
@@ -58,7 +64,7 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -111,7 +117,7 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -119,4 +125,4 @@ private:
 DEF_GM( return new ManyCirclesGM; )
 DEF_GM( return new ManyRRectsGM; )
 
-}
+}  // namespace skiagm

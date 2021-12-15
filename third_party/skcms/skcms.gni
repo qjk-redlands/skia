@@ -3,9 +3,4 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-skcms_sources = [
-  "skcms.cc",
-  "skcms.h",
-  "skcms_internal.h",
-  "src/Transform_inl.h",
-]
+skcms_sources = [ "skcms.cc" ]

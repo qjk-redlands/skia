@@ -8,16 +8,16 @@
 #ifndef VulkanWindowContext_DEFINED
 #define VulkanWindowContext_DEFINED
 
-#include "SkTypes.h" // required to pull in any SkUserConfig defines
+#include "include/core/SkTypes.h"
 
 #ifdef SK_VULKAN
 
-#include "vk/GrVkVulkan.h"
+#include "include/gpu/vk/GrVkVulkan.h"
 
-#include "vk/GrVkBackendContext.h"
-#include "vk/GrVkInterface.h"
-#include "vk/VkTestUtils.h"
-#include "WindowContext.h"
+#include "include/gpu/vk/GrVkBackendContext.h"
+#include "src/gpu/vk/GrVkInterface.h"
+#include "tools/gpu/vk/VkTestUtils.h"
+#include "tools/sk_app/WindowContext.h"
 
 class GrRenderTarget;
 
@@ -61,7 +61,7 @@ private:
 
     BackbufferInfo* getAvailableBackbuffer();
     bool createSwapchain(int width, int height, const DisplayParams& params);
-    void createBuffers(VkFormat format, SkColorType colorType);
+    bool createBuffers(VkFormat format, VkImageUsageFlags, SkColorType colorType, VkSharingMode);
     void destroyBuffers();
 
     VkInstance fInstance = VK_NULL_HANDLE;

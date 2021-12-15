@@ -8,7 +8,7 @@
 #ifndef Window_win_DEFINED
 #define Window_win_DEFINED
 
-#include "../Window.h"
+#include "tools/sk_app/Window.h"
 
 #include <windows.h>
 
@@ -33,11 +33,12 @@ public:
 private:
     void closeWindow();
 
-    HINSTANCE fHInstance;
-    HWND      fHWnd;
+    HINSTANCE   fHInstance;
+    HWND        fHWnd;
     BackendType fBackend;
+    bool        fInitializedBackend = false;
 
-    typedef Window INHERITED;
+    using INHERITED = Window;
 };
 
 }   // namespace sk_app

@@ -9,8 +9,8 @@
 #ifndef SkScan_DEFINED
 #define SkScan_DEFINED
 
-#include "SkFixed.h"
-#include "SkRect.h"
+#include "include/core/SkRect.h"
+#include "include/private/SkFixed.h"
 #include <atomic>
 
 class SkRasterClip;
@@ -40,6 +40,11 @@ public:
     typedef void (*HairRCProc)(const SkPoint[], int count, const SkRasterClip&, SkBlitter*);
 
     static void FillPath(const SkPath&, const SkIRect&, SkBlitter*);
+
+    // Paths of a certain size cannot be anti-aliased unless externally tiled (handled by SkDraw).
+    // AA clipping doesn't do that, so it's better for the clip stack to adjust AA state early
+    // rather than clip to the internal limits of the blitter.
+    static bool DowngradeClipAA(const SkIRect& bounds);
 
     ///////////////////////////////////////////////////////////////////////////
     // rasterclip

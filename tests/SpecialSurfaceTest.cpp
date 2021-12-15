@@ -5,16 +5,15 @@
 * found in the LICENSE file
 */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkSpecialImage.h"
-#include "SkSpecialSurface.h"
-#include "Test.h"
-
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "SkGr.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/core/SkSpecialSurface.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/SkGr.h"
+#include "tests/Test.h"
 
 class TestingSpecialSurfaceAccess {
 public:
@@ -58,7 +57,7 @@ static void test_surface(const sk_sp<SkSpecialSurface>& surf,
 DEF_TEST(SpecialSurface_Raster, reporter) {
 
     SkImageInfo info = SkImageInfo::MakeN32(kSmallerSize, kSmallerSize, kOpaque_SkAlphaType);
-    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRaster(info));
+    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRaster(info, SkSurfaceProps()));
 
     test_surface(surf, reporter, 0);
 }
@@ -70,7 +69,7 @@ DEF_TEST(SpecialSurface_Raster2, reporter) {
 
     const SkIRect subset = SkIRect::MakeXYWH(kPad, kPad, kSmallerSize, kSmallerSize);
 
-    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeFromBitmap(subset, bm));
+    sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeFromBitmap(subset, bm, SkSurfaceProps()));
 
     test_surface(surf, reporter, kPad);
 
@@ -78,19 +77,17 @@ DEF_TEST(SpecialSurface_Raster2, reporter) {
 }
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SpecialSurface_Gpu1, reporter, ctxInfo) {
-    for (auto config : { kRGBA_8888_GrPixelConfig, kRGBA_1010102_GrPixelConfig }) {
-        const GrCaps* caps = ctxInfo.grContext()->priv().caps();
-        if (!caps->isConfigRenderable(config)) {
+    auto dContext = ctxInfo.directContext();
+
+    for (auto colorType : { kRGBA_8888_SkColorType, kRGBA_1010102_SkColorType }) {
+        if (!dContext->colorTypeSupportedAsSurface(colorType)) {
             continue;
         }
-        GrSRGBEncoded srgbEncoded = GrSRGBEncoded::kNo;
-        GrColorType colorType = GrPixelConfigToColorTypeAndEncoding(config, &srgbEncoded);
-        const GrBackendFormat format =
-                caps->getBackendFormatFromGrColorType(colorType, srgbEncoded);
-        sk_sp<SkSpecialSurface> surf(SkSpecialSurface::MakeRenderTarget(ctxInfo.grContext(),
-                                                                        format,
-                                                                        kSmallerSize, kSmallerSize,
-                                                                        config, nullptr));
+
+        SkImageInfo ii = SkImageInfo::Make({ kSmallerSize, kSmallerSize }, colorType,
+                                           kPremul_SkAlphaType);
+
+        auto surf(SkSpecialSurface::MakeRenderTarget(dContext, ii, SkSurfaceProps()));
         test_surface(surf, reporter, 0);
     }
 }

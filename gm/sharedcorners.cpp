@@ -5,11 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkPoint.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 #include <array>
 #include <vector>
@@ -103,7 +112,7 @@ protected:
     void drawTriangleBoxes(SkCanvas* canvas, const std::vector<SkPoint>& points,
                            const std::vector<std::array<int, 3>>& triangles) {
         SkPath path;
-        path.setFillType(SkPath::kEvenOdd_FillType);
+        path.setFillType(SkPathFillType::kEvenOdd);
         path.setIsVolatile(true);
         for (const std::array<int, 3>& triangle : triangles) {
             path.moveTo(points[triangle[0]]);
@@ -111,8 +120,8 @@ protected:
             path.lineTo(points[triangle[2]]);
             path.close();
         }
-        SkScalar scale = kBoxSize / SkTMax(path.getBounds().height(), path.getBounds().width());
-        path.transform(SkMatrix::MakeScale(scale, scale));
+        SkScalar scale = kBoxSize / std::max(path.getBounds().height(), path.getBounds().width());
+        path.transform(SkMatrix::Scale(scale, scale));
 
         this->drawRow(canvas, path);
         canvas->translate(0, kBoxSize + kPadSize);
@@ -140,7 +149,7 @@ protected:
 
         for (SkPoint jitter : kJitters) {
             {
-                SkAutoCanvasRestore acr(canvas, true);
+                SkAutoCanvasRestore acr2(canvas, true);
                 canvas->translate(jitter.x(), jitter.y());
                 canvas->drawPath(path, fFillPaint);
             }
@@ -154,4 +163,4 @@ protected:
 
 DEF_GM(return new SharedCornersGM;)
 
-}
+}  // namespace skiagm

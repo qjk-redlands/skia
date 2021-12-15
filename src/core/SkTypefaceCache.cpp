@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypefaceCache.h"
-#include "SkMutex.h"
+#include "include/private/SkMutex.h"
+#include "src/core/SkTypefaceCache.h"
 #include <atomic>
 
 #define TYPEFACE_CACHE_LIMIT    1024
@@ -59,23 +59,26 @@ SkTypefaceCache& SkTypefaceCache::Get() {
 
 SkFontID SkTypefaceCache::NewFontID() {
     static std::atomic<int32_t> nextID{1};
-    return nextID++;
+    return nextID.fetch_add(1, std::memory_order_relaxed);
 }
 
-SK_DECLARE_STATIC_MUTEX(gMutex);
+static SkMutex& typeface_cache_mutex() {
+    static SkMutex& mutex = *(new SkMutex);
+    return mutex;
+}
 
 void SkTypefaceCache::Add(sk_sp<SkTypeface> face) {
-    SkAutoMutexAcquire ama(gMutex);
+    SkAutoMutexExclusive ama(typeface_cache_mutex());
     Get().add(std::move(face));
 }
 
 sk_sp<SkTypeface> SkTypefaceCache::FindByProcAndRef(FindProc proc, void* ctx) {
-    SkAutoMutexAcquire ama(gMutex);
+    SkAutoMutexExclusive ama(typeface_cache_mutex());
     return Get().findByProcAndRef(proc, ctx);
 }
 
 void SkTypefaceCache::PurgeAll() {
-    SkAutoMutexAcquire ama(gMutex);
+    SkAutoMutexExclusive ama(typeface_cache_mutex());
     Get().purgeAll();
 }
 

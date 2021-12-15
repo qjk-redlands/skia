@@ -3,31 +3,55 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+declare_args() {
+  third_party_isystem = true
+}
+
+template("third_party_config") {
+  enabled = !defined(invoker.enabled) || invoker.enabled
+  config(target_name) {
+    if (enabled) {
+      forward_variables_from(invoker, "*", [ "include_dirs" ])
+      cflags = []
+      if (is_win) {
+        include_dirs = invoker.include_dirs
+        if (is_clang) {
+          foreach(dir, invoker.include_dirs) {
+            cflags += [
+              "/imsvc",
+              rebase_path(dir),
+            ]
+          }
+        }
+      } else {
+        foreach(dir, invoker.include_dirs) {
+          if (third_party_isystem) {
+            cflags += [
+              "-isystem",
+              rebase_path(dir),
+            ]
+          } else {
+            cflags += [
+              "-I",
+              rebase_path(dir),
+            ]
+          }
+        }
+      }
+    } else {
+      not_needed(invoker, "*")
+    }
+  }
+}
+
 template("third_party") {
   enabled = !defined(invoker.enabled) || invoker.enabled
-  config(target_name + "_public") {
+  third_party_config(target_name + "_public") {
     if (enabled) {
-      cflags = []
       if (defined(invoker.public_defines)) {
         defines = invoker.public_defines
       }
-      if (is_win && !is_clang) {
-        include_dirs = invoker.public_include_dirs
-      } else if (is_win && is_clang) {
-        foreach(dir, invoker.public_include_dirs) {
-          cflags += [
-            "/imsvc",
-            rebase_path(dir),
-          ]
-        }
-      } else {
-        foreach(dir, invoker.public_include_dirs) {
-          cflags += [
-            "-isystem",
-            rebase_path(dir),
-          ]
-        }
-      }
+      include_dirs = invoker.public_include_dirs
     } else {
       not_needed(invoker, "*")
     }
@@ -43,7 +67,27 @@ template("third_party") {
 
   target(_mode, target_name) {
     if (enabled) {
-      forward_variables_from(invoker, "*", [ "public_include_dirs" ])
+      # set_defaults(_mode) might not exist or set configs
+      if (!defined(configs)) {
+        configs = []
+      }
+      if (is_debug) {
+        configs += [ "//gn/skia:optimize" ]
+      }
+      if (sanitize == "ASAN") {
+        configs += [ "//gn/skia:recover_pointer_overflow" ]
+      }
+
+      # "*" clobbers the current scope; append to existing configs
+      forward_variables_from(invoker,
+                             "*",
+                             [
+                               "public_include_dirs",
+                               "configs",
+                             ])
+      if (defined(invoker.configs)) {
+        configs += invoker.configs
+      }
       public_configs = [ ":" + target_name + "_public" ]
 
       # Warnings are just noise if we're not maintaining the code.
@@ -53,22 +97,6 @@ template("third_party") {
         cflags = [ "-w" ]
       }
     }
-  }
-}
-
-set_defaults("third_party") {
-  configs = default_configs
-  if (!is_official_build) {
-    # Official builds don't have warnings to begin with.
-    configs -= [ "//gn:warnings" ]
-  }
-
-  # Don't want to to deal with this (especially /RTCc)
-  if (sanitize == "MSVC") {
-    configs -= [ "//gn:msvc_rtc" ]
-  }
-  if (is_debug) {
-    configs += [ "//gn:optimize" ]
   }
 }
 

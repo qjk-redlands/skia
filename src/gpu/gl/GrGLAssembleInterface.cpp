@@ -6,9 +6,9 @@
  */
 
 
-#include "gl/GrGLAssembleInterface.h"
-#include "gl/GrGLAssembleHelpers.h"
-#include "gl/GrGLUtil.h"
+#include "include/gpu/gl/GrGLAssembleHelpers.h"
+#include "include/gpu/gl/GrGLAssembleInterface.h"
+#include "src/gpu/gl/GrGLUtil.h"
 
 #define GET_PROC_LOCAL(F) GrGL##F##Fn* F = (GrGL##F##Fn*)get(ctx, "gl" #F)
 
@@ -37,6 +37,6 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledInterface(void *ctx, GrGLGetProc get
     return nullptr;
 }
 
-SK_API const GrGLInterface* GrGLAssembleInterface(void *ctx, GrGLGetProc get) {
+const GrGLInterface* GrGLAssembleInterface(void *ctx, GrGLGetProc get) {
     return GrGLMakeAssembledInterface(ctx, get).release();
 }

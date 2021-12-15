@@ -5,13 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "CrashHandler.h"
+#include "tools/CrashHandler.h"
 
-#include "../private/SkLeanWindows.h"
+#include "src/core/SkLeanWindows.h"
 
 #include <stdlib.h>
 
 #if defined(SK_BUILD_FOR_GOOGLE3)
+    #include "base/config.h"   // May define GOOGLE_ENABLE_SIGNAL_HANDLERS.
+#endif
+
+#if defined(GOOGLE_ENABLE_SIGNAL_HANDLERS)
     #include "base/process_state.h"
     void SetupCrashHandler() { InstallSignalHandlers(); }
 
@@ -54,10 +58,48 @@
         // both 32 and 64 bit on bots.  Doesn't matter much: catchsegv is best anyway.
         #include <cxxabi.h>
         #include <dlfcn.h>
-        #include <execinfo.h>
         #include <string.h>
+#if defined(__Fuchsia__)
+        #include <stdint.h>
+
+        // syslog crash reporting from Fuchsia's backtrace_request.h
+        //
+        // Special value we put in the first register to let the exception handler know
+        // that we are just requesting a backtrace and we should resume the thread.
+        #define BACKTRACE_REQUEST_MAGIC ((uint64_t)0xee726573756d65ee)
+
+        // Prints a backtrace, resuming the thread without killing the process.
+        __attribute__((always_inline)) static inline void backtrace_request(void) {
+          // Two instructions: one that sets a software breakpoint ("int3" on x64,
+          // "brk" on arm64) and one that writes the "magic" value in the first
+          // register ("a" on x64, "x0" on arm64).
+          //
+          // We set a software breakpoint to trigger the exception handling in
+          // crashsvc, which will print the debug info, including the backtrace.
+          //
+          // We write the "magic" value in the first register so that the exception
+          // handler can check for it and resume the thread if present.
+          #ifdef __x86_64__
+            __asm__("int3" : : "a"(BACKTRACE_REQUEST_MAGIC));
+          #endif
+          #ifdef __aarch64__
+            // This is what gdb uses.
+            __asm__(
+                "mov x0, %0\n"
+                "\tbrk 0"
+                :
+                : "r"(BACKTRACE_REQUEST_MAGIC)
+                : "x0");
+          #endif
+        }
+#else
+        #include <execinfo.h>
+#endif
 
         static void handler(int sig) {
+#if defined(__Fuchsia__)
+            backtrace_request();
+#else
             void* stack[64];
             const int count = backtrace(stack, SK_ARRAY_COUNT(stack));
             char** symbols = backtrace_symbols(stack, count);
@@ -78,11 +120,11 @@
                 }
                 SkDebugf("    %s\n", symbols[i]);
             }
-
-            // Exit NOW.  Don't notify other threads, don't call anything registered with atexit().
+#endif
+            // Exit NOW.  Don't notify other threads, don't call anything registered with
+            // atexit().
             _Exit(sig);
         }
-
     #endif
 
     #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_UNIX)
@@ -110,7 +152,7 @@
     #elif defined(SK_BUILD_FOR_WIN)
 
         #include <DbgHelp.h>
-        #include "SkMalloc.h"
+        #include "include/private/SkMalloc.h"
 
         static const struct {
             const char* name;
@@ -127,7 +169,7 @@
 
         static LONG WINAPI handler(EXCEPTION_POINTERS* e) {
             const DWORD code = e->ExceptionRecord->ExceptionCode;
-            SkDebugf("\nCaught exception %u", code);
+            SkDebugf("\nCaught exception %lu", code);
             for (size_t i = 0; i < SK_ARRAY_COUNT(kExceptions); i++) {
                 if (kExceptions[i].code == code) {
                     SkDebugf(" %s", kExceptions[i].name);
@@ -163,6 +205,7 @@
             const DWORD machineType = IMAGE_FILE_MACHINE_ARM64;
         #endif
 
+        #if !defined(SK_WINUWP)
             while (StackWalk64(machineType,
                                GetCurrentProcess(),
                                GetCurrentThread(),
@@ -187,8 +230,9 @@
                 DWORD64 offset;
                 SymGetSymFromAddr64(hProcess, frame.AddrPC.Offset, &offset, symbol);
 
-                SkDebugf("%s +%x\n", symbol->Name, offset);
+                SkDebugf("%s +%llx\n", symbol->Name, offset);
             }
+        #endif //SK_WINUWP
 
             // Exit NOW.  Don't notify other threads, don't call anything registered with atexit().
             _exit(1);

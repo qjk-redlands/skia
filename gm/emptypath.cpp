@@ -4,31 +4,35 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "ToolUtils.h"
-#include "gm.h"
+
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 namespace skiagm {
 
 class EmptyPathGM : public GM {
-public:
-    EmptyPathGM() {}
+    SkString onShortName() override { return SkString("emptypath"); }
 
-protected:
-    SkString onShortName() {
-        return SkString("emptypath");
-    }
-
-    SkISize onISize() { return SkISize::Make(600, 280); }
+    SkISize onISize() override { return {600, 280}; }
 
     void drawEmpty(SkCanvas* canvas,
                     SkColor color,
                     const SkRect& clip,
                     SkPaint::Style style,
-                    SkPath::FillType fill) {
+                    SkPathFillType fill) {
         SkPath path;
         path.setFillType(fill);
         SkPaint paint;
@@ -40,16 +44,16 @@ protected:
         canvas->restore();
     }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    void onDraw(SkCanvas* canvas) override {
         struct FillAndName {
-            SkPath::FillType fFill;
+            SkPathFillType fFill;
             const char*      fName;
         };
         constexpr FillAndName gFills[] = {
-            {SkPath::kWinding_FillType, "Winding"},
-            {SkPath::kEvenOdd_FillType, "Even / Odd"},
-            {SkPath::kInverseWinding_FillType, "Inverse Winding"},
-            {SkPath::kInverseEvenOdd_FillType, "Inverse Even / Odd"},
+            {SkPathFillType::kWinding, "Winding"},
+            {SkPathFillType::kEvenOdd, "Even / Odd"},
+            {SkPathFillType::kInverseWinding, "Inverse Winding"},
+            {SkPathFillType::kInverseEvenOdd, "Inverse Even / Odd"},
         };
         struct StyleAndName {
             SkPaint::Style fStyle;
@@ -109,61 +113,56 @@ protected:
         canvas->restore();
         canvas->restore();
     }
-
-private:
-    typedef GM INHERITED;
 };
 DEF_GM( return new EmptyPathGM; )
 
 //////////////////////////////////////////////////////////////////////////////
 
-static void make_path_move(SkPath* path, const SkPoint pts[3]) {
-    for (int i = 0; i < 3; ++i) {
-        path->moveTo(pts[i]);
+static constexpr int kPtsCount = 3;
+static constexpr SkPoint kPts[kPtsCount] = {
+    {40, 40},
+    {80, 40},
+    {120, 40},
+};
+
+static SkPath make_path_move() {
+    SkPathBuilder builder;
+    for (SkPoint p : kPts) {
+        builder.moveTo(p);
     }
+    return builder.detach();
 }
 
-static void make_path_move_close(SkPath* path, const SkPoint pts[3]) {
-    for (int i = 0; i < 3; ++i) {
-        path->moveTo(pts[i]);
-        path->close();
+static SkPath make_path_move_close() {
+    SkPathBuilder builder;
+    for (SkPoint p : kPts) {
+        builder.moveTo(p).close();
     }
+    return builder.detach();
 }
 
-static void make_path_move_line(SkPath* path, const SkPoint pts[3]) {
-    for (int i = 0; i < 3; ++i) {
-        path->moveTo(pts[i]);
-        path->lineTo(pts[i]);
+static SkPath make_path_move_line() {
+    SkPathBuilder builder;
+    for (SkPoint p : kPts) {
+        builder.moveTo(p).lineTo(p);
     }
+    return builder.detach();
 }
 
-typedef void (*MakePathProc)(SkPath*, const SkPoint pts[3]);
-
-static void make_path_move_mix(SkPath* path, const SkPoint pts[3]) {
-    path->moveTo(pts[0]);
-    path->moveTo(pts[1]); path->close();
-    path->moveTo(pts[2]); path->lineTo(pts[2]);
+static SkPath make_path_move_mix() {
+    return SkPathBuilder().moveTo(kPts[0])
+                          .moveTo(kPts[1]).close()
+                          .moveTo(kPts[2]).lineTo(kPts[2])
+                          .detach();
 }
 
 class EmptyStrokeGM : public GM {
-    SkPoint fPts[3];
+    SkString onShortName() override { return SkString("emptystroke"); }
 
-public:
-    EmptyStrokeGM() {
-        fPts[0].set(40, 40);
-        fPts[1].set(80, 40);
-        fPts[2].set(120, 40);
-    }
-
-protected:
-    SkString onShortName() override {
-        return SkString("emptystroke");
-    }
-
-    SkISize onISize() override { return SkISize::Make(200, 240); }
+    SkISize onISize() override { return {200, 240}; }
 
     void onDraw(SkCanvas* canvas) override {
-        const MakePathProc procs[] = {
+        static constexpr SkPath (*kProcs[])() = {
             make_path_move,             // expect red red red
             make_path_move_close,       // expect black black black
             make_path_move_line,        // expect black black black
@@ -180,18 +179,13 @@ protected:
         strokePaint.setStyle(SkPaint::kStroke_Style);
         dotPaint.setStrokeWidth(7);
 
-        for (size_t i = 0; i < SK_ARRAY_COUNT(procs); ++i) {
-            SkPath path;
-            procs[i](&path, fPts);
-            canvas->drawPoints(SkCanvas::kPoints_PointMode, 3, fPts, dotPaint);
-            canvas->drawPath(path, strokePaint);
+        for (auto proc : kProcs) {
+            canvas->drawPoints(SkCanvas::kPoints_PointMode, kPtsCount, kPts, dotPaint);
+            canvas->drawPath(proc(), strokePaint);
             canvas->translate(0, 40);
         }
     }
-
-private:
-    typedef GM INHERITED;
 };
 DEF_GM( return new EmptyStrokeGM; )
 
-}
+}  // namespace skiagm

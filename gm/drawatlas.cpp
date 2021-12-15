@@ -5,14 +5,41 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathMeasure.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRSXform.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/core/SkVertices.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkFontPriv.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
-#include "SkAutoMalloc.h"
-#include "SkCanvas.h"
-#include "SkRSXform.h"
-#include "SkSurface.h"
-#include "SkTextBlob.h"
-#include "ToolUtils.h"
+#include <initializer_list>
 
 class DrawAtlasGM : public skiagm::GM {
     static sk_sp<SkImage> MakeAtlas(SkCanvas* caller, const SkRect& target) {
@@ -85,31 +112,29 @@ protected:
         }
 
         SkPaint paint;
-        paint.setFilterQuality(kLow_SkFilterQuality);
         paint.setAntiAlias(true);
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
 
-        canvas->drawAtlas(atlas.get(), xform, tex, N, nullptr, &paint);
+        canvas->drawAtlas(atlas.get(), xform, tex, nullptr, N, SkBlendMode::kDst,
+                          sampling, nullptr, &paint);
         canvas->translate(0, 100);
-        canvas->drawAtlas(atlas.get(), xform, tex, colors, N, SkBlendMode::kSrcIn, nullptr, &paint);
+        canvas->drawAtlas(atlas.get(), xform, tex, colors, N, SkBlendMode::kSrcIn,
+                          sampling, nullptr, &paint);
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 DEF_GM( return new DrawAtlasGM; )
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-#include "SkFont.h"
-#include "SkFontPriv.h"
-#include "SkPath.h"
-#include "SkPathMeasure.h"
 
 static void draw_text_on_path(SkCanvas* canvas, const void* text, size_t length,
                               const SkPoint xy[], const SkPath& path, const SkFont& font, const SkPaint& paint,
                               float baseline_offset) {
     SkPathMeasure meas(path, false);
 
-    int count = font.countText(text, length, kUTF8_SkTextEncoding);
+    int count = font.countText(text, length, SkTextEncoding::kUTF8);
     size_t size = count * (sizeof(SkRSXform) + sizeof(SkScalar));
     SkAutoSMalloc<512> storage(size);
     SkRSXform* xform = (SkRSXform*)storage.get();
@@ -117,12 +142,12 @@ static void draw_text_on_path(SkCanvas* canvas, const void* text, size_t length,
 
     // Compute a conservative bounds so we can cull the draw
     const SkRect fontb = SkFontPriv::GetFontBounds(font);
-    const SkScalar max = SkTMax(SkTMax(SkScalarAbs(fontb.fLeft), SkScalarAbs(fontb.fRight)),
-                                SkTMax(SkScalarAbs(fontb.fTop), SkScalarAbs(fontb.fBottom)));
+    const SkScalar max = std::max(std::max(SkScalarAbs(fontb.fLeft), SkScalarAbs(fontb.fRight)),
+                                std::max(SkScalarAbs(fontb.fTop), SkScalarAbs(fontb.fBottom)));
     const SkRect bounds = path.getBounds().makeOutset(max, max);
 
     SkAutoTArray<SkGlyphID> glyphs(count);
-    font.textToGlyphs(text, length, kUTF8_SkTextEncoding, glyphs.get(), count);
+    font.textToGlyphs(text, length, SkTextEncoding::kUTF8, glyphs.get(), count);
     font.getWidths(glyphs.get(), count, widths);
 
     for (int i = 0; i < count; ++i) {
@@ -143,7 +168,7 @@ static void draw_text_on_path(SkCanvas* canvas, const void* text, size_t length,
     }
 
     canvas->drawTextBlob(SkTextBlob::MakeFromRSXform(glyphs.get(), count * sizeof(SkGlyphID),
-                                         &xform[0], font, kGlyphID_SkTextEncoding),
+                                         &xform[0], font, SkTextEncoding::kGlyphID),
                          0, 0, paint);
 
     if (true) {
@@ -153,7 +178,6 @@ static void draw_text_on_path(SkCanvas* canvas, const void* text, size_t length,
     }
 }
 
-#include "SkGradientShader.h"
 static sk_sp<SkShader> make_shader() {
     SkPoint pts[2] = {{0, 0}, {220, 0}};
     SkColor colors[2] = {SK_ColorRED, SK_ColorBLUE};
@@ -180,14 +204,14 @@ static void drawTextPath(SkCanvas* canvas, bool doStroke) {
     SkScalar x = 0;
     for (int i = 0; i < N; ++i) {
         pos[i].set(x, 0);
-        x += font.measureText(&text0[i], 1, kUTF8_SkTextEncoding, nullptr, &paint);
+        x += font.measureText(&text0[i], 1, SkTextEncoding::kUTF8, nullptr, &paint);
     }
 
     SkPath path;
     const float baseline_offset = -5;
 
-    const SkPath::Direction dirs[] = {
-        SkPath::kCW_Direction, SkPath::kCCW_Direction,
+    const SkPathDirection dirs[] = {
+        SkPathDirection::kCW, SkPathDirection::kCCW,
     };
     for (auto d : dirs) {
         path.reset();
@@ -237,9 +261,43 @@ DEF_SIMPLE_GM(blob_rsxform, canvas, 500, 100) {
     canvas->drawTextBlob(blob, offset.fX, offset.fY, paint);
 }
 
-#include "Resources.h"
-#include "SkColorFilter.h"
-#include "SkVertices.h"
+// Exercise xform blob and its tight bounds
+DEF_SIMPLE_GM(blob_rsxform_distortable, canvas, 500, 100) {
+    sk_sp<SkTypeface> typeface;
+    std::unique_ptr<SkStreamAsset> distortable(GetResourceAsStream("fonts/Distortable.ttf"));
+    if (distortable) {
+        sk_sp<SkFontMgr> fm = SkFontMgr::RefDefault();
+        const SkFontArguments::VariationPosition::Coordinate position[] = {
+            { SkSetFourByteTag('w','g','h','t'), 1.618033988749895f }
+        };
+        SkFontArguments params;
+        params.setVariationDesignPosition({position, SK_ARRAY_COUNT(position)});
+        typeface = fm->makeFromStream(std::move(distortable), params);
+    }
+
+    SkFont font(typeface, 50);
+
+    const char text[] = "abcabcabc";
+    constexpr size_t len = sizeof(text) - 1;
+
+    SkRSXform xforms[len];
+    SkScalar scale = 1;
+    SkScalar x = 0, y = 0;
+    for (size_t i = 0; i < len; ++i) {
+        scale = SkScalarSin(i * SK_ScalarPI / (len-1)) * 0.75f + 0.5f;
+        xforms[i] = SkRSXform::Make(scale, 0, x, y);
+        x += 50 * scale;
+    }
+
+    auto blob = SkTextBlob::MakeFromRSXform(text, len, xforms, font);
+
+    SkPoint offset = { 20, 70 };
+    SkPaint paint;
+    paint.setColor(0xFFCCCCCC);
+    canvas->drawRect(blob->bounds().makeOffset(offset.fX, offset.fY), paint);
+    paint.setColor(SK_ColorBLACK);
+    canvas->drawTextBlob(blob, offset.fX, offset.fY, paint);
+}
 
 static sk_sp<SkVertices> make_vertices(sk_sp<SkImage> image, const SkRect& r,
                                        SkColor color) {
@@ -283,12 +341,12 @@ DEF_SIMPLE_GM(compare_atlas_vertices, canvas, 560, 585) {
         for (float alpha : { 1.0f, 0.5f }) {
             paint.setAlphaf(alpha);
             canvas->save();
-            for (auto cf : filters) {
+            for (const sk_sp<SkColorFilter>& cf : filters) {
                 paint.setColorFilter(cf);
-                canvas->drawAtlas(image, &xform, &tex, &color, 1,
-                                  mode, &tex, &paint);
+                canvas->drawAtlas(image.get(), &xform, &tex, &color, 1, mode,
+                                  SkSamplingOptions(), &tex, &paint);
                 canvas->translate(128, 0);
-                paint.setShader(image->makeShader());
+                paint.setShader(image->makeShader(SkSamplingOptions()));
                 canvas->drawVertices(verts, mode, paint);
                 paint.setShader(nullptr);
                 canvas->translate(145, 0);

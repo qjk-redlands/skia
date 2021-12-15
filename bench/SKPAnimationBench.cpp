@@ -5,15 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SKPAnimationBench.h"
-#include "CommandLineFlags.h"
-#include "SkMultiPictureDraw.h"
-#include "SkSurface.h"
+#include "bench/SKPAnimationBench.h"
+#include "include/core/SkSurface.h"
+#include "tools/flags/CommandLineFlags.h"
 
 SKPAnimationBench::SKPAnimationBench(const char* name, const SkPicture* pic, const SkIRect& clip,
-                                     Animation* animation, bool doLooping)
-    : INHERITED(name, pic, clip, 1.0, false, doLooping)
-    , fAnimation(SkRef(animation)) {
+                                     sk_sp<Animation> animation, bool doLooping)
+    : INHERITED(name, pic, clip, 1.0, doLooping)
+    , fAnimation(std::move(animation)) {
     fUniqueName.printf("%s_%s", name, fAnimation->getTag());
 }
 
@@ -25,21 +24,18 @@ void SKPAnimationBench::onPerCanvasPreDraw(SkCanvas* canvas) {
     INHERITED::onPerCanvasPreDraw(canvas);
     fDevBounds = canvas->getDeviceClipBounds();
     SkAssertResult(!fDevBounds.isEmpty());
-    fAnimationTimer.start();
 }
 
 void SKPAnimationBench::drawPicture() {
-    fAnimationTimer.end();
-
     for (int j = 0; j < this->tileRects().count(); ++j) {
-        SkMatrix trans = SkMatrix::MakeTrans(-1.f * this->tileRects()[j].fLeft,
+        SkMatrix trans = SkMatrix::Translate(-1.f * this->tileRects()[j].fLeft,
                                              -1.f * this->tileRects()[j].fTop);
-        fAnimation->preConcatFrameMatrix(fAnimationTimer.fWall, fDevBounds, &trans);
+        fAnimation->preConcatFrameMatrix(fAnimationTime.nextRangeF(0, 1000), fDevBounds, &trans);
         this->surfaces()[j]->getCanvas()->drawPicture(this->picture(), &trans, nullptr);
     }
 
     for (int j = 0; j < this->tileRects().count(); ++j) {
-       this->surfaces()[j]->getCanvas()->flush();
+       this->surfaces()[j]->flush();
     }
 }
 
@@ -50,10 +46,10 @@ public:
         , fZoomPeriodMs(zoomPeriodMs) {
     }
 
-    virtual const char* getTag() { return "zoom"; }
+    const char* getTag() override { return "zoom"; }
 
-    virtual void preConcatFrameMatrix(double animationTimeMs, const SkIRect& devBounds,
-                                      SkMatrix* drawMatrix) {
+    void preConcatFrameMatrix(double animationTimeMs, const SkIRect& devBounds,
+                              SkMatrix* drawMatrix) override {
         double t = fmod(animationTimeMs / fZoomPeriodMs, 1.0); // t is in [0, 1).
         t = fabs(2 * t - 1); // Make t ping-pong between 0 and 1
         SkScalar zoom = static_cast<SkScalar>(pow(fZoomMax, t));
@@ -70,7 +66,7 @@ private:
     double   fZoomPeriodMs;
 };
 
-SKPAnimationBench::Animation* SKPAnimationBench::CreateZoomAnimation(SkScalar zoomMax,
-                                                                     double zoomPeriodMs) {
-    return new ZoomAnimation(zoomMax, zoomPeriodMs);
+sk_sp<SKPAnimationBench::Animation> SKPAnimationBench::MakeZoomAnimation(SkScalar zoomMax,
+                                                                         double zoomPeriodMs) {
+    return sk_make_sp<ZoomAnimation>(zoomMax, zoomPeriodMs);
 }

@@ -5,11 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "SkTypeface.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "tools/ToolUtils.h"
+
+namespace {
 
 // test shader w/ transparency
 static sk_sp<SkShader> make_grad(SkScalar width) {
@@ -33,17 +47,13 @@ static sk_sp<SkShader> make_chrome_solid() {
     return SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kClamp);
 }
 
-namespace skiagm {
-
 // Replicate chrome layout test - clipped pathed gradient-shaded text
-class ChromeGradTextGM1 : public GM {
-public:
-    ChromeGradTextGM1() { }
-protected:
+class ChromeGradTextGM1 : public skiagm::GM {
+    SkString onShortName() override { return SkString("chrome_gradtext1"); }
 
-    virtual SkString onShortName() { return SkString("chrome_gradtext1"); }
-    virtual SkISize onISize() { return SkISize::Make(500, 480); }
-    virtual void onDraw(SkCanvas* canvas) {
+    SkISize onISize() override { return {500, 480}; }
+
+    void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         SkRect r = SkRect::MakeWH(SkIntToScalar(100), SkIntToScalar(100));
 
@@ -60,20 +70,15 @@ protected:
 
         canvas->drawString("I", 0, 100, font, paint);
     }
-private:
-    typedef GM INHERITED;
 };
 
-
 // Replicate chrome layout test - switching between solid & gradient text
-class ChromeGradTextGM2 : public GM {
-public:
-    ChromeGradTextGM2() { }
-protected:
+class ChromeGradTextGM2 : public skiagm::GM {
+    SkString onShortName() override { return SkString("chrome_gradtext2"); }
 
-    virtual SkString onShortName() { return SkString("chrome_gradtext2"); }
-    virtual SkISize onISize() { return SkISize::Make(500, 480); }
-    virtual void onDraw(SkCanvas* canvas) {
+    SkISize onISize() override { return {500, 480}; }
+
+    void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
         SkFont  font(ToolUtils::create_portable_typeface());
         font.setEdging(SkFont::Edging::kAlias);
@@ -91,15 +96,11 @@ protected:
         paint.setStyle(SkPaint::kStroke_Style);
         canvas->drawString("Gradient Stroke Text", 0, 200, font, paint);
     }
-private:
-    typedef GM INHERITED;
 };
-
-//////////////////////////////////////////////////////////////////////////////
+}  // namespace
 
 DEF_GM( return new ChromeGradTextGM1; )
 DEF_GM( return new ChromeGradTextGM2; )
-}
 
 DEF_SIMPLE_GM(gradtext, canvas, 500, 480) {
     static constexpr float kTextSize = 26.0f;

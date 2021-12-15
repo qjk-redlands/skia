@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkPDFGradientShader.h"
+#include "src/pdf/SkPDFGradientShader.h"
 
-#include "SkOpts.h"
-#include "SkPDFDocument.h"
-#include "SkPDFDocumentPriv.h"
-#include "SkPDFFormXObject.h"
-#include "SkPDFGraphicState.h"
-#include "SkPDFResourceDict.h"
-#include "SkPDFTypes.h"
-#include "SkPDFUtils.h"
+#include "include/docs/SkPDFDocument.h"
+#include "src/core/SkOpts.h"
+#include "src/pdf/SkPDFDocumentPriv.h"
+#include "src/pdf/SkPDFFormXObject.h"
+#include "src/pdf/SkPDFGraphicState.h"
+#include "src/pdf/SkPDFResourceDict.h"
+#include "src/pdf/SkPDFTypes.h"
+#include "src/pdf/SkPDFUtils.h"
 
 static uint32_t hash(const SkShader::GradientInfo& v) {
     uint32_t buffer[] = {
@@ -256,10 +256,10 @@ static std::unique_ptr<SkPDFDict> gradientStitchCode(const SkShader::GradientInf
 
     SkAutoSTMalloc<4, ColorTuple> colorDataAlloc(colorCount);
     ColorTuple *colorData = colorDataAlloc.get();
-    for (int i = 0; i < colorCount; i++) {
-        colorData[i][0] = SkColorGetR(colors[i]);
-        colorData[i][1] = SkColorGetG(colors[i]);
-        colorData[i][2] = SkColorGetB(colors[i]);
+    for (int idx = 0; idx < colorCount; idx++) {
+        colorData[idx][0] = SkColorGetR(colors[idx]);
+        colorData[idx][1] = SkColorGetG(colors[idx]);
+        colorData[idx][2] = SkColorGetB(colors[idx]);
     }
 
     // no need for a stitch function if there are only 2 stops.
@@ -273,15 +273,15 @@ static std::unique_ptr<SkPDFDict> gradientStitchCode(const SkShader::GradientInf
     retval->insertObject("Domain", SkPDFMakeArray(0, 1));
     retval->insertInt("FunctionType", 3);
 
-    for (int i = 1; i < colorCount; i++) {
-        if (i > 1) {
-            bounds->appendScalar(colorOffsets[i-1]);
+    for (int idx = 1; idx < colorCount; idx++) {
+        if (idx > 1) {
+            bounds->appendScalar(colorOffsets[idx-1]);
         }
 
         encode->appendScalar(0);
         encode->appendScalar(1.0f);
 
-        functions->appendObject(createInterpolationFunction(colorData[i-1], colorData[i]));
+        functions->appendObject(createInterpolationFunction(colorData[idx-1], colorData[idx]));
     }
 
     retval->insertObject("Encode", std::move(encode));
@@ -780,7 +780,7 @@ static std::unique_ptr<SkStreamAsset> create_pattern_fill_content(int gsIndex,
     }
     SkPDFUtils::ApplyPattern(patternIndex, &content);
     SkPDFUtils::AppendRectangle(bounds, &content);
-    SkPDFUtils::PaintPath(SkPaint::kFill_Style, SkPath::kEvenOdd_FillType, &content);
+    SkPDFUtils::PaintPath(SkPaint::kFill_Style, SkPathFillType::kEvenOdd, &content);
     return content.detachAsStream();
 }
 

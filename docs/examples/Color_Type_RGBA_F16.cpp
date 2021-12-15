@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=dd81527bbdf5eaae7dd21ac04ab84f9e
 REG_FIDDLE(Color_Type_RGBA_F16, 256, 96, false, 0) {
 union FloatUIntUnion {
@@ -27,7 +27,7 @@ void draw(SkCanvas* canvas) {
     bitmap.allocPixels(imageInfo);
     SkCanvas offscreen(bitmap);
     offscreen.clear(SK_ColorGREEN);
-    canvas->drawBitmap(bitmap, 0, 0);
+    canvas->drawImage(bitmap.asImage(), 0, 0);
     auto H = [](float c) -> uint16_t {
         return FloatToHalf(c);
     };
@@ -42,11 +42,11 @@ void draw(SkCanvas* canvas) {
                                { H(0.0), H(0.0), H(.25), H(1.0) } };
     SkPixmap redPixmap(imageInfo, red_f16, imageInfo.minRowBytes());
     if (bitmap.writePixels(redPixmap, 0, 0)) {
-        canvas->drawBitmap(bitmap, 2, 2);
+        canvas->drawImage(bitmap.asImage(), 2, 2);
     }
     SkPixmap bluePixmap(imageInfo, blue_f16, imageInfo.minRowBytes());
     if (bitmap.writePixels(bluePixmap, 0, 0)) {
-        canvas->drawBitmap(bitmap, 4, 4);
+        canvas->drawImage(bitmap.asImage(), 4, 4);
     }
 }
 }  // END FIDDLE

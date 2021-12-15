@@ -4,8 +4,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef SkScalingCodec_DEFINED
+#define SkScalingCodec_DEFINED
 
-#include "SkCodec.h"
+#include "include/codec/SkCodec.h"
 
 // Helper class for an SkCodec that supports arbitrary downscaling.
 class SkScalingCodec : public SkCodec {
@@ -18,8 +20,8 @@ protected:
         SkISize dim = this->dimensions();
         // SkCodec treats zero dimensional images as errors, so the minimum size
         // that we will recommend is 1x1.
-        dim.fWidth = SkTMax(1, SkScalarRoundToInt(desiredScale * dim.fWidth));
-        dim.fHeight = SkTMax(1, SkScalarRoundToInt(desiredScale * dim.fHeight));
+        dim.fWidth = std::max(1, SkScalarRoundToInt(desiredScale * dim.fWidth));
+        dim.fHeight = std::max(1, SkScalarRoundToInt(desiredScale * dim.fHeight));
         return dim;
     }
 
@@ -31,6 +33,7 @@ protected:
     }
 
 private:
-    typedef SkCodec INHERITED;
+    using INHERITED = SkCodec;
 };
 
+#endif  // SkScalingCodec_DEFINED

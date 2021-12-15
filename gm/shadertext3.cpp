@@ -5,10 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "tools/ToolUtils.h"
+
+#include <string.h>
 
 namespace skiagm {
 
@@ -17,7 +33,7 @@ static void makebm(SkBitmap* bm, int w, int h) {
     bm->eraseColor(SK_ColorTRANSPARENT);
 
     SkCanvas    canvas(*bm);
-    SkScalar    s = SkIntToScalar(SkMin32(w, h));
+    SkScalar    s = SkIntToScalar(std::min(w, h));
     const SkPoint     kPts0[] = { { 0, 0 }, { s, s } };
     const SkPoint     kPts1[] = { { s/2, 0 }, { s/2, s } };
     const SkScalar    kPos[] = { 0, SK_Scalar1/2, SK_Scalar1 };
@@ -56,7 +72,7 @@ protected:
         return SkString("shadertext3");
     }
 
-    SkISize onISize() override{ return SkISize::Make(820, 930); }
+    SkISize onISize() override { return SkISize::Make(820, 930); }
 
     void onOnceBeforeDraw() override {
         makebm(&fBmp, kPointSize / 4, kPointSize / 4);
@@ -66,9 +82,10 @@ protected:
 
         SkPaint bmpPaint;
         bmpPaint.setAntiAlias(true);
-        bmpPaint.setFilterQuality(kLow_SkFilterQuality);
         bmpPaint.setAlphaf(0.5f);
-        canvas->drawBitmap(fBmp, 5.f, 5.f, &bmpPaint);
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
+
+        canvas->drawImage(fBmp.asImage(), 5.f, 5.f, sampling, &bmpPaint);
 
         SkFont  font(ToolUtils::create_portable_typeface(), SkIntToScalar(kPointSize));
         SkPaint outlinePaint;
@@ -99,13 +116,13 @@ protected:
 
                 SkPaint fillPaint;
                 fillPaint.setAntiAlias(true);
-                fillPaint.setFilterQuality(kLow_SkFilterQuality);
-                fillPaint.setShader(fBmp.makeShader(kTileModes[tm0], kTileModes[tm1], &localM));
+                fillPaint.setShader(fBmp.makeShader(kTileModes[tm0], kTileModes[tm1],
+                                                    sampling, localM));
 
                 constexpr char kText[] = "B";
                 canvas->drawString(kText, 0, 0, font, fillPaint);
                 canvas->drawString(kText, 0, 0, font, outlinePaint);
-                SkScalar w = font.measureText(kText, strlen(kText), kUTF8_SkTextEncoding);
+                SkScalar w = font.measureText(kText, strlen(kText), SkTextEncoding::kUTF8);
                 canvas->translate(w + 10.f, 0.f);
                 ++i;
                 if (!(i % 2)) {
@@ -120,10 +137,10 @@ protected:
 
 private:
     SkBitmap fBmp;
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new ShaderText3GM; )
-}
+}  // namespace skiagm

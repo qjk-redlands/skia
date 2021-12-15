@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "SkAndroidCodec.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkData.h"
-#include "SkSurface.h"
+#include "include/codec/SkAndroidCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkSurface.h"
 
-#include "../Fuzz.h"
+#include "fuzz/Fuzz.h"
 
 bool FuzzAndroidCodec(sk_sp<SkData> bytes, uint8_t sampleSize) {
     auto codec = SkAndroidCodec::MakeFromData(bytes);
@@ -46,12 +46,15 @@ bool FuzzAndroidCodec(sk_sp<SkData> bytes, uint8_t sampleSize) {
         return false;
     }
 
-    surface->getCanvas()->drawBitmap(bm, 0, 0);
+    surface->getCanvas()->drawImage(bm.asImage(), 0, 0);
     return true;
 }
 
-#if defined(IS_FUZZING_WITH_LIBFUZZER)
+#if defined(SK_BUILD_FOR_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    if (size > 10240) {
+        return 0;
+    }
     auto bytes = SkData::MakeWithoutCopy(data, size);
     Fuzz fuzz(bytes);
     uint8_t sampleSize;

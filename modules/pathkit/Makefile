@@ -57,12 +57,12 @@ test-docker:
 	mkdir -p $$SKIA_ROOT/out/dockerbuild
 
 	docker run --rm -v $$SKIA_ROOT:/SRC -v $$SKIA_ROOT/out/dockerbuild:/OUT \
-gcr.io/skia-public/emsdk-release:prod /SRC/infra/pathkit/build_pathkit.sh
+gcr.io/skia-public/emsdk-base:prod /SRC/infra/pathkit/build_pathkit.sh
 	cp ../../out/dockerbuild/pathkit.js   ./npm-wasm/bin/test/pathkit.js
 	cp ../../out/dockerbuild/pathkit.wasm ./npm-wasm/bin/test/pathkit.wasm
 
 	docker run --rm -v $$SKIA_ROOT:/SRC -v $$SKIA_ROOT/out/dockerbuild:/OUT \
-gcr.io/skia-public/emsdk-release:prod /SRC/infra/pathkit/build_pathkit.sh asm.js
+gcr.io/skia-public/emsdk-base:prod /SRC/infra/pathkit/build_pathkit.sh asm.js
 	cp ../../out/dockerbuild/pathkit.js     ./npm-asmjs/bin/test/pathkit.js
 	cp ../../out/dockerbuild/pathkit.js.mem ./npm-asmjs/bin/test/pathkit.js.mem
 
@@ -101,15 +101,15 @@ npm-debug:
 	./compile.sh debug
 	cp ../../out/pathkit/pathkit.js     ./npm-wasm/bin/debug/pathkit.js
 	cp ../../out/pathkit/pathkit.wasm   ./npm-wasm/bin/debug/pathkit.wasm
-	cp ../../out/pathkit/pathkit.wasm.map ./npm-wasm/bin/debug/pathkit.wasm.map
+
 	./compile.sh asm.js debug
 	cp ../../out/pathkit/pathkit.js     ./npm-asmjs/bin/debug/pathkit.js
-	cp ../../out/pathkit/pathkit.js.map ./npm-asmjs/bin/debug/pathkit.js.map
+
 
 example:
 	npm install pathkit-asmjs pathkit-wasm
 	echo "Go check out localhost:8000/npm-wasm/example.html"
-	python serve.py
+	python3 ../../tools/serve_wasm.py
 
 local-example:
 	rm -rf node_modules/pathkit-wasm
@@ -119,7 +119,7 @@ local-example:
 	ln -s -T ../npm-asmjs node_modules/pathkit-asmjs
 	echo "Go check out http://localhost:8000/npm-wasm/example.html"
 	echo "or http://localhost:8000/npm-asmjs/example.html"
-	python serve.py
+	python3 ../../tools/serve_wasm.py
 
 local-example-test:
 	rm -rf node_modules/pathkit-wasm
@@ -130,7 +130,7 @@ local-example-test:
 	ln -s -T ../../npm-asmjs/bin/test node_modules/pathkit-asmjs/bin
 	echo "Go check out localhost:8000/npm-wasm/example.html"
 	echo "or http://localhost:8000/npm-asmjs/example.html"
-	python serve.py
+	python3 ../../tools/serve_wasm.py
 
 local-example-debug:
 	rm -rf node_modules/pathkit-wasm
@@ -141,5 +141,5 @@ local-example-debug:
 	ln -s -T ../../npm-asmjs/bin/debug node_modules/pathkit-asmjs/bin
 	echo "Go check out localhost:8000/npm-wasm/example.html"
 	echo "or http://localhost:8000/npm-asmjs/example.html"
-	python serve.py
+	python3 ../../tools/serve_wasm.py
 

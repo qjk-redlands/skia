@@ -6,10 +6,10 @@
  * found in the LICENSE file.
  */
 
-#include "../GLWindowContext.h"
-#include "gl/GrGLInterface.h"
-#include "WindowContextFactory_win.h"
-#include "win/SkWGL.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "src/utils/win/SkWGL.h"
+#include "tools/sk_app/GLWindowContext.h"
+#include "tools/sk_app/win/WindowContextFactory_win.h"
 
 #include <Windows.h>
 #include <GL/gl.h>
@@ -22,7 +22,7 @@ using sk_app::DisplayParams;
 namespace sk_app {
 namespace window_context_factory {
 
-WindowContext* NewGLForWin(HWND, const DisplayParams&) { return nullptr; }
+std::unique_ptr<WindowContext> MakeGLForWin(HWND, const DisplayParams&) { return nullptr; }
 
 }  // namespace window_context_factory
 }  // namespace sk_app
@@ -46,7 +46,7 @@ private:
     HWND              fHWND;
     HGLRC             fHGLRC;
 
-    typedef GLWindowContext INHERITED;
+    using INHERITED = GLWindowContext;
 };
 
 GLWindowContext_win::GLWindowContext_win(HWND wnd, const DisplayParams& params)
@@ -113,7 +113,7 @@ sk_sp<const GrGLInterface> GLWindowContext_win::onInitializeContext() {
                                               1,
                                               &kSampleCountAttr,
                                               &fSampleCount);
-            fSampleCount = SkTMax(fSampleCount, 1);
+            fSampleCount = std::max(fSampleCount, 1);
         } else {
             fSampleCount = 1;
         }
@@ -146,10 +146,9 @@ void GLWindowContext_win::onSwapBuffers() {
 namespace sk_app {
 namespace window_context_factory {
 
-WindowContext* NewGLForWin(HWND wnd, const DisplayParams& params) {
-    GLWindowContext_win* ctx = new GLWindowContext_win(wnd, params);
+std::unique_ptr<WindowContext> MakeGLForWin(HWND wnd, const DisplayParams& params) {
+    std::unique_ptr<WindowContext> ctx(new GLWindowContext_win(wnd, params));
     if (!ctx->isValid()) {
-        delete ctx;
         return nullptr;
     }
     return ctx;

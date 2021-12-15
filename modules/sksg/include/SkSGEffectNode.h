@@ -8,7 +8,7 @@
 #ifndef SkSGEffectNode_DEFINED
 #define SkSGEffectNode_DEFINED
 
-#include "SkSGRenderNode.h"
+#include "modules/sksg/include/SkSGRenderNode.h"
 
 namespace sksg {
 
@@ -33,7 +33,7 @@ protected:
 private:
     sk_sp<RenderNode> fChild;
 
-    typedef RenderNode INHERITED;
+    using INHERITED = RenderNode;
 };
 
 } // namespace sksg

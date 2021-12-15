@@ -1,7 +1,7 @@
 #if 0  // Disabled until updated to use current API.
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=5acc77eba0cb4d00bbf3a8f4db0c0aee
 REG_FIDDLE(Arc, 256, 128, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -34,7 +34,7 @@ void draw(SkCanvas* canvas) {
                 path.arcTo({56, 56}, {32, 56}, 24);
                 break;
             case '5':
-                path.arcTo({24, 24}, 0, SkPath::kSmall_ArcSize, SkPath::kCW_Direction, {32, 56});
+                path.arcTo({24, 24}, 0, SkPath::kSmall_ArcSize, SkPathDirection::kCW, {32, 56});
                 break;
             case '6':
                 path.conicTo({56, 56}, {32, 56}, SK_ScalarRoot2Over2);

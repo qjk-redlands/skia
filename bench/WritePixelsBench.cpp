@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkString.h"
 
 // Time variants of write-pixels
 //  [ colortype ][ alphatype ][ colorspace ]
@@ -35,8 +35,7 @@ protected:
     void onDraw(int loops, SkCanvas* canvas) override {
         SkISize size = canvas->getBaseLayerSize();
 
-        SkImageInfo info = SkImageInfo::Make(size.width(), size.height(), fColorType, fAlphaType,
-                                             fCS);
+        SkImageInfo info = SkImageInfo::Make(size, fColorType, fAlphaType, fCS);
         SkBitmap bmp;
         bmp.allocPixels(info);
         bmp.eraseColor(SK_ColorBLACK);
@@ -52,7 +51,7 @@ private:
     sk_sp<SkColorSpace> fCS;
     SkString    fName;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -1,10 +1,11 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 
-#include "CommonFlags.h"
-#include "SkOSFile.h"
-#include "SkOSPath.h"
+#include "src/core/SkOSFile.h"
+#include "src/utils/SkOSPath.h"
+#include "tools/flags/CommonFlags.h"
 
+namespace CommonFlags {
 bool CollectImages(CommandLineFlags::StringArray images, SkTArray<SkString>* output) {
     SkASSERT(output);
 
@@ -75,9 +76,9 @@ bool CollectImages(CommandLineFlags::StringArray images, SkTArray<SkString>* out
             bool foundAnImage = false;
             for (const char* ext : exts) {
                 SkOSFile::Iter it(flag, ext);
-                SkString       file;
+                SkString file;
                 while (it.next(&file)) {
-                    foundAnImage        = true;
+                    foundAnImage = true;
                     output->push_back() = SkOSPath::Join(flag, file.c_str());
                 }
             }
@@ -92,3 +93,5 @@ bool CollectImages(CommandLineFlags::StringArray images, SkTArray<SkString>* out
     }
     return true;
 }
+
+}  // namespace CommonFlags

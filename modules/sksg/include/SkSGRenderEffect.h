@@ -8,11 +8,11 @@
 #ifndef SkSGRenderEffect_DEFINED
 #define SkSGRenderEffect_DEFINED
 
-#include "SkSGEffectNode.h"
+#include "modules/sksg/include/SkSGEffectNode.h"
 
-#include "SkBlendMode.h"
-#include "SkBlurImageFilter.h"
-#include "SkColor.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColor.h"
+#include "include/effects/SkImageFilters.h"
 
 #include <memory>
 #include <vector>
@@ -20,6 +20,7 @@
 // TODO: merge EffectNode.h with this header
 
 class SkImageFilter;
+class SkMaskFilter;
 class SkShader;
 
 namespace sksg {
@@ -56,7 +57,7 @@ class ShaderEffect final : public EffectNode {
 public:
     ~ShaderEffect() override;
 
-    static sk_sp<ShaderEffect> Make(sk_sp<RenderNode> child, sk_sp<Shader> shader = 0);
+    static sk_sp<ShaderEffect> Make(sk_sp<RenderNode> child, sk_sp<Shader> shader = nullptr);
 
     void setShader(sk_sp<Shader>);
 
@@ -74,6 +75,26 @@ private:
 };
 
 /**
+ * Attaches a mask shader to the render DAG.
+ */
+class MaskShaderEffect final : public EffectNode {
+public:
+    static sk_sp<MaskShaderEffect> Make(sk_sp<RenderNode>, sk_sp<SkShader> = nullptr);
+
+    SG_ATTRIBUTE(Shader, sk_sp<SkShader>, fShader)
+
+protected:
+    void onRender(SkCanvas*, const RenderContext*) const override;
+
+private:
+    MaskShaderEffect(sk_sp<RenderNode>, sk_sp<SkShader>);
+
+    sk_sp<SkShader> fShader;
+
+    using INHERITED = EffectNode;
+};
+
+/**
  * ImageFilter base class.
  */
 class ImageFilter : public Node {
@@ -86,7 +107,7 @@ public:
     }
 
 protected:
-    explicit ImageFilter(sk_sp<ImageFilter> input = 0);
+    explicit ImageFilter(sk_sp<ImageFilter> input = nullptr);
 
     using InputsT = std::vector<sk_sp<ImageFilter>>;
     explicit ImageFilter(std::unique_ptr<InputsT> inputs);
@@ -129,6 +150,27 @@ private:
 };
 
 /**
+ * Wrapper for externally-managed SkImageFilters.
+ */
+class ExternalImageFilter final : public ImageFilter {
+public:
+    ~ExternalImageFilter() override;
+
+    static sk_sp<ExternalImageFilter> Make() {
+        return sk_sp<ExternalImageFilter>(new ExternalImageFilter());
+    }
+
+    SG_ATTRIBUTE(ImageFilter, sk_sp<SkImageFilter>, fImageFilter)
+
+private:
+    ExternalImageFilter();
+
+    sk_sp<SkImageFilter> onRevalidateFilter() override { return fImageFilter; }
+
+    sk_sp<SkImageFilter> fImageFilter;
+};
+
+/**
  * SkDropShadowImageFilter node.
  */
 class DropShadowImageFilter final : public ImageFilter {
@@ -167,8 +209,8 @@ public:
 
     static sk_sp<BlurImageFilter> Make(sk_sp<ImageFilter> input = nullptr);
 
-    SG_ATTRIBUTE(Sigma   , SkVector                   , fSigma   )
-    SG_ATTRIBUTE(TileMode, SkBlurImageFilter::TileMode, fTileMode)
+    SG_ATTRIBUTE(Sigma   , SkVector  , fSigma   )
+    SG_ATTRIBUTE(TileMode, SkTileMode, fTileMode)
 
 protected:
     sk_sp<SkImageFilter> onRevalidateFilter() override;
@@ -176,8 +218,8 @@ protected:
 private:
     explicit BlurImageFilter(sk_sp<ImageFilter> input);
 
-    SkVector                    fSigma    = { 0, 0 };
-    SkBlurImageFilter::TileMode fTileMode = SkBlurImageFilter::kClamp_TileMode;
+    SkVector   fSigma    = { 0, 0 };
+    SkTileMode fTileMode = SkTileMode::kClamp;
 
     using INHERITED = ImageFilter;
 };
@@ -200,6 +242,25 @@ protected:
 
 private:
     BlendModeEffect(sk_sp<RenderNode>, SkBlendMode);
+
+    SkBlendMode fMode;
+
+    using INHERITED = EffectNode;
+};
+
+class LayerEffect final : public EffectNode {
+public:
+    ~LayerEffect() override;
+
+    static sk_sp<LayerEffect> Make(sk_sp<RenderNode> child,
+                                   SkBlendMode mode = SkBlendMode::kSrcOver);
+
+    SG_ATTRIBUTE(Mode, SkBlendMode, fMode)
+
+private:
+    LayerEffect(sk_sp<RenderNode> child, SkBlendMode mode);
+
+    void onRender(SkCanvas*, const RenderContext*) const override;
 
     SkBlendMode fMode;
 

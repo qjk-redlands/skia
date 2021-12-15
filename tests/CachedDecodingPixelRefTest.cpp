@@ -5,19 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkColorData.h"
-#include "SkImage.h"
-#include "SkImageGenerator.h"
-#include "SkImageInfo.h"
-#include "SkMakeUnique.h"
-#include "SkRefCnt.h"
-#include "SkTypes.h"
-#include "SkUtils.h"
-#include "Test.h"
-#include "ToolUtils.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageGenerator.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkColorData.h"
+#include "src/core/SkOpts.h"
+#include "tests/Test.h"
+#include "tools/ToolUtils.h"
 
 #include <utility>
 
@@ -83,7 +82,7 @@ private:
     const TestType fType;
     skiatest::Reporter* const fReporter;
 
-    typedef SkImageGenerator INHERITED;
+    using INHERITED = SkImageGenerator;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,11 +99,10 @@ DEF_TEST(Image_NewFromGenerator, r) {
     for (size_t i = 0; i < SK_ARRAY_COUNT(testTypes); ++i) {
         TestImageGenerator::TestType test = testTypes[i];
         for (const SkColorType testColorType : testColorTypes) {
-            auto gen = skstd::make_unique<TestImageGenerator>(test, r, testColorType);
+            auto gen = std::make_unique<TestImageGenerator>(test, r, testColorType);
             sk_sp<SkImage> image(SkImage::MakeFromGenerator(std::move(gen)));
             if (nullptr == image) {
-                ERRORF(r, "SkImage::NewFromGenerator unexpecedly failed ["
-                    SK_SIZE_T_SPECIFIER "]", i);
+                ERRORF(r, "SkImage::NewFromGenerator unexpecedly failed [%zu]", i);
                 continue;
             }
             REPORTER_ASSERT(r, TestImageGenerator::Width() == image->width());
@@ -116,7 +114,7 @@ DEF_TEST(Image_NewFromGenerator, r) {
             SkCanvas canvas(bitmap);
             const SkColor kDefaultColor = 0xffabcdef;
             canvas.clear(kDefaultColor);
-            canvas.drawImage(image, 0, 0, nullptr);
+            canvas.drawImage(image, 0, 0);
             if (TestImageGenerator::kSucceedGetPixels_TestType == test) {
                 REPORTER_ASSERT(
                     r, TestImageGenerator::Color() == bitmap.getColor(0, 0));

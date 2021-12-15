@@ -9,15 +9,63 @@
  * be overwritten.
  */
 
-#include "gl/GrGLInterface.h"
-#include "gl/GrGLExtensions.h"
-#include "gl/GrGLUtil.h"
+#include "include/gpu/gl/GrGLExtensions.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "src/gpu/gl/GrGLUtil.h"
 
 #include <stdio.h>
 
 GrGLInterface::GrGLInterface() {
     fStandard = kNone_GrGLStandard;
 }
+
+#if GR_GL_CHECK_ERROR
+static const char* get_error_string(GrGLenum err) {
+    switch (err) {
+        case GR_GL_NO_ERROR:
+            return "";
+        case GR_GL_INVALID_ENUM:
+            return "Invalid Enum";
+        case GR_GL_INVALID_VALUE:
+            return "Invalid Value";
+        case GR_GL_INVALID_OPERATION:
+            return "Invalid Operation";
+        case GR_GL_OUT_OF_MEMORY:
+            return "Out of Memory";
+        case GR_GL_CONTEXT_LOST:
+            return "Context Lost";
+    }
+    return "Unknown";
+}
+
+GrGLenum GrGLInterface::checkError(const char* location, const char* call) const {
+    GrGLenum error = fFunctions.fGetError();
+    if (error != GR_GL_NO_ERROR && !fSuppressErrorLogging) {
+        SkDebugf("---- glGetError 0x%x(%s)", error, get_error_string(error));
+        if (location) {
+            SkDebugf(" at\n\t%s", location);
+        }
+        if (call) {
+            SkDebugf("\n\t\t%s", call);
+        }
+        SkDebugf("\n");
+        if (error == GR_GL_OUT_OF_MEMORY) {
+            fOOMed = true;
+        }
+    }
+    return error;
+}
+
+bool GrGLInterface::checkAndResetOOMed() const {
+    if (fOOMed) {
+        fOOMed = false;
+        return true;
+    }
+    return false;
+}
+
+void GrGLInterface::suppressErrorLogging() { fSuppressErrorLogging = true; }
+#endif
 
 #define RETURN_FALSE_INTERFACE                                                 \
     SkDEBUGF("%s:%d GrGLInterface::validate() failed.\n", __FILE__, __LINE__); \
@@ -150,7 +198,17 @@ bool GrGLInterface::validate() const {
         }
     }
 
-    if (GR_IS_GR_GL(fStandard) ||
+    if ((GR_IS_GR_GL(fStandard) && (
+          (glVer >= GR_GL_VER(4,2)))) ||
+       (GR_IS_GR_GL_ES(fStandard) && (
+          (glVer >= GR_GL_VER(3,1))))) {
+        // all functions were marked optional or test_only
+    }
+
+    if ((GR_IS_GR_GL(fStandard) && (
+          (glVer >= GR_GL_VER(3,0)) ||
+          fExtensions.has("GL_ARB_vertex_array_object") ||
+          fExtensions.has("GL_APPLE_vertex_array_object"))) ||
        (GR_IS_GR_GL_ES(fStandard) && (
           (glVer >= GR_GL_VER(3,0)) ||
           fExtensions.has("GL_OES_vertex_array_object"))) ||
@@ -161,6 +219,17 @@ bool GrGLInterface::validate() const {
         if (!fFunctions.fBindVertexArray ||
             !fFunctions.fDeleteVertexArrays ||
             !fFunctions.fGenVertexArrays) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
+    if ((GR_IS_GR_GL(fStandard) && (
+          (glVer >= GR_GL_VER(4,0)) ||
+          fExtensions.has("GL_ARB_tessellation_shader"))) ||
+       (GR_IS_GR_GL_ES(fStandard) && (
+          (glVer >= GR_GL_VER(3,2)) ||
+          fExtensions.has("GL_OES_tessellation_shader")))) {
+        if (!fFunctions.fPatchParameteri) {
             RETURN_FALSE_INTERFACE;
         }
     }
@@ -209,11 +278,26 @@ bool GrGLInterface::validate() const {
           fExtensions.has("GL_EXT_draw_instanced"))) ||
        (GR_IS_GR_GL_ES(fStandard) && (
           (glVer >= GR_GL_VER(3,0)) ||
-          fExtensions.has("GL_EXT_draw_instanced"))) ||
+          fExtensions.has("GL_EXT_draw_instanced") ||
+          fExtensions.has("GL_ANGLE_instanced_arrays"))) ||
        (GR_IS_GR_WEBGL(fStandard) && (
           (glVer >= GR_GL_VER(2,0))))) {
         if (!fFunctions.fDrawArraysInstanced ||
             !fFunctions.fDrawElementsInstanced) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
+    if ((GR_IS_GR_GL(fStandard) && (
+          (glVer >= GR_GL_VER(4,2)) ||
+          fExtensions.has("GL_ARB_base_instance"))) ||
+       (GR_IS_GR_GL_ES(fStandard) && (
+          fExtensions.has("GL_EXT_base_instance") ||
+          fExtensions.has("GL_ANGLE_base_vertex_base_instance"))) ||
+       (GR_IS_GR_WEBGL(fStandard) && (
+          fExtensions.has("GL_WEBGL_draw_instanced_base_vertex_base_instance")))) {
+        if (!fFunctions.fDrawArraysInstancedBaseInstance ||
+            !fFunctions.fDrawElementsInstancedBaseVertexBaseInstance) {
             RETURN_FALSE_INTERFACE;
         }
     }
@@ -236,6 +320,16 @@ bool GrGLInterface::validate() const {
           (glVer >= GR_GL_VER(3,1))))) {
         if (!fFunctions.fDrawArraysIndirect ||
             !fFunctions.fDrawElementsIndirect) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
+    if ((GR_IS_GR_GL_ES(fStandard) && (
+          fExtensions.has("GL_ANGLE_base_vertex_base_instance"))) ||
+       (GR_IS_GR_WEBGL(fStandard) && (
+          fExtensions.has("GL_WEBGL_multi_draw_instanced_base_vertex_base_instance")))) {
+        if (!fFunctions.fMultiDrawArraysInstancedBaseInstance ||
+            !fFunctions.fMultiDrawElementsInstancedBaseVertexBaseInstance) {
             RETURN_FALSE_INTERFACE;
         }
     }
@@ -333,12 +427,20 @@ bool GrGLInterface::validate() const {
         }
     }
 
+    if ((GR_IS_GR_GL_ES(fStandard) && (
+          fExtensions.has("GL_QCOM_tiled_rendering")))) {
+        // all functions were marked optional or test_only
+    }
+
     if ((GR_IS_GR_GL(fStandard) && (
           (glVer >= GR_GL_VER(3,2)) ||
           fExtensions.has("GL_ARB_instanced_arrays"))) ||
        (GR_IS_GR_GL_ES(fStandard) && (
           (glVer >= GR_GL_VER(3,0)) ||
-          fExtensions.has("GL_EXT_instanced_arrays")))) {
+          fExtensions.has("GL_EXT_instanced_arrays") ||
+          fExtensions.has("GL_ANGLE_instanced_arrays"))) ||
+       (GR_IS_GR_WEBGL(fStandard) && (
+          (glVer >= GR_GL_VER(2,0))))) {
         if (!fFunctions.fVertexAttribDivisor) {
             RETURN_FALSE_INTERFACE;
         }
@@ -384,8 +486,11 @@ bool GrGLInterface::validate() const {
           fExtensions.has("GL_EXT_framebuffer_blit"))) ||
        (GR_IS_GR_GL_ES(fStandard) && (
           (glVer >= GR_GL_VER(3,0)) ||
+          fExtensions.has("GL_NV_framebuffer_blit") ||
           fExtensions.has("GL_CHROMIUM_framebuffer_multisample") ||
-          fExtensions.has("GL_ANGLE_framebuffer_blit")))) {
+          fExtensions.has("GL_ANGLE_framebuffer_blit"))) ||
+       (GR_IS_GR_WEBGL(fStandard) && (
+          (glVer >= GR_GL_VER(2,0))))) {
         if (!fFunctions.fBlitFramebuffer) {
             RETURN_FALSE_INTERFACE;
         }
@@ -487,58 +592,6 @@ bool GrGLInterface::validate() const {
     }
 
     if ((GR_IS_GR_GL(fStandard) && (
-          (glVer >= GR_GL_VER(4,3)) ||
-          fExtensions.has("GL_ARB_program_interface_query"))) ||
-       (GR_IS_GR_GL_ES(fStandard) && (
-          (glVer >= GR_GL_VER(3,1))))) {
-        if (!fFunctions.fGetProgramResourceLocation) {
-            RETURN_FALSE_INTERFACE;
-        }
-    }
-
-    if ((GR_IS_GR_GL(fStandard) && (
-          fExtensions.has("GL_NV_path_rendering"))) ||
-       (GR_IS_GR_GL_ES(fStandard) && (
-          fExtensions.has("GL_CHROMIUM_path_rendering") ||
-          fExtensions.has("GL_NV_path_rendering")))) {
-        if (!fFunctions.fMatrixLoadIdentity ||
-            !fFunctions.fMatrixLoadf) {
-            RETURN_FALSE_INTERFACE;
-        }
-    }
-
-    if ((GR_IS_GR_GL(fStandard) && (
-          fExtensions.has("GL_NV_path_rendering"))) ||
-       (GR_IS_GR_GL_ES(fStandard) && (
-          fExtensions.has("GL_CHROMIUM_path_rendering") ||
-          fExtensions.has("GL_NV_path_rendering")))) {
-        if (!fFunctions.fCoverFillPath ||
-            !fFunctions.fCoverFillPathInstanced ||
-            !fFunctions.fCoverStrokePath ||
-            !fFunctions.fCoverStrokePathInstanced ||
-            !fFunctions.fDeletePaths ||
-            !fFunctions.fGenPaths ||
-            !fFunctions.fIsPath ||
-            !fFunctions.fPathCommands ||
-            !fFunctions.fPathParameterf ||
-            !fFunctions.fPathParameteri ||
-            !fFunctions.fPathStencilFunc ||
-            !fFunctions.fStencilFillPath ||
-            !fFunctions.fStencilFillPathInstanced ||
-            !fFunctions.fStencilStrokePath ||
-            !fFunctions.fStencilStrokePathInstanced) {
-            RETURN_FALSE_INTERFACE;
-        }
-    }
-
-    if ((GR_IS_GR_GL_ES(fStandard) && (
-          fExtensions.has("GL_CHROMIUM_path_rendering")))) {
-        if (!fFunctions.fBindFragmentInputLocation) {
-            RETURN_FALSE_INTERFACE;
-        }
-    }
-
-    if ((GR_IS_GR_GL(fStandard) && (
           fExtensions.has("GL_NV_framebuffer_mixed_samples"))) ||
        (GR_IS_GR_GL_ES(fStandard) && (
           fExtensions.has("GL_CHROMIUM_framebuffer_mixed_samples") ||
@@ -581,18 +634,6 @@ bool GrGLInterface::validate() const {
     }
 
     if ((GR_IS_GR_GL(fStandard) && (
-          fExtensions.has("EGL_KHR_image") ||
-          fExtensions.has("EGL_KHR_image_base"))) ||
-       (GR_IS_GR_GL_ES(fStandard) && (
-          fExtensions.has("EGL_KHR_image") ||
-          fExtensions.has("EGL_KHR_image_base")))) {
-        if (!fFunctions.fEGLCreateImage ||
-            !fFunctions.fEGLDestroyImage) {
-            RETURN_FALSE_INTERFACE;
-        }
-    }
-
-    if ((GR_IS_GR_GL(fStandard) && (
           (glVer >= GR_GL_VER(3,2)) ||
           fExtensions.has("GL_ARB_sync"))) ||
        (GR_IS_GR_GL_ES(fStandard) && (
@@ -622,10 +663,19 @@ bool GrGLInterface::validate() const {
     if ((GR_IS_GR_GL(fStandard) && (
           (glVer >= GR_GL_VER(4,1)))) ||
        (GR_IS_GR_GL_ES(fStandard) && (
-          (glVer >= GR_GL_VER(3,0))))) {
+          (glVer >= GR_GL_VER(3,0)) ||
+          fExtensions.has("GL_OES_get_program_binary")))) {
         if (!fFunctions.fGetProgramBinary ||
-            !fFunctions.fProgramBinary ||
-            !fFunctions.fProgramParameteri) {
+            !fFunctions.fProgramBinary) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
+    if ((GR_IS_GR_GL(fStandard) && (
+          (glVer >= GR_GL_VER(4,1)))) ||
+       (GR_IS_GR_GL_ES(fStandard) && (
+          (glVer >= GR_GL_VER(3,0))))) {
+        if (!fFunctions.fProgramParameteri) {
             RETURN_FALSE_INTERFACE;
         }
     }
@@ -717,6 +767,19 @@ bool GrGLInterface::validate() const {
        GR_IS_GR_GL_ES(fStandard) ||
        GR_IS_GR_WEBGL(fStandard)) {
         if (!fFunctions.fGetShaderPrecisionFormat) {
+            RETURN_FALSE_INTERFACE;
+        }
+    }
+
+    if ((GR_IS_GR_GL(fStandard) && (
+          fExtensions.has("GL_NV_fence"))) ||
+       (GR_IS_GR_GL_ES(fStandard) && (
+          fExtensions.has("GL_NV_fence")))) {
+        if (!fFunctions.fDeleteFences ||
+            !fFunctions.fFinishFence ||
+            !fFunctions.fGenFences ||
+            !fFunctions.fSetFence ||
+            !fFunctions.fTestFence) {
             RETURN_FALSE_INTERFACE;
         }
     }

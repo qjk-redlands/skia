@@ -5,17 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "AnimTimer.h"
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkDrawable.h"
-#include "SkGradientShader.h"
-#include "SkPath.h"
-#include "SkRSXform.h"
-#include "SkRandom.h"
-#include "SkString.h"
-#include "SkSurface.h"
-#include "SkTextUtils.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkDrawable.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRSXform.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/utils/SkRandom.h"
+#include "include/utils/SkTextUtils.h"
+#include "samplecode/Sample.h"
 
 const SkBlendMode gModes[] = {
     SkBlendMode::kSrcOver,
@@ -59,7 +58,7 @@ public:
     }
 
     bool hitTest(SkScalar x, SkScalar y) {
-        return fRect.intersects(x - 1, y - 1, x + 1, y + 1);
+        return fRect.intersects({x - 1, y - 1, x + 1, y + 1});
     }
 };
 
@@ -137,13 +136,7 @@ public:
     }
 
 protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "XferDemo");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("XferDemo"); }
 
     void onDrawContent(SkCanvas* canvas) override {
         for (int i = 0; i < N_Modes; ++i) {
@@ -167,11 +160,11 @@ protected:
         canvas->restore();
     }
 
-    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned) override {
+    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey) override {
         // Check mode buttons first
         for (int i = 0; i < N_Modes; ++i) {
             if (fModeButtons[i].hitTest(x, y)) {
-                Click* click = new Click(this);
+                Click* click = new Click();
                 click->fMeta.setS32("mode", i);
                 return click;
             }
@@ -183,13 +176,13 @@ protected:
                 break;
             }
         }
-        return fSelected ? new Click(this) : nullptr;
+        return fSelected ? new Click() : nullptr;
     }
 
     bool onClick(Click* click) override {
         int32_t mode;
         if (click->fMeta.findS32("mode", &mode)) {
-            if (fSelected && Click::kUp_State == click->fState) {
+            if (fSelected && skui::InputState::kUp == click->fState) {
                 fSelected->fMode = gModes[mode];
             }
         } else {
@@ -200,9 +193,114 @@ protected:
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
+DEF_SAMPLE( return new XferDemo; )
 
 //////////////////////////////////////////////////////////////////////////////
 
-DEF_SAMPLE( return new XferDemo; )
+#include "tools/Resources.h"
+
+class CubicResamplerDemo : public Sample {
+    struct Rec {
+        sk_sp<SkImage>  fImage;
+        SkRect          fBounds;
+
+        void draw(SkCanvas* canvas, SkCubicResampler cubic) const {
+            SkRect r = fBounds;
+            SkPaint paint;
+
+            SkMatrix lm = SkMatrix::Translate(r.x(), r.y())
+                        * SkMatrix::Scale(10, 10);
+            paint.setShader(fImage->makeShader(SkSamplingOptions(), lm));
+            canvas->drawRect(r, paint);
+
+            r.offset(r.width() + 10, 0);
+            lm.postTranslate(r.width() + 10, 0);
+
+            paint.setShader(fImage->makeShader(SkSamplingOptions(SkFilterMode::kLinear), lm));
+            canvas->drawRect(r, paint);
+
+            r.offset(r.width() + 10, 0);
+            lm.postTranslate(r.width() + 10, 0);
+
+            paint.setShader(fImage->makeShader(SkTileMode::kClamp, SkTileMode::kClamp,
+                                               SkSamplingOptions(cubic), &lm));
+            canvas->drawRect(r, paint);
+        }
+    };
+    std::vector<Rec> fRecs;
+
+public:
+    CubicResamplerDemo() {
+        const char* names[] = {
+            "images/mandrill_128.png",
+            "images/rle.bmp",
+            "images/example_4.png",
+        };
+        SkRect r = {10, 10, 200, 200};
+        for (auto name : names) {
+            fRecs.push_back({GetResourceAsImage(name), r});
+            r.offset(0, r.height() + 10);
+        }
+
+        fDomain.setXYWH(r.fLeft + 3*r.width() + 40, 50, 200, 200);
+        fCubic = {.3f, .5f};
+    }
+
+protected:
+    SkString name() override { return SkString("CubicResampler"); }
+
+    void onDrawContent(SkCanvas* canvas) override {
+        for (const auto& rec : fRecs) {
+            rec.draw(canvas, fCubic);
+        }
+
+        SkPaint paint;
+        paint.setAntiAlias(true);
+        paint.setStroke(true);
+        canvas->drawRect(fDomain, paint);
+
+        paint.setColor(SK_ColorRED);
+        paint.setStroke(false);
+        SkPoint loc = SkMatrix::RectToRect({0,0,1,1}, fDomain).mapXY(fCubic.B, fCubic.C);
+        canvas->drawCircle(loc.fX, loc.fY, 8, paint);
+
+        SkString str;
+        str.printf("B=%4.2f  C=%4.2f", fCubic.B, fCubic.C);
+        SkFont font;
+        font.setSize(25);
+        font.setEdging(SkFont::Edging::kAntiAlias);
+        paint.setColor(SK_ColorBLACK);
+        canvas->drawSimpleText(str.c_str(), str.size(), SkTextEncoding::kUTF8,
+                               fDomain.fLeft + 10, fDomain.fBottom + 40, font, paint);
+    }
+
+    static float pin_unitize(float min, float max, float value) {
+        return (std::min(std::max(value, min), max) - min) / (max - min);
+    }
+    static SkPoint pin_unitize(const SkRect& r, SkPoint p) {
+        return {
+            pin_unitize(r.fLeft, r.fRight,  p.fX),
+            pin_unitize(r.fTop,  r.fBottom, p.fY),
+        };
+    }
+
+    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey) override {
+        if (fDomain.contains(x, y)) {
+            return new Click([this](Click* click) {
+                auto [B, C] = pin_unitize(fDomain, click->fCurr);
+                fCubic = {B, C};
+                return true;
+            });
+        }
+        return nullptr;
+    }
+
+private:
+    SkRect                  fDomain;
+    SkImage::CubicResampler fCubic;
+
+    using INHERITED = Sample;
+};
+DEF_SAMPLE( return new CubicResamplerDemo; )

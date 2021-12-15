@@ -10,10 +10,10 @@ module.exports = function(config) {
 
     // list of files / patterns to load in the browser
     files: [
-      { pattern: 'canvaskit/bin/canvaskit.wasm', included:false, served:true},
+      { pattern: 'build/canvaskit.wasm', included:false, served:true},
       { pattern: 'tests/assets/*', included:false, served:true},
-      '../../modules/pathkit/tests/testReporter.js',
-      'canvaskit/bin/canvaskit.js',
+      'tests/testReporter.js',
+      'build/canvaskit.js',
       'tests/canvaskitinit.js',
       'tests/util.js',
       'tests/*.spec.js'
@@ -21,7 +21,7 @@ module.exports = function(config) {
 
     proxies: {
       '/assets/': '/base/tests/assets/',
-      '/canvaskit/': '/base/canvaskit/bin/',
+      '/build/': '/base/build/',
     },
 
     // test results reporter to use
@@ -57,18 +57,35 @@ module.exports = function(config) {
     concurrency: Infinity,
   };
 
-  if (isDocker) {
+  if (isDocker || config.headless) {
     // See https://hackernoon.com/running-karma-tests-with-headless-chrome-inside-docker-ae4aceb06ed3
     cfg.browsers = ['ChromeHeadlessNoSandbox'],
     cfg.customLaunchers = {
         ChromeHeadlessNoSandbox: {
-            base: 'ChromeHeadless',
-            flags: [
+          base: 'ChromeHeadless',
+          flags: [
             // Without this flag, we see an error:
             // Failed to move to new namespace: PID namespaces supported, Network namespace supported, but failed: errno = Operation not permitted
-                '--no-sandbox'
-            ],
+            '--no-sandbox',
+            // may help tests be less flaky
+            // https://peter.sh/experiments/chromium-command-line-switches/#browser-test
+            '--browser-test',
+            // This can also help avoid crashes/timeouts:
+            // https://github.com/GoogleChrome/puppeteer/issues/1834
+            '--disable-dev-shm-usage',
+          ],
         },
+    };
+  } else {
+    // Extra options that should only be applied locally
+
+    // Measure test coverage and write output to coverage/ directory
+    cfg.reporters.push('coverage');
+    cfg.preprocessors = {
+      // Measure test coverage of these source files
+      // Since this file is a combination of our code, and emscripten's glue,
+      // we'll never see 100% coverage, but this lets us measure improvements.
+      'canvaskit/bin/canvaskit.js': ['coverage'],
     };
   }
 

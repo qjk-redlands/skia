@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkBlurMask.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkRandom.h"
-#include "SkShader.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkBlurMask.h"
 
 #define SMALL   SkIntToScalar(2)
 #define REAL    1.5f
@@ -39,7 +39,7 @@ public:
     }
 
 protected:
-    virtual const char* onGetName() {
+    const char* onGetName() override {
         return fName.c_str();
     }
 
@@ -51,7 +51,7 @@ protected:
         fName = name;
     }
 
-    virtual void onDraw(int loops, SkCanvas*) {
+    void onDraw(int loops, SkCanvas*) override {
         SkPaint paint;
         this->setupPaint(&paint);
 
@@ -70,7 +70,7 @@ protected:
     virtual void makeBlurryRect(const SkRect&) = 0;
     virtual void preBenchSetup(const SkRect&) {}
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 
@@ -97,7 +97,7 @@ protected:
         SkMask::FreeImage(mask.fImage);
     }
 private:
-    typedef BlurRectBench INHERITED;
+    using INHERITED = BlurRectBench;
 };
 
 class BlurRectSeparableBench: public BlurRectBench {
@@ -123,7 +123,7 @@ protected:
 
     SkMask fSrcMask;
 private:
-    typedef BlurRectBench INHERITED;
+    using INHERITED = BlurRectBench;
 };
 
 class BlurRectBoxFilterBench: public BlurRectSeparableBench {
@@ -151,7 +151,7 @@ protected:
         SkMask::FreeImage(mask.fImage);
     }
 private:
-    typedef BlurRectSeparableBench INHERITED;
+    using INHERITED = BlurRectSeparableBench;
 };
 
 class BlurRectGaussianBench: public BlurRectSeparableBench {
@@ -179,7 +179,7 @@ protected:
         SkMask::FreeImage(mask.fImage);
     }
 private:
-    typedef BlurRectSeparableBench INHERITED;
+    using INHERITED = BlurRectSeparableBench;
 };
 
 DEF_BENCH(return new BlurRectBoxFilterBench(SMALL);)

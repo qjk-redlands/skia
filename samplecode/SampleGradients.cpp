@@ -4,9 +4,9 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
+#include "include/core/SkCanvas.h"
+#include "include/effects/SkGradientShader.h"
+#include "samplecode/Sample.h"
 
 static sk_sp<SkShader> setgrad(const SkRect& r, SkColor c0, SkColor c1) {
     SkColor colors[] = { c0, c1 };
@@ -16,8 +16,7 @@ static sk_sp<SkShader> setgrad(const SkRect& r, SkColor c0, SkColor c1) {
 
 static void test_alphagradients(SkCanvas* canvas) {
     SkRect r;
-    r.set(SkIntToScalar(10), SkIntToScalar(10),
-          SkIntToScalar(410), SkIntToScalar(30));
+    r.setLTRB(10, 10, 410, 30);
     SkPaint p, p2;
     p2.setStyle(SkPaint::kStroke_Style);
 
@@ -118,13 +117,7 @@ public:
     }
 
 protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "Gradients");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("Gradients"); }
 
     void onDrawContent(SkCanvas* canvas) override {
         SkPoint pts[2] = {
@@ -162,7 +155,7 @@ protected:
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

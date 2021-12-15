@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCodec.h"
-#include "SkData.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
 
 bool FuzzIncrementalImageDecode(sk_sp<SkData> bytes) {
     auto codec = SkCodec::MakeFromData(bytes);
@@ -45,8 +45,12 @@ bool FuzzIncrementalImageDecode(sk_sp<SkData> bytes) {
     }
 }
 
-#if defined(IS_FUZZING_WITH_LIBFUZZER)
+// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
+#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    if (size > 10240) {
+        return 0;
+    }
     auto bytes = SkData::MakeWithoutCopy(data, size);
     FuzzIncrementalImageDecode(bytes);
     return 0;

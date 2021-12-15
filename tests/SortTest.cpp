@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkRandom.h"
-#include "SkTSort.h"
-#include "Test.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkTSort.h"
+#include "tests/Test.h"
 
 #include <stdlib.h>
 
@@ -56,7 +56,7 @@ DEF_TEST(Sort, reporter) {
         check_sort(reporter, "Heap", workingArray, sortedArray, count);
 
         memcpy(workingArray, randomArray, sizeof(randomArray));
-        SkTQSort<int>(workingArray, workingArray + count - 1);
+        SkTQSort<int>(workingArray, workingArray + count);
         check_sort(reporter, "Quick", workingArray, sortedArray, count);
     }
 }

@@ -8,87 +8,37 @@
 #ifndef Skottie_DEFINED
 #define Skottie_DEFINED
 
-#include "SkFontMgr.h"
-#include "SkRefCnt.h"
-#include "SkSize.h"
-#include "SkString.h"
-#include "SkTypes.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "modules/skottie/include/ExternalLayer.h"
+#include "modules/skottie/include/SkottieProperty.h"
+#include "modules/skresources/include/SkResources.h"
 
 #include <memory>
+#include <vector>
 
 class SkCanvas;
-class SkData;
-class SkImage;
 struct SkRect;
 class SkStream;
 
 namespace skjson { class ObjectValue; }
 
-namespace sksg { class Scene;  }
+namespace sksg {
+
+class InvalidationController;
+class Scene;
+
+} // namespace sksg
 
 namespace skottie {
 
-class PropertyObserver;
+namespace internal { class Animator; }
 
-/**
- * Image asset proxy interface.
- */
-class SK_API ImageAsset : public SkRefCnt {
-public:
-    /**
-     * Returns true if the image asset is animated.
-     */
-    virtual bool isMultiFrame() = 0;
-
-    /**
-     * Returns the SkImage for a given frame.
-     *
-     * If the image asset is static, getImage() is only called once, at animation load time.
-     * Otherwise, this gets invoked every time the animation time is adjusted (on every seek).
-     *
-     * Embedders should cache and serve the same SkImage whenever possible, for efficiency.
-     *
-     * @param t   Frame time code, in seconds, relative to the image layer timeline origin
-     *            (in-point).
-     */
-    virtual sk_sp<SkImage> getFrame(float t) = 0;
-};
-
-/**
- * ResourceProvider allows Skottie embedders to control loading of external
- * Skottie resources -- e.g. images, fonts, nested animations.
- */
-class SK_API ResourceProvider : public SkRefCnt {
-public:
-    /**
-     * Load a generic resource (currently only nested animations) specified by |path| + |name|,
-     * and return as an SkData.
-     */
-    virtual sk_sp<SkData> load(const char resource_path[],
-                               const char resource_name[]) const;
-
-    /**
-     * Load an image asset specified by |path| + |name|, and returns the corresponding
-     * ImageAsset proxy.
-     */
-    virtual sk_sp<ImageAsset> loadImageAsset(const char resource_path[],
-                                             const char resource_name[]) const;
-
-    /**
-     * Load an external font and return as SkData.
-     *
-     * @param name  font name    ("fName" Lottie property)
-     * @param url   web font URL ("fPath" Lottie property)
-     *
-     * -- Note --
-     *
-     *   This mechanism assumes monolithic fonts (single data blob).  Some web font providers may
-     *   serve multiple font blobs, segmented for various unicode ranges, depending on user agent
-     *   capabilities (woff, woff2).  In that case, the embedder would need to advertise no user
-     *   agent capabilities when fetching the URL, in order to receive full font data.
-     */
-    virtual sk_sp<SkData> loadFont(const char name[], const char url[]) const;
-};
+using ImageAsset = skresources::ImageAsset;
+using ResourceProvider = skresources::ResourceProvider;
 
 /**
  * A Logger subclass can be used to receive Animation::Builder parsing errors and warnings.
@@ -103,6 +53,29 @@ public:
     virtual void log(Level, const char message[], const char* json = nullptr);
 };
 
+// Evaluates AE expressions.
+template <class T>
+class SK_API ExpressionEvaluator : public SkRefCnt {
+public:
+    // Evaluate the expression at the current time.
+    virtual T evaluate(float t) = 0;
+};
+
+/**
+ * Creates ExpressionEvaluators to evaluate AE expressions and return the results.
+ */
+class SK_API ExpressionManager : public SkRefCnt {
+public:
+    virtual sk_sp<ExpressionEvaluator<float>> createNumberExpressionEvaluator(
+        const char expression[]) = 0;
+
+    virtual sk_sp<ExpressionEvaluator<SkString>> createStringExpressionEvaluator(
+        const char expression[]) = 0;
+
+    virtual sk_sp<ExpressionEvaluator<std::vector<float>>> createArrayExpressionEvaluator(
+        const char expression[]) = 0;
+};
+
 /**
  * Interface for receiving AE composition markers at Animation build time.
  */
@@ -114,10 +87,17 @@ public:
 
 class SK_API Animation : public SkNVRefCnt<Animation> {
 public:
-
-    class Builder final {
+    class SK_API Builder final {
     public:
-        Builder();
+        enum Flags : uint32_t {
+            kDeferImageLoading   = 0x01, // Normally, all static image frames are resolved at
+                                         // load time via ImageAsset::getFrame(0).  With this flag,
+                                         // frames are only resolved when needed, at seek() time.
+            kPreferEmbeddedFonts = 0x02, // Attempt to use the embedded fonts (glyph paths,
+                                         // normally used as fallback) over native Skia typefaces.
+        };
+
+        explicit Builder(uint32_t flags = 0);
         ~Builder();
 
         struct Stats {
@@ -164,6 +144,18 @@ public:
         Builder& setMarkerObserver(sk_sp<MarkerObserver>);
 
         /**
+         * Register a precomp layer interceptor.
+         * This allows substituting precomp layers with custom/externally managed content.
+         */
+        Builder& setPrecompInterceptor(sk_sp<PrecompInterceptor>);
+
+        /**
+         * Registers an ExpressionManager to evaluate AE expressions.
+         * If unspecified, expressions in the animation JSON will be ignored.
+         */
+        Builder& setExpressionManager(sk_sp<ExpressionManager>);
+
+        /**
          * Animation factories.
          */
         sk_sp<Animation> make(SkStream*);
@@ -171,12 +163,16 @@ public:
         sk_sp<Animation> makeFromFile(const char path[]);
 
     private:
-        sk_sp<ResourceProvider> fResourceProvider;
-        sk_sp<SkFontMgr>        fFontMgr;
-        sk_sp<PropertyObserver> fPropertyObserver;
-        sk_sp<Logger>           fLogger;
-        sk_sp<MarkerObserver>   fMarkerObserver;
-        Stats                   fStats;
+        const uint32_t          fFlags;
+
+        sk_sp<ResourceProvider>   fResourceProvider;
+        sk_sp<SkFontMgr>          fFontMgr;
+        sk_sp<PropertyObserver>   fPropertyObserver;
+        sk_sp<Logger>             fLogger;
+        sk_sp<MarkerObserver  >   fMarkerObserver;
+        sk_sp<PrecompInterceptor> fPrecompInterceptor;
+        sk_sp<ExpressionManager>  fExpressionManager;
+        Stats                     fStats;
     };
 
     /**
@@ -194,12 +190,19 @@ public:
         // When rendering into a known transparent buffer, clients can pass
         // this flag to avoid some unnecessary compositing overhead for
         // animations using layer blend modes.
-        kSkipTopLevelIsolation = 0x01,
+        kSkipTopLevelIsolation   = 0x01,
+        // By default, content is clipped to the intrinsic animation
+        // bounds (as determined by its size).  If this flag is set,
+        // then the animation can draw outside of the bounds.
+        kDisableTopLevelClipping = 0x02,
     };
     using RenderFlags = uint32_t;
 
     /**
      * Draws the current animation frame.
+     *
+     * It is undefined behavior to call render() on a newly created Animation
+     * before specifying an initial frame via one of the seek() variants.
      *
      * @param canvas   destination canvas
      * @param dst      optional destination rect
@@ -209,40 +212,79 @@ public:
     void render(SkCanvas* canvas, const SkRect* dst, RenderFlags) const;
 
     /**
+     * [Deprecated: use one of the other versions.]
+     *
      * Updates the animation state for |t|.
      *
      * @param t   normalized [0..1] frame selector (0 -> first frame, 1 -> final frame)
+     * @param ic  optional invalidation controller (dirty region tracking)
      *
      */
-    void seek(SkScalar t);
+    void seek(SkScalar t, sksg::InvalidationController* ic = nullptr) {
+        this->seekFrameTime(t * this->duration(), ic);
+    }
+
+    /**
+     * Update the animation state to match |t|, specified as a frame index
+     * i.e. relative to duration() * fps().
+     *
+     * Fractional values are allowed and meaningful - e.g.
+     *
+     *   0.0 -> first frame
+     *   1.0 -> second frame
+     *   0.5 -> halfway between first and second frame
+     */
+    void seekFrame(double t, sksg::InvalidationController* ic = nullptr);
+
+    /** Update the animation state to match t, specifed in frame time
+     *  i.e. relative to duration().
+     */
+    void seekFrameTime(double t, sksg::InvalidationController* = nullptr);
 
     /**
      * Returns the animation duration in seconds.
      */
-    SkScalar duration() const { return fDuration; }
+    double duration() const { return fDuration; }
 
-    const SkString& version() const { return fVersion;   }
-    const SkSize&      size() const { return fSize;      }
+    /**
+     * Returns the animation frame rate (frames / second).
+     */
+    double fps() const { return fFPS; }
 
-    void setShowInval(bool show);
+    /**
+     * Animation in point, in frame index units.
+     */
+    double inPoint()  const { return fInPoint;  }
+
+    /**
+     * Animation out point, in frame index units.
+     */
+    double outPoint() const { return fOutPoint; }
+
+    const SkString& version() const { return fVersion; }
+    const SkSize&      size() const { return fSize;    }
 
 private:
     enum Flags : uint32_t {
         kRequiresTopLevelIsolation = 1 << 0, // Needs to draw into a layer due to layer blending.
     };
 
-    Animation(std::unique_ptr<sksg::Scene>, SkString ver, const SkSize& size,
-              SkScalar inPoint, SkScalar outPoint, SkScalar duration, uint32_t flags = 0);
+    Animation(std::unique_ptr<sksg::Scene>,
+              std::vector<sk_sp<internal::Animator>>&&,
+              SkString ver, const SkSize& size,
+              double inPoint, double outPoint, double duration, double fps, uint32_t flags);
 
-    std::unique_ptr<sksg::Scene> fScene;
-    const SkString               fVersion;
-    const SkSize                 fSize;
-    const SkScalar               fInPoint,
-                                 fOutPoint,
-                                 fDuration;
-    const uint32_t               fFlags;
+    const std::unique_ptr<sksg::Scene>           fScene;
+    const std::vector<sk_sp<internal::Animator>> fAnimators;
+    const SkString                               fVersion;
+    const SkSize                                 fSize;
+    const double                                 fInPoint,
+                                                 fOutPoint,
+                                                 fDuration,
+                                                 fFPS;
+    const uint32_t                               fFlags;
 
-    typedef SkNVRefCnt<Animation> INHERITED;
+    using INHERITED = SkNVRefCnt<Animation>;
 };
 
 } // namespace skottie

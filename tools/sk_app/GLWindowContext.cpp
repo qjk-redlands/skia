@@ -6,24 +6,24 @@
  * found in the LICENSE file.
  */
 
-#include "GLWindowContext.h"
-#include "GrBackendSurface.h"
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "SkCanvas.h"
-#include "SkImage_Base.h"
-#include "SkMathPriv.h"
-#include "SkSurface.h"
-#include "gl/GrGLDefines.h"
-#include "gl/GrGLUtil.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/core/SkMathPriv.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/gl/GrGLDefines.h"
+#include "src/gpu/gl/GrGLUtil.h"
+#include "src/image/SkImage_Base.h"
+#include "tools/sk_app/GLWindowContext.h"
 
 namespace sk_app {
 
 GLWindowContext::GLWindowContext(const DisplayParams& params)
-    : WindowContext(params)
-    , fBackendContext(nullptr)
-    , fSurface(nullptr) {
+        : WindowContext(params)
+        , fBackendContext(nullptr)
+        , fSurface(nullptr) {
     fDisplayParams.fMSAASampleCount = GrNextPow2(fDisplayParams.fMSAASampleCount);
 }
 
@@ -31,7 +31,8 @@ void GLWindowContext::initializeContext() {
     SkASSERT(!fContext);
 
     fBackendContext = this->onInitializeContext();
-    fContext = GrContext::MakeGL(fBackendContext, fDisplayParams.fGrContextOptions);
+
+    fContext = GrDirectContext::MakeGL(fBackendContext, fDisplayParams.fGrContextOptions);
     if (!fContext && fDisplayParams.fMSAASampleCount > 1) {
         fDisplayParams.fMSAASampleCount /= 2;
         this->initializeContext();
@@ -43,7 +44,7 @@ void GLWindowContext::destroyContext() {
     fSurface.reset(nullptr);
 
     if (fContext) {
-        // in case we have outstanding refs to this guy (lua?)
+        // in case we have outstanding refs to this (lua?)
         fContext->abandonContext();
         fContext.reset();
     }
@@ -84,14 +85,14 @@ void GLWindowContext::swapBuffers() {
     this->onSwapBuffers();
 }
 
-void GLWindowContext::resize(int  w, int h) {
+void GLWindowContext::resize(int w, int h) {
     this->destroyContext();
     this->initializeContext();
 }
 
 void GLWindowContext::setDisplayParams(const DisplayParams& params) {
-    this->destroyContext();
     fDisplayParams = params;
+    this->destroyContext();
     this->initializeContext();
 }
 

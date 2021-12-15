@@ -8,9 +8,8 @@
 #ifndef RecordingBench_DEFINED
 #define RecordingBench_DEFINED
 
-#include "Benchmark.h"
-#include "SkPicture.h"
-#include "SkLiteDL.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkPicture.h"
 
 class PictureCentricBench : public Benchmark {
 public:
@@ -25,21 +24,20 @@ protected:
     sk_sp<const SkPicture> fSrc;
     SkString fName;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 class RecordingBench : public PictureCentricBench {
 public:
-    RecordingBench(const char* name, const SkPicture*, bool useBBH, bool lite);
+    RecordingBench(const char* name, const SkPicture*, bool useBBH);
 
 protected:
     void onDraw(int loops, SkCanvas*) override;
 
 private:
-    std::unique_ptr<SkLiteDL> fDL;
     bool fUseBBH;
 
-    typedef PictureCentricBench INHERITED;
+    using INHERITED = PictureCentricBench;
 };
 
 class DeserializePictureBench : public Benchmark {
@@ -56,7 +54,7 @@ private:
     SkString      fName;
     sk_sp<SkData> fEncodedPicture;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 #endif//RecordingBench_DEFINED

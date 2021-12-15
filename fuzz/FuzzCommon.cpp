@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "Fuzz.h"
-#include "FuzzCommon.h"
+#include "fuzz/Fuzz.h"
+#include "fuzz/FuzzCommon.h"
 
 // We don't always want to test NaNs and infinities.
 static void fuzz_nice_float(Fuzz* fuzz, float* f) {
@@ -33,8 +33,8 @@ void FuzzNicePath(Fuzz* fuzz, SkPath* path, int maxOps) {
         return;
     }
     uint8_t fillType;
-    fuzz->nextRange(&fillType, 0, (uint8_t)SkPath::kInverseEvenOdd_FillType);
-    path->setFillType((SkPath::FillType)fillType);
+    fuzz->nextRange(&fillType, 0, (uint8_t)SkPathFillType::kInverseEvenOdd);
+    path->setFillType((SkPathFillType)fillType);
     uint8_t numOps;
     fuzz->nextRange(&numOps, 0, maxOps);
     for (uint8_t i = 0; i < numOps; ++i) {
@@ -52,7 +52,7 @@ void FuzzNicePath(Fuzz* fuzz, SkPath* path, int maxOps) {
         SkMatrix m;
         SkRRect rr;
         SkRect r;
-        SkPath::Direction dir;
+        SkPathDirection dir;
         unsigned int ui;
         SkScalar a, b, c, d, e, f;
         switch (op) {
@@ -112,32 +112,32 @@ void FuzzNicePath(Fuzz* fuzz, SkPath* path, int maxOps) {
             case 13:
                 fuzz_nice_rect(fuzz, &r);
                 fuzz->nextRange(&ui, 0, 1);
-                dir = static_cast<SkPath::Direction>(ui);
+                dir = static_cast<SkPathDirection>(ui);
                 path->addRect(r, dir);
                 break;
             case 14:
                 fuzz->nextRange(&ui, 0, 1);
-                dir = static_cast<SkPath::Direction>(ui);
+                dir = static_cast<SkPathDirection>(ui);
                 fuzz_nice_rect(fuzz, &r);
                 fuzz->next(&ui);
                 path->addRect(r, dir, ui);
                 break;
             case 15:
                 fuzz->nextRange(&ui, 0, 1);
-                dir = static_cast<SkPath::Direction>(ui);
+                dir = static_cast<SkPathDirection>(ui);
                 fuzz_nice_rect(fuzz, &r);
                 path->addOval(r, dir);
                 break;
             case 16:
                 fuzz->nextRange(&ui, 0, 1);
-                dir = static_cast<SkPath::Direction>(ui);
+                dir = static_cast<SkPathDirection>(ui);
                 fuzz_nice_rect(fuzz, &r);
                 fuzz->next(&ui);
                 path->addOval(r, dir, ui);
                 break;
             case 17:
                 fuzz->nextRange(&ui, 0, 1);
-                dir = static_cast<SkPath::Direction>(ui);
+                dir = static_cast<SkPathDirection>(ui);
                 fuzz_nice_float(fuzz, &a, &b, &c);
                 path->addCircle(a, b, c, dir);
                 break;
@@ -150,18 +150,18 @@ void FuzzNicePath(Fuzz* fuzz, SkPath* path, int maxOps) {
                 fuzz_nice_float(fuzz, &a, &b);
                 fuzz_nice_rect(fuzz, &r);
                 fuzz->nextRange(&ui, 0, 1);
-                dir = static_cast<SkPath::Direction>(ui);
+                dir = static_cast<SkPathDirection>(ui);
                 path->addRoundRect(r, a, b, dir);
                 break;
             case 20:
                 FuzzNiceRRect(fuzz, &rr);
                 fuzz->nextRange(&ui, 0, 1);
-                dir = static_cast<SkPath::Direction>(ui);
+                dir = static_cast<SkPathDirection>(ui);
                 path->addRRect(rr, dir);
                 break;
             case 21:
                 fuzz->nextRange(&ui, 0, 1);
-                dir = static_cast<SkPath::Direction>(ui);
+                dir = static_cast<SkPathDirection>(ui);
                 FuzzNiceRRect(fuzz, &rr);
                 path->addRRect(rr, dir, ui);
                 break;
@@ -211,9 +211,6 @@ void FuzzNicePath(Fuzz* fuzz, SkPath* path, int maxOps) {
             case 31:
                 fuzz_nice_float(fuzz, &a, &b);
                 path->setLastPt(a, b);
-                break;
-            case PATH_OPERATIONS:
-                path->shrinkToFit();
                 break;
 
             default:
@@ -297,14 +294,14 @@ void FuzzNiceMatrix(Fuzz* fuzz, SkMatrix* m) {
         case 1:  // translate
             fuzz->nextRange(&buffer[0], -4000.0f, 4000.0f);
             fuzz->nextRange(&buffer[1], -4000.0f, 4000.0f);
-            *m = SkMatrix::MakeTrans(buffer[0], buffer[1]);
+            *m = SkMatrix::Translate(buffer[0], buffer[1]);
             return;
         case 2:  // translate + scale
             fuzz->nextRange(&buffer[0], -400.0f, 400.0f);
             fuzz->nextRange(&buffer[1], -400.0f, 400.0f);
             fuzz->nextRange(&buffer[2], -4000.0f, 4000.0f);
             fuzz->nextRange(&buffer[3], -4000.0f, 4000.0f);
-            *m = SkMatrix::MakeScale(buffer[0], buffer[1]);
+            *m = SkMatrix::Scale(buffer[0], buffer[1]);
             m->postTranslate(buffer[2], buffer[3]);
             return;
         case 3:  // affine
@@ -327,13 +324,13 @@ void FuzzNiceRegion(Fuzz* fuzz, SkRegion* region, int maxN) {
     for (uint8_t i = 0; i < N; ++i) {
         SkIRect r;
         SkRegion::Op op;
-        // Avoid the sentinal value used by Region.
+        // Avoid the sentinel value used by Region.
         fuzz->nextRange(&r.fLeft,   -2147483646, 2147483646);
         fuzz->nextRange(&r.fTop,    -2147483646, 2147483646);
         fuzz->nextRange(&r.fRight,  -2147483646, 2147483646);
         fuzz->nextRange(&r.fBottom, -2147483646, 2147483646);
         r.sort();
-        fuzz->nextRange(&op, 0, SkRegion::kLastOp);
+        fuzz->nextEnum(&op, SkRegion::kLastOp);
         if (!region->op(r, op)) {
             return;
         }

@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=d597d9af8d17fd93e634dd12017058e2
 REG_FIDDLE(Canvas_drawImageNine_2, 256, 128, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -21,9 +21,10 @@ void draw(SkCanvas* canvas) {
         }
         left = right;
     }
-    sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
+    sk_sp<SkImage> image = bitmap.asImage();
     for (auto dest: { 20, 30, 40, 60, 90 } ) {
-        canvas->drawImageNine(image, center, SkRect::MakeWH(dest, 110 - dest), nullptr);
+        canvas->drawImageNine(image.get(), center, SkRect::MakeWH(dest, 110 - dest),
+                              SkFilterMode::kNearest, nullptr);
         canvas->translate(dest + 4, 0);
     }
 }

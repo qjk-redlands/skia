@@ -8,11 +8,11 @@
 #ifndef SkMaskGamma_DEFINED
 #define SkMaskGamma_DEFINED
 
-#include "SkColor.h"
-#include "SkColorData.h"
-#include "SkNoncopyable.h"
-#include "SkRefCnt.h"
-#include "SkTypes.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkNoncopyable.h"
 
 /**
  * SkColorSpaceLuminance is used to convert luminances to and from linear and
@@ -161,7 +161,7 @@ private:
     uint8_t fGammaTables[1 << MAX_LUM_BITS][256];
     bool fIsLinear;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 

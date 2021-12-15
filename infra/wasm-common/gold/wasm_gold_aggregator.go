@@ -25,8 +25,9 @@ import (
 	"strings"
 	"sync"
 
-	"go.skia.org/infra/golden/go/goldingestion"
+	"go.skia.org/infra/go/util"
 	"go.skia.org/infra/golden/go/jsonio"
+	"go.skia.org/infra/golden/go/types"
 )
 
 // This allows us to use upload_dm_results.py out of the box
@@ -36,17 +37,15 @@ var (
 	outDir = flag.String("out_dir", "/OUT/", "location to dump the Gold JSON and pngs")
 	port   = flag.String("port", "8081", "Port to listen on.")
 
-	botId            = flag.String("bot_id", "", "swarming bot id (deprecated/unused)")
 	browser          = flag.String("browser", "Chrome", "Browser Key")
-	buildBucketID    = flag.Int64("buildbucket_build_id", 0, "Buildbucket build id key")
+	buildBucketID    = flag.String("buildbucket_build_id", "", "Buildbucket build id key")
 	builder          = flag.String("builder", "", "Builder, like 'Test-Debian9-EMCC-GCE-CPU-AVX2-wasm-Debug-All-PathKit'")
 	compiledLanguage = flag.String("compiled_language", "wasm", "wasm or asm.js")
 	config           = flag.String("config", "Release", "Configuration (e.g. Debug/Release) key")
 	gitHash          = flag.String("git_hash", "-", "The git commit hash of the version being tested")
 	hostOS           = flag.String("host_os", "Debian9", "OS Key")
-	issue            = flag.Int64("issue", 0, "issue (if tryjob)")
-	patchset         = flag.Int64("patchset", 0, "patchset (if tryjob)")
-	taskId           = flag.String("task_id", "", "swarming task id")
+	issue            = flag.String("issue", "", "ChangelistID (if tryjob)")
+	patchset         = flag.Int("patchset", 0, "patchset (if tryjob)")
 	sourceType       = flag.String("source_type", "pathkit", "Gold Source type, like pathkit,canvaskit")
 )
 
@@ -64,7 +63,7 @@ type reportBody struct {
 var defaultKeys map[string]string
 
 // contains all the results reported in through report_gold_data
-var results []*jsonio.Result
+var results []jsonio.Result
 var resultsMutex sync.Mutex
 
 func main() {
@@ -86,7 +85,7 @@ func main() {
 		"source_type":       *sourceType,
 	}
 
-	results = []*jsonio.Result{}
+	results = []jsonio.Result{}
 
 	http.HandleFunc("/report_gold_data", reporter)
 	http.HandleFunc("/dump_json", dumpJSON)
@@ -104,7 +103,7 @@ func reporter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Only POST accepted", 400)
 		return
 	}
-	defer r.Body.Close()
+	defer util.Close(r.Body)
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -132,9 +131,9 @@ func reporter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resultsMutex.Lock()
- 	defer resultsMutex.Unlock()
-	results = append(results, &jsonio.Result{
-		Digest: hash,
+	defer resultsMutex.Unlock()
+	results = append(results, jsonio.Result{
+		Digest: types.Digest(hash),
 		Key: map[string]string{
 			"name":   testOutput.TestName,
 			"config": testOutput.OutputType,
@@ -168,24 +167,25 @@ func dumpJSON(w http.ResponseWriter, r *http.Request) {
 
 	p := path.Join(*outDir, JSON_FILENAME)
 	outputFile, err := createOutputFile(p)
-	defer outputFile.Close()
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, "Could not open json file on disk", 500)
 		return
 	}
+	defer util.Close(outputFile)
 
-	dmresults := goldingestion.DMResults{
-		GoldResults: &jsonio.GoldResults{
-			BuildBucketID: *buildBucketID,
-			Builder:       *builder,
-			GitHash:       *gitHash,
-			Issue:         *issue,
-			Key:           defaultKeys,
-			Patchset:      *patchset,
-			Results:       results,
-			TaskID:        *taskId,
-		},
+	dmresults := jsonio.GoldResults{
+		GitHash: *gitHash,
+		Key:     defaultKeys,
+		Results: results,
+	}
+
+	if *patchset > 0 {
+		dmresults.ChangelistID = *issue
+		dmresults.PatchsetOrder = *patchset
+		dmresults.CodeReviewSystem = "gerrit"
+		dmresults.ContinuousIntegrationSystem = "buildbucket"
+		dmresults.TryJobID = *buildBucketID
 	}
 
 	enc := json.NewEncoder(outputFile)
@@ -235,12 +235,12 @@ func writeBase64EncodedPNG(data string) (string, error) {
 
 	p := path.Join(*outDir, hash+".png")
 	outputFile, err := createOutputFile(p)
-	defer outputFile.Close()
 	if err != nil {
 		return "", fmt.Errorf("Could not create png file %s: %s", p, err)
 	}
 	if _, err = outputFile.Write(pngBytes); err != nil {
+		util.Close(outputFile)
 		return "", fmt.Errorf("Could not write to file %s: %s", p, err)
 	}
-	return hash, nil
+	return hash, outputFile.Close()
 }

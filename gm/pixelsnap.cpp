@@ -5,10 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "ToolUtils.h"
-#include "gm.h"
-
-#include "SkShader.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "tools/ToolUtils.h"
 
 // This class of GMs test how edges/verts snap near rounding boundaries in device space without
 // anti-aliaing.
@@ -18,15 +28,15 @@ public:
 
 protected:
     // kTrans should be even or checkboards wont agree in different test cases.
-    static constexpr int kTrans = 14;
-    static constexpr int kLabelPad = 4;
+    inline static constexpr int kTrans = 14;
+    inline static constexpr int kLabelPad = 4;
     // The inverse of this value should be a perfect SkScalar.
-    static constexpr int kSubPixelSteps = 8;
-    static constexpr int kLabelTextSize = 9;
+    inline static constexpr int kSubPixelSteps = 8;
+    inline static constexpr int kLabelTextSize = 9;
 
     static_assert(kSubPixelSteps < 99, "label_offset_too_small");
-    static constexpr int kLabelOffsetX = 2 * kLabelTextSize + kLabelPad;
-    static constexpr int kLabelOffsetY = kLabelTextSize + kLabelPad;
+    inline static constexpr int kLabelOffsetX = 2 * kLabelTextSize + kLabelPad;
+    inline static constexpr int kLabelOffsetY = kLabelTextSize + kLabelPad;
 
     SkISize onISize() override {
         return SkISize::Make((kSubPixelSteps + 1) * kTrans + kLabelOffsetX + kLabelPad,
@@ -97,7 +107,7 @@ protected:
     virtual void drawElement(SkCanvas*) = 0;
 
 private:
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 
 class PointSnapGM : public PixelSnapGM {
@@ -111,7 +121,7 @@ protected:
     }
 
 private:
-    typedef PixelSnapGM INHERITED;
+    using INHERITED = PixelSnapGM;
 };
 
 class LineSnapGM : public PixelSnapGM {
@@ -126,7 +136,7 @@ protected:
     }
 
 private:
-    typedef PixelSnapGM INHERITED;
+    using INHERITED = PixelSnapGM;
 };
 
 class RectSnapGM : public PixelSnapGM {
@@ -139,7 +149,7 @@ protected:
     }
 
 private:
-    typedef PixelSnapGM INHERITED;
+    using INHERITED = PixelSnapGM;
 };
 
 class ComboSnapGM : public PixelSnapGM {
@@ -176,7 +186,7 @@ protected:
     }
 
 private:
-    typedef PixelSnapGM INHERITED;
+    using INHERITED = PixelSnapGM;
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -5,16 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlurDrawLooper.h"
-#include "SkBlurMaskFilter.h"
-#include "SkColorFilter.h"
-#include "SkGradientShader.h"
-#include "SkMatrix.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkTArray.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/private/SkTArray.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 namespace skiagm {
 
@@ -139,7 +146,7 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         SkRandom rand(1);
         canvas->translate(20 * SK_Scalar1, 20 * SK_Scalar1);
-        SkRect oval = SkRect::MakeLTRB(-20, -30, 20, 30);
+        const SkRect kOval = SkRect::MakeLTRB(-20, -30, 20, 30);
 
         const SkScalar kXStart = 60.0f;
         const SkScalar kYStart = 80.0f;
@@ -168,8 +175,8 @@ protected:
                 SkColor color = genColor(&rand);
                 fPaints[i].setColor(color);
 
-                canvas->drawRect(oval, rectPaint);
-                canvas->drawOval(oval, fPaints[i]);
+                canvas->drawRect(kOval, rectPaint);
+                canvas->drawOval(kOval, fPaints[i]);
 
                 canvas->restore();
 
@@ -261,8 +268,8 @@ protected:
             fPaints[i].setColor(color);
             fPaints[i].setShader(shader);
 
-            canvas->drawRect(oval, rectPaint);
-            canvas->drawOval(oval, fPaints[i]);
+            canvas->drawRect(kOval, rectPaint);
+            canvas->drawOval(kOval, fPaints[i]);
 
             fPaints[i].setShader(nullptr);
 
@@ -294,11 +301,11 @@ private:
     SkTArray<SkPaint> fPaints;
     SkTArray<SkMatrix> fMatrices;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new OvalGM; )
 
-}
+}  // namespace skiagm

@@ -5,20 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkMatrix.h"
-#include "SkMatrixUtils.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkScalar.h"
-#include "SkShader.h"
-#include "SkSize.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkMatrixUtils.h"
+#include "tests/Test.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -53,12 +55,14 @@ static void test_treatAsSprite(skiatest::Reporter* reporter) {
     SkPaint aaPaint;
     aaPaint.setAntiAlias(true);
 
+    const SkSamplingOptions sampling;
+
     // assert: translate-only no-aa can always be treated as sprite
     for (int i = 0; i < 1000; ++i) {
         rand_matrix(&mat, rand, SkMatrix::kTranslate_Mask);
         for (int j = 0; j < 1000; ++j) {
             rand_size(&size, rand);
-            REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, noaaPaint));
+            REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, sampling, noaaPaint));
         }
     }
 
@@ -67,8 +71,8 @@ static void test_treatAsSprite(skiatest::Reporter* reporter) {
         rand_matrix(&mat, rand, SkMatrix::kAffine_Mask | SkMatrix::kPerspective_Mask);
         for (int j = 0; j < 1000; ++j) {
             rand_size(&size, rand);
-            REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, noaaPaint));
-            REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, aaPaint));
+            REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, sampling, noaaPaint));
+            REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, sampling, aaPaint));
         }
     }
 
@@ -76,33 +80,33 @@ static void test_treatAsSprite(skiatest::Reporter* reporter) {
 
     const SkScalar tooMuchSubpixel = 100.1f;
     mat.setTranslate(tooMuchSubpixel, 0);
-    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, aaPaint));
+    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, sampling, aaPaint));
     mat.setTranslate(0, tooMuchSubpixel);
-    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, aaPaint));
+    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, sampling, aaPaint));
 
     const SkScalar tinySubPixel = 100.02f;
     mat.setTranslate(tinySubPixel, 0);
-    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, aaPaint));
+    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, sampling, aaPaint));
     mat.setTranslate(0, tinySubPixel);
-    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, aaPaint));
+    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, sampling, aaPaint));
 
     const SkScalar twoThirds = SK_Scalar1 * 2 / 3;
     const SkScalar bigScale = (size.width() + twoThirds) / size.width();
     mat.setScale(bigScale, bigScale);
-    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, noaaPaint));
-    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, aaPaint));
+    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, sampling, noaaPaint));
+    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, sampling, aaPaint));
 
     const SkScalar oneThird = SK_Scalar1 / 3;
     const SkScalar smallScale = (size.width() + oneThird) / size.width();
     mat.setScale(smallScale, smallScale);
-    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, noaaPaint));
-    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, aaPaint));
+    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, sampling, noaaPaint));
+    REPORTER_ASSERT(reporter, !SkTreatAsSprite(mat, size, sampling, aaPaint));
 
     const SkScalar oneFortyth = SK_Scalar1 / 40;
     const SkScalar tinyScale = (size.width() + oneFortyth) / size.width();
     mat.setScale(tinyScale, tinyScale);
-    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, noaaPaint));
-    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, aaPaint));
+    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, sampling, noaaPaint));
+    REPORTER_ASSERT(reporter, SkTreatAsSprite(mat, size, sampling, aaPaint));
 }
 
 static void test_wacky_bitmapshader(skiatest::Reporter* reporter,
@@ -139,7 +143,8 @@ static void test_wacky_bitmapshader(skiatest::Reporter* reporter,
                   SkIntToScalar(239),
                   0, 0, SK_Scalar1);
     SkPaint paint;
-    paint.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &matrix));
+    paint.setShader(bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
+                                  SkSamplingOptions(), matrix));
 
     SkRect r = SkRect::MakeXYWH(681, 239, 695, 253);
     c.drawRect(r, paint);
@@ -243,10 +248,11 @@ DEF_TEST(DrawBitmapRect, reporter) {
 
     SkCanvas canvas(dst);
 
-    SkIRect srcR = { gWidth, 0, gWidth + 16, 16 };
-    SkRect  dstR = { 0, 0, SkIntToScalar(16), SkIntToScalar(16) };
+    SkRect srcR = { gWidth, 0, gWidth + 16, 16 };
+    SkRect dstR = { 0, 0, 16, 16 };
 
-    canvas.drawBitmapRect(src, srcR, dstR, nullptr);
+    canvas.drawImageRect(src.asImage(), srcR, dstR, SkSamplingOptions(), nullptr,
+                         SkCanvas::kStrict_SrcRectConstraint);
 
     // ensure that we draw nothing if srcR does not intersect the bitmap
     REPORTER_ASSERT(reporter, check_for_all_zeros(dst));

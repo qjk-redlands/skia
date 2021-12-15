@@ -5,17 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
-#ifdef SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
-#include "CanvasStateHelpers.h"
-#include "SkCanvas.h"
-#include "SkCanvasStateUtils.h"
-#include "SkClipOp.h"
-#include "SkColor.h"
-#include "SkPaint.h"
-#include "SkRect.h"
-#include "SkRegion.h"
-#include "SkScalar.h"
+#include "include/core/SkTypes.h"
+
+#if !defined(SK_TEST_CANVAS_STATE_CROSS_LIBRARY)
+
+#include "tests/CanvasStateHelpers.h"
+
+#include "include/core/SkCanvas.h"
+#include "include/core/SkClipOp.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkScalar.h"
+#include "include/utils/SkCanvasStateUtils.h"
 
 #include <memory>
 
@@ -64,7 +67,7 @@ extern "C" bool complex_clips_draw_from_canvas_state(SkCanvasState* state,
 
     SkRegion localRegion;
     for (int32_t i = 0; i < regionRects; ++i) {
-        localRegion.op(rectCoords[0], rectCoords[1], rectCoords[2], rectCoords[3],
+        localRegion.op({rectCoords[0], rectCoords[1], rectCoords[2], rectCoords[3]},
                        SkRegion::kUnion_Op);
         rectCoords += 4;
     }
@@ -72,4 +75,5 @@ extern "C" bool complex_clips_draw_from_canvas_state(SkCanvasState* state,
     complex_clips_draw(canvas.get(), left, top, right, bottom, clipOp, localRegion);
     return true;
 }
-#endif // SK_SUPPORT_LEGACY_CLIPTOLAYERFLAG
+
+#endif // SK_TEST_CANVAS_STATE_CROSS_LIBRARY

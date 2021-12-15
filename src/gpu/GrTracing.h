@@ -8,9 +8,9 @@
 #ifndef GrTracing_DEFINED
 #define GrTracing_DEFINED
 
-#include "SkTraceEvent.h"
+#include "src/core/SkTraceEvent.h"
 
-class GrContext;
+#include "src/gpu/GrAuditTrail.h"
 
 /**
  * Context level GrTracing macros, classname and op are const char*, context is GrContext

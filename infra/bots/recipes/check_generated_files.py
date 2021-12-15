@@ -5,6 +5,8 @@
 
 # Recipe for the Skia PerCommit Housekeeper.
 
+PYTHON_VERSION_COMPATIBILITY = "PY3"
+
 DEPS = [
   'build',
   'infra',
@@ -16,7 +18,6 @@ DEPS = [
   'recipe_engine/raw_io',
   'recipe_engine/step',
   'checkout',
-  'flavor',
   'run',
   'vars',
 ]
@@ -28,7 +29,6 @@ def RunSteps(api):
   checkout_root = api.checkout.default_checkout_root
   api.checkout.bot_update(checkout_root=checkout_root)
   api.file.ensure_directory('makedirs tmp_dir', api.vars.tmp_dir)
-  api.flavor.setup()
 
   cwd = api.path['checkout']
 
@@ -39,28 +39,13 @@ def RunSteps(api):
         api.step,
         'git diff #1',
         cmd=['git', 'diff', '--no-ext-diff'],
-        stdout=api.m.raw_io.output()).stdout
+        stdout=api.m.raw_io.output()).stdout.decode('utf-8')
 
     with api.context(env=api.infra.go_env):
       api.step('generate gl interfaces',
                cmd=['make', '-C', 'tools/gpu/gl/interface', 'generate'])
 
-    # Touch all .fp files so that the generated files are rebuilt.
-    api.run(
-        api.python.inline,
-        'touch fp files',
-        program="""import os
-import subprocess
-
-for r, d, files in os.walk('%s'):
-  for f in files:
-    if f.endswith('.fp'):
-      path = os.path.join(r, f)
-      print 'touch %%s' %% path
-      subprocess.check_call(['touch', path])
-""" % cwd)
-
-    # Regenerate the SKSL files.
+    # Run GN, regenerate the SKSL files, and make sure rewritten #includes work.
     api.build(checkout_root=checkout_root,
               out_dir=api.vars.build_dir.join('out', 'Release'))
 
@@ -70,7 +55,7 @@ for r, d, files in os.walk('%s'):
         api.step,
         'git diff #2',
         cmd=['git', 'diff', '--no-ext-diff'],
-        stdout=api.m.raw_io.output()).stdout
+        stdout=api.m.raw_io.output()).stdout.decode('utf-8')
 
     api.run(
         api.python.inline,
@@ -81,7 +66,7 @@ diff1 = '''%s'''
 diff2 = '''%s'''
 
 if diff1 != diff2:
-  print 'Generated files have been edited!'
+  print('Generated files have been edited!')
   exit(1)
 """ % (diff1, diff2))
 

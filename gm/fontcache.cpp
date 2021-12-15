@@ -8,26 +8,32 @@
 // GM to stress the GPU font cache
 // It's not necessary to run this with CPU configs
 
-#include "gm.h"
-
-#include "GrContext.h"
-#include "GrContextOptions.h"
-#include "GrContextPriv.h"
-#include "SkCanvas.h"
-#include "SkGraphics.h"
-#include "SkImage.h"
-#include "SkTypeface.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/gpu/GrContextOptions.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/GrTypesPriv.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "tools/ToolUtils.h"
 
 static SkScalar draw_string(SkCanvas* canvas, const SkString& text, SkScalar x,
                            SkScalar y, const SkFont& font) {
     SkPaint paint;
     canvas->drawString(text, x, y, font, paint);
-    return x + font.measureText(text.c_str(), text.size(), kUTF8_SkTextEncoding);
+    return x + font.measureText(text.c_str(), text.size(), SkTextEncoding::kUTF8);
 }
 
-class FontCacheGM : public skiagm::GpuGM {
+class FontCacheGM : public skiagm::GM {
 public:
     FontCacheGM(GrContextOptions::Enable allowMultipleTextures)
         : fAllowMultipleTextures(allowMultipleTextures) {
@@ -59,13 +65,13 @@ protected:
         fTypefaces[5] = ToolUtils::create_portable_typeface("sans-serif", SkFontStyle::Bold());
     }
 
-    void onDraw(GrContext*, GrRenderTargetContext*, SkCanvas* canvas) override {
+    void onDraw(SkCanvas* canvas) override {
         this->drawText(canvas);
         //  Debugging tool for GPU.
         static const bool kShowAtlas = false;
         if (kShowAtlas) {
-            if (auto ctx = canvas->getGrContext()) {
-                auto img = ctx->priv().testingOnly_getFontAtlasImage(kA8_GrMaskFormat);
+            if (auto dContext = GrAsDirectContext(canvas->recordingContext())) {
+                auto img = dContext->priv().testingOnly_getFontAtlasImage(kA8_GrMaskFormat);
                 canvas->drawImage(img, 0, 0);
             }
         }
@@ -118,14 +124,12 @@ private:
         } while (true);
     }
 
-    static constexpr SkScalar kSize = 1280;
+    inline static constexpr SkScalar kSize = 1280;
 
     GrContextOptions::Enable fAllowMultipleTextures;
     sk_sp<SkTypeface> fTypefaces[6];
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
-
-constexpr SkScalar FontCacheGM::kSize;
 
 //////////////////////////////////////////////////////////////////////////////
 

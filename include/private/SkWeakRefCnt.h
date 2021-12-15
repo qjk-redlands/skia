@@ -8,7 +8,7 @@
 #ifndef SkWeakRefCnt_DEFINED
 #define SkWeakRefCnt_DEFINED
 
-#include "SkRefCnt.h"
+#include "include/core/SkRefCnt.h"
 #include <atomic>
 
 /** \class SkWeakRefCnt
@@ -164,7 +164,7 @@ private:
     /* Invariant: fWeakCnt = #weak + (fRefCnt > 0 ? 1 : 0) */
     mutable std::atomic<int32_t> fWeakCnt;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 #endif

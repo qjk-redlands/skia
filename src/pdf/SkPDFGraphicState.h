@@ -9,9 +9,9 @@
 #ifndef SkPDFGraphicState_DEFINED
 #define SkPDFGraphicState_DEFINED
 
-#include "SkMacros.h"
-#include "SkOpts.h"
-#include "SkPDFTypes.h"
+#include "include/private/SkMacros.h"
+#include "src/core/SkOpts.h"
+#include "src/pdf/SkPDFTypes.h"
 
 class SkPaint;
 
@@ -42,7 +42,7 @@ namespace SkPDFGraphicState {
                                                 bool invert,
                                                 SkPDFSMaskMode sMaskMode,
                                                 SkPDFDocument* doc);
-}
+}  // namespace SkPDFGraphicState
 
 SK_BEGIN_REQUIRE_DENSE
 struct SkPDFStrokeGraphicState {

@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkString.h"
 
 struct BezierRec {
     SkCanvas*   fCanvas;
@@ -75,11 +75,11 @@ public:
     }
 
 protected:
-    virtual const char* onGetName() {
+    const char* onGetName() override {
         return fName.c_str();
     }
 
-    virtual void onDraw(int loops, SkCanvas* canvas) {
+    void onDraw(int loops, SkCanvas* canvas) override {
         fRec.fCanvas = canvas;
         this->setupPaint(&fRec.fPaint);
         fRec.fPaint.setStyle(SkPaint::kStroke_Style);
@@ -90,7 +90,7 @@ protected:
     }
 
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 DEF_BENCH( return new BezierBench(SkPaint::kButt_Cap, SkPaint::kRound_Join, 2, draw_quad); )

@@ -5,13 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkFontMetrics.h"
-#include "SkMakeUnique.h"
-#include "SkShaper.h"
-#include "SkStream.h"
-#include "SkTo.h"
-#include "SkTypeface.h"
-#include "SkUTF.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypeface.h"
+#include "include/private/SkTo.h"
+#include "modules/skshaper/include/SkShaper.h"
+#include "src/utils/SkUTF.h"
 
 class SkShaperPrimitive : public SkShaper {
 public:
@@ -30,10 +29,19 @@ private:
                LanguageRunIterator&,
                SkScalar width,
                RunHandler*) const override;
+
+    void shape(const char* utf8, size_t utf8Bytes,
+               FontRunIterator&,
+               BiDiRunIterator&,
+               ScriptRunIterator&,
+               LanguageRunIterator&,
+               const Feature*, size_t featureSize,
+               SkScalar width,
+               RunHandler*) const override;
 };
 
 std::unique_ptr<SkShaper> SkShaper::MakePrimitive() {
-    return skstd::make_unique<SkShaperPrimitive>();
+    return std::make_unique<SkShaperPrimitive>();
 }
 
 static inline bool is_breaking_whitespace(SkUnichar c) {
@@ -118,11 +126,36 @@ void SkShaperPrimitive::shape(const char* utf8, size_t utf8Bytes,
                               FontRunIterator& font,
                               BiDiRunIterator& bidi,
                               ScriptRunIterator&,
-                              LanguageRunIterator& ,
+                              LanguageRunIterator&,
                               SkScalar width,
                               RunHandler* handler) const
 {
+    SkFont skfont;
+    if (!font.atEnd()) {
+        font.consume();
+        skfont = font.currentFont();
+    } else {
+        skfont.setTypeface(sk_ref_sp(skfont.getTypefaceOrDefault()));
+    }
+    SkASSERT(skfont.getTypeface());
+    bool skbidi = 0;
+    if (!bidi.atEnd()) {
+        bidi.consume();
+        skbidi = (bidi.currentLevel() % 2) == 0;
+    }
+    return this->shape(utf8, utf8Bytes, skfont, skbidi, width, handler);
+}
+
+void SkShaperPrimitive::shape(const char* utf8, size_t utf8Bytes,
+                              FontRunIterator& font,
+                              BiDiRunIterator& bidi,
+                              ScriptRunIterator&,
+                              LanguageRunIterator&,
+                              const Feature*, size_t,
+                              SkScalar width,
+                              RunHandler* handler) const {
     font.consume();
+    SkASSERT(font.currentFont().getTypeface());
     bidi.consume();
     return this->shape(utf8, utf8Bytes, font.currentFont(), (bidi.currentLevel() % 2) == 0,
                        width, handler);

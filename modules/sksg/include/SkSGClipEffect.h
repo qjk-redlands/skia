@@ -8,7 +8,7 @@
 #ifndef SkSGClipEffect_DEFINED
 #define SkSGClipEffect_DEFINED
 
-#include "SkSGEffectNode.h"
+#include "modules/sksg/include/SkSGEffectNode.h"
 
 namespace sksg {
 
@@ -43,7 +43,7 @@ private:
 
     bool                      fNoop = false;
 
-    typedef EffectNode INHERITED;
+    using INHERITED = EffectNode;
 };
 
 } // namespace sksg

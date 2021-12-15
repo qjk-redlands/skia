@@ -5,39 +5,39 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
+#include "tests/Test.h"
 
 #ifdef SK_SUPPORT_PDF
 
-#include "Resources.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkClusterator.h"
-#include "SkData.h"
-#include "SkDeflate.h"
-#include "SkGlyphRun.h"
-#include "SkImageEncoder.h"
-#include "SkImageFilterPriv.h"
-#include "SkMakeUnique.h"
-#include "SkMatrix.h"
-#include "SkPDFDevice.h"
-#include "SkPDFDocumentPriv.h"
-#include "SkPDFFont.h"
-#include "SkPDFTypes.h"
-#include "SkPDFUnion.h"
-#include "SkPDFUtils.h"
-#include "SkReadBuffer.h"
-#include "SkScalar.h"
-#include "SkSpecialImage.h"
-#include "SkStream.h"
-#include "SkTo.h"
-#include "SkTypes.h"
-#include "ToolUtils.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageEncoder.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkImageFilters.h"
+#include "include/effects/SkPerlinNoiseShader.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkGlyphRun.h"
+#include "src/core/SkImageFilter_Base.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/pdf/SkClusterator.h"
+#include "src/pdf/SkDeflate.h"
+#include "src/pdf/SkPDFDevice.h"
+#include "src/pdf/SkPDFDocumentPriv.h"
+#include "src/pdf/SkPDFFont.h"
+#include "src/pdf/SkPDFTypes.h"
+#include "src/pdf/SkPDFUnion.h"
+#include "src/pdf/SkPDFUtils.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
 #include <cstdlib>
 #include <cmath>
-
-#define DUMMY_TEXT "DCT compessed stream."
+#include <memory>
 
 template <typename T>
 static SkString emit_to_string(T& obj) {
@@ -58,7 +58,7 @@ static void assert_eql(skiatest::Reporter* reporter,
                        size_t len) {
     if (!eq(skString, str, len)) {
         REPORT_FAILURE(reporter, "", SkStringPrintf(
-                "'%*s' != '%s'", len, str, skString.c_str()));
+                "'%*s' != '%s'", (int)len, str, skString.c_str()));
     }
 }
 
@@ -87,7 +87,7 @@ static void test_issue1083() {
     SkCanvas* canvas = doc->beginPage(100.0f, 100.0f);
 
     uint16_t glyphID = 65000;
-    canvas->drawSimpleText(&glyphID, 2, kGlyphID_SkTextEncoding, 0, 0, SkFont(), SkPaint());
+    canvas->drawSimpleText(&glyphID, 2, SkTextEncoding::kGlyphID, 0, 0, SkFont(), SkPaint());
 
     doc->close();
 }
@@ -143,6 +143,13 @@ static void TestPDFUnion(skiatest::Reporter* reporter) {
     SkString highBitString("\xDE\xAD" "be\xEF");
     SkPDFUnion highBitName = SkPDFUnion::Name(highBitString);
     assert_emit_eq(reporter, highBitName, "/#DE#ADbe#EF");
+
+    // https://bugs.skia.org/9508
+    // https://crbug.com/494913
+    // Trailing '\0' characters must be removed.
+    const char nameInput4[] = "Test name with nil\0";
+    SkPDFUnion name4 = SkPDFUnion::Name(SkString(nameInput4, strlen(nameInput4) + 1));
+    assert_emit_eq(reporter, name4, "/Test#20name#20with#20nil");
 }
 
 static void TestPDFArray(skiatest::Reporter* reporter) {
@@ -191,7 +198,7 @@ static void TestPDFDict(skiatest::Reporter* reporter) {
     dict->insertInt("n1", SkToSizeT(42));
     assert_emit_eq(reporter, *dict, "<</n1 42>>");
 
-    dict.reset(new SkPDFDict);
+    dict = std::make_unique<SkPDFDict>();
     assert_emit_eq(reporter, *dict, "<<>>");
 
     dict->insertInt("n1", 42);
@@ -205,7 +212,7 @@ static void TestPDFDict(skiatest::Reporter* reporter) {
     dict->insertObject(n3, std::move(innerArray));
     assert_emit_eq(reporter, *dict, "<</n1 42\n/n2 .5\n/n3 [-100]>>");
 
-    dict.reset(new SkPDFDict);
+    dict = std::make_unique<SkPDFDict>();
     assert_emit_eq(reporter, *dict, "<<>>");
 
     dict->insertInt("n1", 24);
@@ -232,7 +239,7 @@ static void TestPDFDict(skiatest::Reporter* reporter) {
     assert_emit_eq(reporter, *dict, "<</n1 24\n/n2 99\n/n3 .5\n/n4 /AName\n"
                    "/n5 /AnotherName\n/n6 (A String)\n/n7 (Another String)>>");
 
-    dict.reset(new SkPDFDict("DType"));
+    dict = std::make_unique<SkPDFDict>("DType");
     assert_emit_eq(reporter, *dict, "<</Type /DType>>");
 }
 
@@ -245,38 +252,37 @@ DEF_TEST(SkPDF_Primitives, reporter) {
 
 namespace {
 
-class DummyImageFilter : public SkImageFilter {
+class TestImageFilter : public SkImageFilter_Base {
 public:
-    static sk_sp<DummyImageFilter> Make(bool visited = false) {
-        return sk_sp<DummyImageFilter>(new DummyImageFilter(visited));
+    static sk_sp<TestImageFilter> Make(bool visited = false) {
+        return sk_sp<TestImageFilter>(new TestImageFilter(visited));
     }
 
     bool visited() const { return fVisited; }
 
 protected:
-    sk_sp<SkSpecialImage> onFilterImage(SkSpecialImage* source, const Context&,
-                                        SkIPoint* offset) const override {
+    sk_sp<SkSpecialImage> onFilterImage(const Context& ctx, SkIPoint* offset) const override {
         fVisited = true;
         offset->fX = offset->fY = 0;
-        return sk_ref_sp<SkSpecialImage>(source);
+        return sk_ref_sp<SkSpecialImage>(ctx.sourceImage());
     }
 
 private:
-    SK_FLATTENABLE_HOOKS(DummyImageFilter)
-    DummyImageFilter(bool visited) : INHERITED(nullptr, 0, nullptr), fVisited(visited) {}
+    SK_FLATTENABLE_HOOKS(TestImageFilter)
+    TestImageFilter(bool visited) : INHERITED(nullptr, 0, nullptr), fVisited(visited) {}
 
     mutable bool fVisited;
 
-    typedef SkImageFilter INHERITED;
+    using INHERITED = SkImageFilter_Base;
 };
 
-sk_sp<SkFlattenable> DummyImageFilter::CreateProc(SkReadBuffer& buffer) {
+sk_sp<SkFlattenable> TestImageFilter::CreateProc(SkReadBuffer& buffer) {
     SK_IMAGEFILTER_UNFLATTEN_COMMON(common, 0);
     bool visited = buffer.readBool();
-    return DummyImageFilter::Make(visited);
+    return TestImageFilter::Make(visited);
 }
 
-};
+}  // namespace
 
 // Check that PDF rendering of image filters successfully falls back to
 // CPU rasterization.
@@ -286,7 +292,7 @@ DEF_TEST(SkPDF_ImageFilter, reporter) {
     auto doc = SkPDF::MakeDocument(&stream);
     SkCanvas* canvas = doc->beginPage(100.0f, 100.0f);
 
-    sk_sp<DummyImageFilter> filter(DummyImageFilter::Make());
+    sk_sp<TestImageFilter> filter(TestImageFilter::Make());
 
     // Filter just created; should be unvisited.
     REPORTER_ASSERT(reporter, !filter->visited());
@@ -385,7 +391,8 @@ static SkGlyphRun make_run(size_t len, const SkGlyphID* glyphs, SkPoint* pos,
                       SkSpan<const SkPoint>{pos, len},
                       SkSpan<const SkGlyphID>{glyphs, len},
                       SkSpan<const char>{utf8Text, utf8TextByteLength},
-                      SkSpan<const uint32_t>{clusters, len});
+                      SkSpan<const uint32_t>{clusters, len},
+                      SkSpan<const SkVector>{});
 }
 
 DEF_TEST(SkPDF_Clusterator, reporter) {
@@ -436,4 +443,26 @@ DEF_TEST(SkPDF_Clusterator, reporter) {
     }
 }
 
+DEF_TEST(fuzz875632f0, reporter) {
+    SkNullWStream stream;
+    auto doc = SkPDF::MakeDocument(&stream);
+    REPORTER_ASSERT(reporter, doc);
+    SkCanvas* canvas = doc->beginPage(128, 160);
+
+    SkAutoCanvasRestore autoCanvasRestore(canvas, false);
+
+    SkPaint layerPaint({0, 0, 0, 0});
+    layerPaint.setImageFilter(SkImageFilters::Dilate(536870912, 0, nullptr, nullptr));
+    layerPaint.setBlendMode(SkBlendMode::kClear);
+
+    canvas->saveLayer(nullptr, &layerPaint);
+    canvas->saveLayer(nullptr, nullptr);
+
+    SkPaint paint;
+    paint.setBlendMode(SkBlendMode::kDarken);
+    paint.setShader(SkPerlinNoiseShader::MakeFractalNoise(0, 0, 2, 0, nullptr));
+    paint.setColor4f(SkColor4f{0, 0, 0 ,0});
+
+    canvas->drawPath(SkPath(), paint);
+}
 #endif

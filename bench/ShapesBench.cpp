@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "CommandLineFlags.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkRRect.h"
-#include "SkRandom.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
+#include "tools/flags/CommandLineFlags.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,7 +102,7 @@ public:
 
 private:
     void clampShapeSize() {
-        float maxDiagonal = static_cast<float>(SkTMin(kBenchWidth, kBenchHeight));
+        float maxDiagonal = static_cast<float>(std::min(kBenchWidth, kBenchHeight));
         float diagonal = sqrtf(static_cast<float>(fShapesSize.width() * fShapesSize.width()) +
                                static_cast<float>(fShapesSize.height() * fShapesSize.height()));
         if (diagonal > maxDiagonal) {
@@ -246,7 +246,7 @@ private:
     SkTArray<ShapeInfo>   fShapes;
 
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 #if ENABLE_COMMAND_LINE_SHAPES_BENCH

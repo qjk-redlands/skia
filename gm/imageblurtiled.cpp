@@ -5,10 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlurImageFilter.h"
-#include "SkRandom.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkImageFilters.h"
+#include "tools/ToolUtils.h"
 
 #define WIDTH 640
 #define HEIGHT 480
@@ -32,7 +41,7 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
-        paint.setImageFilter(SkBlurImageFilter::Make(fSigmaX, fSigmaY, nullptr));
+        paint.setImageFilter(SkImageFilters::Blur(fSigmaX, fSigmaY, nullptr));
         const SkScalar tileSize = SkIntToScalar(128);
         SkRect bounds = canvas->getLocalClipBounds();
         for (SkScalar y = bounds.top(); y < bounds.bottom(); y += tileSize) {
@@ -62,11 +71,11 @@ private:
     SkScalar fSigmaX;
     SkScalar fSigmaY;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new  ImageBlurTiledGM(3.0f, 3.0f);)
 
-}
+}  // namespace skiagm

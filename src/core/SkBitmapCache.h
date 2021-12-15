@@ -8,14 +8,14 @@
 #ifndef SkBitmapCache_DEFINED
 #define SkBitmapCache_DEFINED
 
-#include "SkRect.h"
+#include "include/core/SkRect.h"
 #include <memory>
 
 class SkBitmap;
-class SkBitmapProvider;
 class SkImage;
+class SkImage_Base;
 struct SkImageInfo;
-class SkMipMap;
+class SkMipmap;
 class SkPixmap;
 class SkResourceCache;
 
@@ -56,11 +56,11 @@ private:
     static void PrivateDeleteRec(Rec*);
 };
 
-class SkMipMapCache {
+class SkMipmapCache {
 public:
-    static const SkMipMap* FindAndRef(const SkBitmapCacheDesc&,
+    static const SkMipmap* FindAndRef(const SkBitmapCacheDesc&,
                                       SkResourceCache* localCache = nullptr);
-    static const SkMipMap* AddAndRef(const SkBitmapProvider&,
+    static const SkMipmap* AddAndRef(const SkImage_Base*,
                                      SkResourceCache* localCache = nullptr);
 };
 

@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCubicMap.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCubicMap.h"
 
 class CubicMapBench : public Benchmark {
 public:
@@ -23,9 +23,11 @@ public:
     }
 
     void onDraw(int loops, SkCanvas*) override {
-        for (int i = 0; i < loops * 100; ++i) {
-            for (SkScalar x = 0; x <= 1; x += 1.0f / 512) {
-                fCMap.computeYFromX(x);
+        for (int outer = 0; outer < 100; ++outer) {
+            for (int i = 0; i < loops; ++i) {
+                for (SkScalar x = 0; x <= 1; x += 1.0f / 512) {
+                    fCMap.computeYFromX(x);
+                }
             }
         }
     }
@@ -34,7 +36,7 @@ private:
     SkCubicMap  fCMap;
     SkString    fName;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 DEF_BENCH( return new CubicMapBench({1, 0}, {0,0}); )

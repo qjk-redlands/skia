@@ -7,10 +7,12 @@
 #ifndef GrBackendTextureImageGenerator_DEFINED
 #define GrBackendTextureImageGenerator_DEFINED
 
-#include "GrBackendSurface.h"
-#include "GrResourceKey.h"
-#include "SkImageGenerator.h"
-#include "SkMutex.h"
+#include "include/core/SkImageGenerator.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/GrResourceKey.h"
+#include "include/private/SkMutex.h"
+#include "src/gpu/GrTexture.h"
 
 class GrSemaphore;
 
@@ -29,60 +31,66 @@ class GrSemaphore;
 class GrBackendTextureImageGenerator : public SkImageGenerator {
 public:
     static std::unique_ptr<SkImageGenerator> Make(sk_sp<GrTexture>, GrSurfaceOrigin,
-                                                  sk_sp<GrSemaphore>, SkColorType,
+                                                  std::unique_ptr<GrSemaphore>, SkColorType,
                                                   SkAlphaType, sk_sp<SkColorSpace>);
 
     ~GrBackendTextureImageGenerator() override;
 
 protected:
-    // NOTE: We would like to validate that the owning context hasn't been abandoned, but we can't
-    // do that safely (we might be on another thread). So assume everything is fine.
-    bool onIsValid(GrContext*) const override { return true; }
+    bool onIsValid(GrRecordingContext* context) const override {
+        if (context && context->abandoned()) {
+            return false;
+        }
+        return true;
+    }
 
-    TexGenType onCanGenerateTexture() const override { return TexGenType::kCheap; }
-    sk_sp<GrTextureProxy> onGenerateTexture(GrRecordingContext*, const SkImageInfo&,
-                                            const SkIPoint&, bool willNeedMipMaps) override;
+    GrSurfaceProxyView onGenerateTexture(GrRecordingContext*, const SkImageInfo&, const SkIPoint&,
+                                         GrMipmapped mipMapped, GrImageTexGenPolicy) override;
 
 private:
-    GrBackendTextureImageGenerator(const SkImageInfo& info, GrTexture*, GrSurfaceOrigin,
-                                   uint32_t owningContextID, sk_sp<GrSemaphore>,
+    GrBackendTextureImageGenerator(const SkImageInfo& info,
+                                   GrTexture*,
+                                   GrSurfaceOrigin,
+                                   GrDirectContext::DirectContextID owningContextID,
+                                   std::unique_ptr<GrSemaphore>,
                                    const GrBackendTexture&);
 
     static void ReleaseRefHelper_TextureReleaseProc(void* ctx);
 
     class RefHelper : public SkNVRefCnt<RefHelper> {
     public:
-        RefHelper(GrTexture*, uint32_t owningContextID);
+        RefHelper(GrTexture*,
+                  GrDirectContext::DirectContextID owningContextID,
+                  std::unique_ptr<GrSemaphore>);
 
         ~RefHelper();
 
-        GrTexture*          fOriginalTexture;
-        uint32_t            fOwningContextID;
+        GrTexture*                       fOriginalTexture;
+        GrDirectContext::DirectContextID fOwningContextID;
 
         // We use this key so that we don't rewrap the GrBackendTexture in a GrTexture for each
         // proxy created from this generator for a particular borrowing context.
-        GrUniqueKey         fBorrowedTextureKey;
+        GrUniqueKey                      fBorrowedTextureKey;
         // There is no ref associated with this pointer. We rely on our atomic bookkeeping with the
         // context ID to know when this pointer is valid and safe to use. This is used to make sure
         // all uses of the wrapped texture are finished on the borrowing context before we open
         // this back up to other contexts. In general a ref to this release proc is owned by all
         // proxies and gpu uses of the backend texture.
-        GrRefCntedCallback*  fBorrowingContextReleaseProc;
-        uint32_t             fBorrowingContextID;
+        GrRefCntedCallback*              fBorrowingContextReleaseProc;
+        GrDirectContext::DirectContextID fBorrowingContextID;
+
+        std::unique_ptr<GrSemaphore>     fSemaphore;
     };
 
-    RefHelper*           fRefHelper;
+    RefHelper*       fRefHelper;
     // This Mutex is used to guard the borrowing of the texture to one GrContext at a time as well
     // as the creation of the fBorrowingContextReleaseProc. The latter happening if two threads with
     // the same consuming GrContext try to generate a texture at the same time.
-    SkMutex              fBorrowingMutex;
+    SkMutex          fBorrowingMutex;
 
-    sk_sp<GrSemaphore>   fSemaphore;
+    GrBackendTexture fBackendTexture;
+    GrSurfaceOrigin  fSurfaceOrigin;
 
-    GrBackendTexture     fBackendTexture;
-    GrPixelConfig        fConfig;
-    GrSurfaceOrigin      fSurfaceOrigin;
-
-    typedef SkImageGenerator INHERITED;
+    using INHERITED = SkImageGenerator;
 };
 #endif  // GrBackendTextureImageGenerator_DEFINED

@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=5df49d1f4da37275a1f10ef7f1a749f0
 REG_FIDDLE(Canvas_SrcRectConstraint, 256, 64, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -13,16 +13,15 @@ void draw(SkCanvas* canvas) {
     checkRed.writePixels(
             SkImageInfo::MakeN32Premul(2, 2), (void*) checkers, sizeof(checkers[0]), 1, 1);
     canvas->scale(16, 16);
-    canvas->drawBitmap(redBorder, 0, 0, nullptr);
+    canvas->drawImage(redBorder.asImage(), 0, 0);
     canvas->resetMatrix();
-    sk_sp<SkImage> image = SkImage::MakeFromBitmap(redBorder);
-    SkPaint lowPaint;
-    lowPaint.setFilterQuality(kLow_SkFilterQuality);
+    sk_sp<SkImage> image = redBorder.asImage();
     for (auto constraint : { SkCanvas::kStrict_SrcRectConstraint,
                              SkCanvas::kFast_SrcRectConstraint } ) {
         canvas->translate(80, 0);
         canvas->drawImageRect(image.get(), SkRect::MakeLTRB(1, 1, 3, 3),
-                SkRect::MakeLTRB(16, 16, 48, 48), &lowPaint, constraint);
+                SkRect::MakeLTRB(16, 16, 48, 48),
+                SkSamplingOptions(SkFilterMode::kLinear), nullptr, constraint);
     }
 }
 }  // END FIDDLE

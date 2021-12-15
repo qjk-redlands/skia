@@ -1,13 +1,13 @@
 #if 0  // Disabled until updated to use current API.
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=d2c33dc791cd165dcc2423226ba5b095
 REG_FIDDLE(Path_FillType_b, 256, 230, false, 0) {
 void draw(SkCanvas* canvas) {
    SkPath path;
-   path.addRect({20, 10, 80, 70}, SkPath::kCW_Direction);
-   path.addRect({40, 30, 100, 90}, SkPath::kCW_Direction);
+   path.addRect({20, 10, 80, 70}, SkPathDirection::kCW);
+   path.addRect({40, 30, 100, 90}, SkPathDirection::kCW);
    SkPaint strokePaint;
    strokePaint.setStyle(SkPaint::kStroke_Style);
    SkRect clipRect = {0, 0, 128, 128};
@@ -22,8 +22,8 @@ void draw(SkCanvas* canvas) {
    canvas->scale(.5f, .5f);
    canvas->drawString("inverse", 384, 150, textPaint);
    SkPaint fillPaint;
-   for (auto fillType : { SkPath::kWinding_FillType, SkPath::kEvenOdd_FillType,
-                      SkPath::kInverseWinding_FillType, SkPath::kInverseEvenOdd_FillType } ) {
+   for (auto fillType : { SkPathFillType::kWinding, SkPathFillType::kEvenOdd,
+                      SkPathFillType::kInverseWinding, SkPathFillType::kInverseEvenOdd } ) {
         canvas->save();
         canvas->clipRect(clipRect);
         path.setFillType(fillType);

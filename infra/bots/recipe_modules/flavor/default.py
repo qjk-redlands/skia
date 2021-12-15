@@ -9,71 +9,26 @@
 """Default flavor, used for running code on desktop machines."""
 
 
+import collections
+
+
 WIN_TOOLCHAIN_DIR = 't'
 
 
-class DeviceDirs(object):
-  def __init__(self,
-               bin_dir,
-               dm_dir,
-               perf_data_dir,
-               resource_dir,
-               images_dir,
-               lotties_dir,
-               skp_dir,
-               svg_dir,
-               tmp_dir):
-    self._bin_dir = bin_dir
-    self._dm_dir = dm_dir
-    self._perf_data_dir = perf_data_dir
-    self._resource_dir = resource_dir
-    self._images_dir = images_dir
-    self._lotties_dir = lotties_dir
-    self._skp_dir = skp_dir
-    self._svg_dir = svg_dir
-    self._tmp_dir = tmp_dir
-
-  @property
-  def bin_dir(self):
-    return self._bin_dir
-
-  @property
-  def dm_dir(self):
-    """Where DM writes."""
-    return self._dm_dir
-
-  @property
-  def perf_data_dir(self):
-    return self._perf_data_dir
-
-  @property
-  def resource_dir(self):
-    return self._resource_dir
-
-  @property
-  def images_dir(self):
-    return self._images_dir
-
-  @property
-  def lotties_dir(self):
-    return self._lotties_dir
-
-  @property
-  def skp_dir(self):
-    """Holds SKP files that are consumed by RenderSKPs and BenchPictures."""
-    return self._skp_dir
-
-  @property
-  def svg_dir(self):
-    return self._svg_dir
-
-  @property
-  def tmp_dir(self):
-    return self._tmp_dir
+# Notes:
+#   dm_dir: Where DM writes.
+#   skp_dir: Holds SKP files that are consumed by RenderSKPs and BenchPictures.
+DeviceDirs = collections.namedtuple(
+    'DeviceDirs', ['bin_dir', 'dm_dir', 'perf_data_dir', 'resource_dir', 'images_dir',
+                   'lotties_dir', 'skp_dir', 'svg_dir', 'mskp_dir', 'tmp_dir', 'texttraces_dir'])
 
 
 class DefaultFlavor(object):
-  def __init__(self, module):
+  def __init__(self, module, app_name):
+    # Name of the app we're going to run. May be used in various ways by
+    # different flavors.
+    self.app_name = app_name
+
     # Store a pointer to the parent recipe module (SkiaFlavorApi) so that
     # FlavorUtils objects can do recipe module-like things, like run steps or
     # access module-level resources.
@@ -92,7 +47,9 @@ class DefaultFlavor(object):
         lotties_dir=self.m.path['start_dir'].join('lottie-samples'),
         skp_dir=self.m.path['start_dir'].join('skp'),
         svg_dir=self.m.path['start_dir'].join('svg'),
-        tmp_dir=self.m.vars.tmp_dir)
+        mskp_dir=self.m.path['start_dir'].join('mskp'),
+        tmp_dir=self.m.vars.tmp_dir,
+        texttraces_dir=self.m.path['start_dir'].join('text_blob_traces'))
     self.host_dirs = self.device_dirs
 
   def device_path_join(self, *args):
@@ -170,44 +127,40 @@ class DefaultFlavor(object):
     path = []
     ld_library_path = []
 
-    slave_dir = self.m.vars.slave_dir
-    clang_linux = str(slave_dir.join('clang_linux'))
+    workdir = self.m.vars.workdir
+    clang_linux = str(workdir.join('clang_linux'))
     extra_tokens = self.m.vars.extra_tokens
 
     if self.m.vars.is_linux:
       if (self.m.vars.builder_cfg.get('cpu_or_gpu', '') == 'GPU'
           and 'Intel' in self.m.vars.builder_cfg.get('cpu_or_gpu_value', '')):
-        dri_path = slave_dir.join('mesa_intel_driver_linux')
+        dri_path = workdir.join('mesa_intel_driver_linux')
         ld_library_path.append(dri_path)
         env['LIBGL_DRIVERS_PATH'] = str(dri_path)
         env['VK_ICD_FILENAMES'] = str(dri_path.join('intel_icd.x86_64.json'))
 
       if 'Vulkan' in extra_tokens:
-        path.append(slave_dir.join('linux_vulkan_sdk', 'bin'))
-        ld_library_path.append(slave_dir.join('linux_vulkan_sdk', 'lib'))
-
-      if 'OpenCL' in extra_tokens:
-        ld_library_path.append(slave_dir.join('opencl_ocl_icd_linux'))
-        # TODO(dogben): Limit to the appropriate GPUs when we start running on
-        # GPUs other than IntelIris640.
-        # Skylake and later use the NEO driver.
-        neo_path = slave_dir.join('opencl_intel_neo_linux')
-        ld_library_path.append(neo_path)
-        # Generate vendors dir contaning the ICD file pointing to the NEO OpenCL
-        # library.
-        vendors_dir = self.m.vars.tmp_dir.join('OpenCL', 'vendors')
-        self.m.file.ensure_directory('mkdirs OpenCL/vendors', vendors_dir)
-        self.m.file.write_raw('write NEO OpenCL ICD',
-                              vendors_dir.join('neo.icd'),
-                              '%s\n' % neo_path.join('libigdrcl.so'))
-        env['OPENCL_VENDOR_PATH'] = vendors_dir
+        env['VULKAN_SDK'] = str(workdir.join('linux_vulkan_sdk'))
+        path.append(workdir.join('linux_vulkan_sdk', 'bin'))
+        ld_library_path.append(workdir.join('linux_vulkan_sdk', 'lib'))
+        # Enable layers for Debug only to avoid affecting perf results on
+        # Release.
+        # ASAN reports leaks in the Vulkan SDK when the debug layer is enabled.
+        # TSAN runs out of memory.
+        if (self.m.vars.builder_cfg.get('configuration', '') != 'Release' and
+            'ASAN' not in extra_tokens and
+            'TSAN' not in extra_tokens):
+          env['VK_LAYER_PATH'] = str(workdir.join(
+              'linux_vulkan_sdk', 'etc', 'vulkan', 'explicit_layer.d'))
 
     if 'SwiftShader' in extra_tokens:
       ld_library_path.append(self.host_dirs.bin_dir.join('swiftshader_out'))
 
+    # Find the MSAN/TSAN-built libc++.
     if 'MSAN' in extra_tokens:
-      # Find the MSAN-built libc++.
       ld_library_path.append(clang_linux + '/msan')
+    elif 'TSAN' in extra_tokens:
+      ld_library_path.append(clang_linux + '/tsan')
 
     if any('SAN' in t for t in extra_tokens):
       # Sanitized binaries may want to run clang_linux/bin/llvm-symbolizer.
@@ -222,7 +175,7 @@ class DefaultFlavor(object):
     elif 'ProcDump' in extra_tokens:
       dumps_dir = self.m.path.join(self.m.vars.swarming_out_dir, 'dumps')
       self.m.file.ensure_directory('makedirs dumps', dumps_dir)
-      procdump = str(self.m.vars.slave_dir.join('procdump_win',
+      procdump = str(self.m.vars.workdir.join('procdump_win',
                                                 'procdump64.exe'))
       # Full docs for ProcDump here:
       # https://docs.microsoft.com/en-us/sysinternals/downloads/procdump
@@ -233,15 +186,21 @@ class DefaultFlavor(object):
       #   specified dir
       cmd = [procdump, '-accepteula', '-mp', '-e', '1', '-x', dumps_dir] + cmd
 
-    if 'ASAN' in extra_tokens or 'UBSAN' in extra_tokens:
-      # Note: if you see "<unknown module>" in stacktraces for xSAN warnings,
-      # try adding "fast_unwind_on_malloc=0" to xSAN_OPTIONS.
-      if 'Mac' in self.m.vars.builder_cfg.get('os', ''):
-        env['ASAN_OPTIONS'] = 'symbolize=1'  # Mac doesn't support detect_leaks.
+    if 'ASAN' in extra_tokens:
+      os = self.m.vars.builder_cfg.get('os', '')
+      if 'Mac' in os or 'Win' in os:
+        # Mac and Win don't support detect_leaks.
+        env['ASAN_OPTIONS'] = 'symbolize=1'
       else:
         env['ASAN_OPTIONS'] = 'symbolize=1 detect_leaks=1'
       env[ 'LSAN_OPTIONS'] = 'symbolize=1 print_suppressions=1'
       env['UBSAN_OPTIONS'] = 'symbolize=1 print_stacktrace=1'
+
+      # If you see <unknown module> in stacktraces, try fast_unwind_on_malloc=0.
+      # This may cause a 2-25x slowdown, so use it only when you really need it.
+      if name == 'dm' and 'Vulkan' in extra_tokens:
+        env['ASAN_OPTIONS'] += ' fast_unwind_on_malloc=0'
+        env['LSAN_OPTIONS'] += ' fast_unwind_on_malloc=0'
 
     if 'TSAN' in extra_tokens:
       # We don't care about malloc(), fprintf, etc. used in signal handlers.
@@ -257,21 +216,28 @@ class DefaultFlavor(object):
                                                   profname)
 
     if path:
-      env['PATH'] = '%%(PATH)s:%s' % ':'.join('%s' % p for p in path)
+      env['PATH'] = self.m.path.pathsep.join(
+          ['%(PATH)s'] + ['%s' % p for p in path])
     if ld_library_path:
-      env['LD_LIBRARY_PATH'] = ':'.join('%s' % p for p in ld_library_path)
+      env['LD_LIBRARY_PATH'] = self.m.path.pathsep.join(
+          '%s' % p for p in ld_library_path)
 
     to_symbolize = ['dm', 'nanobench']
     if name in to_symbolize and self.m.vars.is_linux:
       # Convert path objects or placeholders into strings such that they can
       # be passed to symbolize_stack_trace.py
-      args = [slave_dir] + [str(x) for x in cmd]
+      args = [workdir] + [str(x) for x in cmd]
       with self.m.context(cwd=self.m.path['start_dir'].join('skia'), env=env):
         self._py('symbolized %s' % name,
                  self.module.resource('symbolize_stack_trace.py'),
                  args=args,
                  infra_step=False)
-
+    elif 'Win' in self.m.vars.builder_cfg.get('os', ''):
+      with self.m.context(env=env):
+        wrapped_cmd = ['powershell', '-ExecutionPolicy', 'Unrestricted',
+                       '-File',
+                       self.module.resource('win_run_and_check_log.ps1')] + cmd
+        self._run(name, wrapped_cmd)
     else:
       with self.m.context(env=env):
         self._run(name, cmd)

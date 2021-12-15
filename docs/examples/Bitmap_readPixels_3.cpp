@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=4590fbf052659d6e629fbfd827081ae5
 REG_FIDDLE(Bitmap_readPixels_3, 256, 128, false, 3) {
 void draw(SkCanvas* canvas) {
@@ -16,6 +16,6 @@ void draw(SkCanvas* canvas) {
     SkBitmap bitmap;
     bitmap.installPixels(SkImageInfo::MakeN32Premul(source.width() * 2, source.height()),
                          &srcPixels.front(), source.rowBytes() * 2);
-    canvas->drawBitmap(bitmap, 0, 0);
+    canvas->drawImage(bitmap.asImage(), 0, 0);
 }
 }  // END FIDDLE

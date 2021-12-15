@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "RegexNode.h"
+#include "src/sksl/lex/RegexNode.h"
 
-#include "NFA.h"
+#include "src/sksl/lex/NFA.h"
 
 std::vector<int> RegexNode::createStates(NFA* nfa, const std::vector<int>& accept) const {
     std::vector<int> result;
@@ -67,7 +67,7 @@ std::vector<int> RegexNode::createStates(NFA* nfa, const std::vector<int>& accep
             result.insert(result.end(), accept.begin(), accept.end());
             break;
         case kRange_Kind:
-            ABORT("unreachable");
+            SkUNREACHABLE;
         case kStar_Kind: {
             std::vector<int> next = accept;
             std::vector<int> placeholder;
@@ -82,6 +82,7 @@ std::vector<int> RegexNode::createStates(NFA* nfa, const std::vector<int>& accep
     return result;
 }
 
+#ifdef SK_DEBUG
 std::string RegexNode::description() const {
     switch (fKind) {
         case kChar_Kind:
@@ -115,3 +116,4 @@ std::string RegexNode::description() const {
             return "<" + std::to_string(fKind) + ">";
     }
 }
+#endif

@@ -8,17 +8,16 @@
 #ifndef SkPictureData_DEFINED
 #define SkPictureData_DEFINED
 
-#include "SkBitmap.h"
-#include "SkDrawable.h"
-#include "SkPicture.h"
-#include "SkPictureFlat.h"
-#include "SkTArray.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkDrawable.h"
+#include "include/core/SkPicture.h"
+#include "include/private/SkTArray.h"
+#include "src/core/SkPictureFlat.h"
 
 #include <memory>
 
 class SkData;
 class SkPictureRecord;
-class SkReader32;
 struct SkSerialProcs;
 class SkStream;
 class SkWStream;
@@ -65,7 +64,7 @@ public:
 #define SK_PICT_VERTICES_BUFFER_TAG SkSetFourByteTag('v', 'e', 'r', 't')
 #define SK_PICT_IMAGE_BUFFER_TAG    SkSetFourByteTag('i', 'm', 'a', 'g')
 
-// Always write this guy last (with no length field afterwards)
+// Always write this last (with no length field afterwards)
 #define SK_PICT_EOF_TAG     SkSetFourByteTag('e', 'o', 'f', ' ')
 
 template <typename T>
@@ -84,7 +83,7 @@ public:
                                            SkTypefacePlayback*);
     static SkPictureData* CreateFromBuffer(SkReadBuffer&, const SkPictInfo&);
 
-    void serialize(SkWStream*, const SkSerialProcs&, SkRefCntSet*) const;
+    void serialize(SkWStream*, const SkSerialProcs&, SkRefCntSet*, bool textBlobsOnly=false) const;
     void flatten(SkWriteBuffer&) const;
 
     const sk_sp<SkData>& opData() const { return fOpData; }
@@ -117,14 +116,12 @@ public:
         return read_index_base_1_or_null(reader, fDrawables);
     }
 
-    const SkPaint* getPaint(SkReadBuffer* reader) const {
-        int index = reader->readInt();
-        if (index == 0) {
-            return nullptr; // recorder wrote a zero for no paint (likely drawimage)
-        }
-        return reader->validate(index > 0 && index <= fPaints.count()) ?
-                &fPaints[index - 1] : nullptr;
-    }
+    // Return a paint if one was used for this op, or nullptr if none was used.
+    const SkPaint* optionalPaint(SkReadBuffer* reader) const;
+
+    // Return the paint used for this op, invalidating the SkReadBuffer if there appears to be none.
+    // The returned paint is always safe to use.
+    const SkPaint& requiredPaint(SkReadBuffer* reader) const;
 
     const SkTextBlob* getTextBlob(SkReadBuffer* reader) const {
         return read_index_base_1_or_null(reader, fTextBlobs);
@@ -140,7 +137,7 @@ private:
     bool parseStreamTag(SkStream*, uint32_t tag, uint32_t size,
                         const SkDeserialProcs&, SkTypefacePlayback*);
     void parseBufferTag(SkReadBuffer&, uint32_t tag, uint32_t size);
-    void flattenToBuffer(SkWriteBuffer&) const;
+    void flattenToBuffer(SkWriteBuffer&, bool textBlobsOnly) const;
 
     SkTArray<SkPaint>  fPaints;
     SkTArray<SkPath>   fPaths;

@@ -5,19 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkColorFilter.h"
-#include "SkColorPriv.h"
-#include "SkShader.h"
-#include "SkTextUtils.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkImageFilters.h"
+#include "include/utils/SkTextUtils.h"
+#include "tools/ToolUtils.h"
 
-#include "SkBlurImageFilter.h"
-#include "SkMorphologyImageFilter.h"
-#include "SkColorFilterImageFilter.h"
-#include "SkMergeImageFilter.h"
-#include "SkOffsetImageFilter.h"
+#include <utility>
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -54,14 +62,11 @@ static void draw_bitmap(SkCanvas* canvas, const SkRect& r, sk_sp<SkImageFilter> 
     SkIRect bounds;
     r.roundOut(&bounds);
 
-    SkBitmap bm;
-    bm.allocN32Pixels(bounds.width(), bounds.height());
-    bm.eraseColor(SK_ColorTRANSPARENT);
-    SkCanvas c(bm);
-    draw_path(&c, r, nullptr);
+    auto surf = SkSurface::MakeRasterN32Premul(bounds.width(), bounds.height());
+    draw_path(surf->getCanvas(), r, nullptr);
 
     paint.setImageFilter(std::move(imf));
-    canvas->drawBitmap(bm, 0, 0, &paint);
+    surf->draw(canvas, 0, 0, SkSamplingOptions(), &paint);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -78,24 +83,24 @@ protected:
     SkISize onISize() override { return SkISize::Make(400, 960); }
 
     void make_checkerboard() {
-        fCheckerboard.allocN32Pixels(80, 80);
-        SkCanvas canvas(fCheckerboard);
-        canvas.clear(SK_ColorTRANSPARENT);
+        auto surf = SkSurface::MakeRasterN32Premul(80, 80);
+        auto canvas = surf->getCanvas();
         SkPaint darkPaint;
         darkPaint.setColor(0xFF404040);
         SkPaint lightPaint;
         lightPaint.setColor(0xFFA0A0A0);
         for (int y = 0; y < 80; y += 16) {
             for (int x = 0; x < 80; x += 16) {
-                canvas.save();
-                canvas.translate(SkIntToScalar(x), SkIntToScalar(y));
-                canvas.drawRect(SkRect::MakeXYWH(0, 0, 8, 8), darkPaint);
-                canvas.drawRect(SkRect::MakeXYWH(8, 0, 8, 8), lightPaint);
-                canvas.drawRect(SkRect::MakeXYWH(0, 8, 8, 8), lightPaint);
-                canvas.drawRect(SkRect::MakeXYWH(8, 8, 8, 8), darkPaint);
-                canvas.restore();
+                canvas->save();
+                canvas->translate(SkIntToScalar(x), SkIntToScalar(y));
+                canvas->drawRect(SkRect::MakeXYWH(0, 0, 8, 8), darkPaint);
+                canvas->drawRect(SkRect::MakeXYWH(8, 0, 8, 8), lightPaint);
+                canvas->drawRect(SkRect::MakeXYWH(0, 8, 8, 8), lightPaint);
+                canvas->drawRect(SkRect::MakeXYWH(8, 8, 8, 8), darkPaint);
+                canvas->restore();
             }
         }
+        fCheckerboard = surf->makeImageSnapshot();
     }
 
     void draw_frame(SkCanvas* canvas, const SkRect& r) {
@@ -105,7 +110,7 @@ protected:
         canvas->drawRect(r, paint);
     }
 
-    void onOnceBeforeDraw() override{
+    void onOnceBeforeDraw() override {
         make_checkerboard();
     }
 
@@ -116,37 +121,31 @@ protected:
 
         sk_sp<SkColorFilter> cf(SkColorFilters::Blend(SK_ColorBLUE,
                                                               SkBlendMode::kSrcIn));
-        SkImageFilter::CropRect cropRect(SkRect::Make(SkIRect::MakeXYWH(10, 10, 44, 44)),
-                                         SkImageFilter::CropRect::kHasAll_CropEdge);
-        SkImageFilter::CropRect bogusRect(SkRect::Make(SkIRect::MakeXYWH(-100, -100, 10, 10)),
-                                          SkImageFilter::CropRect::kHasAll_CropEdge);
+        SkIRect cropRect = SkIRect::MakeXYWH(10, 10, 44, 44);
+        SkIRect bogusRect = SkIRect::MakeXYWH(-100, -100, 10, 10);
 
-        sk_sp<SkImageFilter> offset(SkOffsetImageFilter::Make(SkIntToScalar(-10),
-                                                              SkIntToScalar(-10),
-                                                              nullptr));
+        sk_sp<SkImageFilter> offset(SkImageFilters::Offset(-10, -10, nullptr));
 
-        sk_sp<SkImageFilter> cfOffset(SkColorFilterImageFilter::Make(cf, std::move(offset)));
+        sk_sp<SkImageFilter> cfOffset(SkImageFilters::ColorFilter(cf, std::move(offset)));
 
-        sk_sp<SkImageFilter> erodeX(SkErodeImageFilter::Make(8, 0, nullptr, &cropRect));
-        sk_sp<SkImageFilter> erodeY(SkErodeImageFilter::Make(0, 8, nullptr, &cropRect));
+        sk_sp<SkImageFilter> erodeX(SkImageFilters::Erode(8, 0, nullptr, &cropRect));
+        sk_sp<SkImageFilter> erodeY(SkImageFilters::Erode(0, 8, nullptr, &cropRect));
 
         sk_sp<SkImageFilter> filters[] = {
             nullptr,
-            SkColorFilterImageFilter::Make(cf, nullptr, &cropRect),
-            SkBlurImageFilter::Make(0.0f, 0.0f, nullptr, &cropRect),
-            SkBlurImageFilter::Make(1.0f, 1.0f, nullptr, &cropRect),
-            SkBlurImageFilter::Make(8.0f, 0.0f, nullptr, &cropRect),
-            SkBlurImageFilter::Make(0.0f, 8.0f, nullptr, &cropRect),
-            SkBlurImageFilter::Make(8.0f, 8.0f, nullptr, &cropRect),
-            SkErodeImageFilter::Make(1, 1, nullptr, &cropRect),
-            SkErodeImageFilter::Make(8, 0, std::move(erodeY), &cropRect),
-            SkErodeImageFilter::Make(0, 8, std::move(erodeX), &cropRect),
-            SkErodeImageFilter::Make(8, 8, nullptr, &cropRect),
-            SkMergeImageFilter::Make(nullptr,
-                                     std::move(cfOffset),
-                                     &cropRect),
-            SkBlurImageFilter::Make(8.0f, 8.0f, nullptr, &bogusRect),
-            SkColorFilterImageFilter::Make(cf, nullptr, &bogusRect),
+            SkImageFilters::ColorFilter(cf, nullptr, &cropRect),
+            SkImageFilters::Blur(0.0f, 0.0f, nullptr, &cropRect),
+            SkImageFilters::Blur(1.0f, 1.0f, nullptr, &cropRect),
+            SkImageFilters::Blur(8.0f, 0.0f, nullptr, &cropRect),
+            SkImageFilters::Blur(0.0f, 8.0f, nullptr, &cropRect),
+            SkImageFilters::Blur(8.0f, 8.0f, nullptr, &cropRect),
+            SkImageFilters::Erode(1, 1, nullptr, &cropRect),
+            SkImageFilters::Erode(8, 0, std::move(erodeY), &cropRect),
+            SkImageFilters::Erode(0, 8, std::move(erodeX), &cropRect),
+            SkImageFilters::Erode(8, 8, nullptr, &cropRect),
+            SkImageFilters::Merge(nullptr, std::move(cfOffset), &cropRect),
+            SkImageFilters::Blur(8.0f, 8.0f, nullptr, &bogusRect),
+            SkImageFilters::ColorFilter(cf, nullptr, &bogusRect),
         };
 
         SkRect r = SkRect::MakeWH(SkIntToScalar(64), SkIntToScalar(64));
@@ -159,7 +158,7 @@ protected:
             canvas->save();
             for (size_t i = 0; i < SK_ARRAY_COUNT(filters); ++i) {
                 SkPaint paint;
-                canvas->drawBitmap(fCheckerboard, 0, 0);
+                canvas->drawImage(fCheckerboard, 0, 0);
                 drawProc[j](canvas, r, filters[i]);
                 canvas->translate(0, DY);
             }
@@ -169,8 +168,8 @@ protected:
     }
 
 private:
-    SkBitmap fCheckerboard;
-    typedef GM INHERITED;
+    sk_sp<SkImage> fCheckerboard;
+    using INHERITED = GM;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

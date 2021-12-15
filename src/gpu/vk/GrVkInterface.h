@@ -8,10 +8,10 @@
 #ifndef GrVkInterface_DEFINED
 #define GrVkInterface_DEFINED
 
-#include "SkRefCnt.h"
+#include "include/core/SkRefCnt.h"
 
-#include "vk/GrVkBackendContext.h"
-#include "vk/GrVkTypes.h"
+#include "include/gpu/vk/GrVkBackendContext.h"
+#include "include/gpu/vk/GrVkTypes.h"
 
 class GrVkExtensions;
 
@@ -35,7 +35,7 @@ private:
         FNPTR_TYPE fPtr;
     };
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 
 public:
     GrVkInterface(GrVkGetProc getProc,

@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkAutoMalloc.h"
-#include "SkColorSpacePriv.h"
-#include "SkEndian.h"
-#include "SkFixed.h"
-#include "SkICC.h"
-#include "SkICCPriv.h"
-#include "SkMD5.h"
-#include "SkUtils.h"
+#include "include/core/SkICC.h"
+#include "include/private/SkFixed.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkEndian.h"
+#include "src/core/SkICCPriv.h"
+#include "src/core/SkMD5.h"
+#include "src/core/SkUtils.h"
 
 static constexpr char kDescriptionTagBodyPrefix[12] =
         { 'G', 'o', 'o', 'g', 'l', 'e', '/', 'S', 'k', 'i', 'a' , '/'};
@@ -96,7 +96,7 @@ static constexpr uint32_t kICCProfileSize = kTAG_cprt_Offset + kTAG_cprt_Bytes;
 static constexpr uint32_t kICCHeader[kICCHeaderSize / 4] {
     SkEndian_SwapBE32(kICCProfileSize),  // Size of the profile
     0,                                   // Preferred CMM type (ignored)
-    SkEndian_SwapBE32(0x02100000),       // Version 2.1
+    SkEndian_SwapBE32(0x04300000),       // Version 4.3
     SkEndian_SwapBE32(kDisplay_Profile), // Display device profile
     SkEndian_SwapBE32(kRGB_ColorSpace),  // RGB input color space
     SkEndian_SwapBE32(kXYZ_PCSSpace),    // XYZ profile connection space
@@ -166,7 +166,7 @@ static constexpr uint32_t kICCTagTable[3 * kICCNumEntries] {
 
 // This is like SkFloatToFixed, but rounds to nearest, preserving as much accuracy as possible
 // when going float -> fixed -> float (it has the same accuracy when going fixed -> float -> fixed).
-// The use of double is necessary to accomodate the full potential 32-bit mantissa of the 16.16
+// The use of double is necessary to accommodate the full potential 32-bit mantissa of the 16.16
 // SkFixed value, and so avoiding rounding problems with float. Also, see the comment in SkFixed.h.
 static SkFixed float_round_to_fixed(float x) {
     return sk_float_saturate2int((float)floor((double)x * SK_Fixed1 + 0.5));
@@ -246,13 +246,13 @@ const char* get_color_profile_description(const skcms_TransferFunction& fn,
     if (twoDotTwo && nearly_equal(toXYZD50, SkNamedGamut::kAdobeRGB)) {
         return "AdobeRGB";
     }
-    bool dcip3_gamut = nearly_equal(toXYZD50, SkNamedGamut::kDCIP3);
+    bool display_p3 = nearly_equal(toXYZD50, SkNamedGamut::kDisplayP3);
     if (srgb_xfer || line_xfer) {
-        if (srgb_xfer && dcip3_gamut) {
-            return "sRGB Transfer with DCI-P3 Gamut";
+        if (srgb_xfer && display_p3) {
+            return "sRGB Transfer with Display P3 Gamut";
         }
-        if (line_xfer && dcip3_gamut) {
-            return "Linear Transfer with DCI-P3 Gamut";
+        if (line_xfer && display_p3) {
+            return "Linear Transfer with Display P3 Gamut";
         }
         bool rec2020 = nearly_equal(toXYZD50, SkNamedGamut::kRec2020);
         if (srgb_xfer && rec2020) {
@@ -266,16 +266,21 @@ const char* get_color_profile_description(const skcms_TransferFunction& fn,
 }
 
 static void get_color_profile_tag(char dst[kICCDescriptionTagSize],
-                                 const skcms_TransferFunction& fn,
-                                 const skcms_Matrix3x3& toXYZD50) {
+                                  const skcms_TransferFunction& fn,
+                                  const skcms_Matrix3x3& toXYZD50) {
     SkASSERT(dst);
     if (const char* description = get_color_profile_description(fn, toXYZD50)) {
         SkASSERT(strlen(description) < kICCDescriptionTagSize);
-        strncpy(dst, description, kICCDescriptionTagSize);
+
+        // Without these extra (), GCC would warn us something like
+        //    ... sepecified bound 44 equals destination size ...
+        // which, yeah, is exactly what we're trying to do, copy the string
+        // and zero the rest of the destination if any.  Sheesh.
+        (strncpy(dst, description, kICCDescriptionTagSize));
         // "If the length of src is less than n, strncpy() writes additional
         // null bytes to dest to ensure that a total of n bytes are written."
     } else {
-        strncpy(dst, kDescriptionTagBodyPrefix, sizeof(kDescriptionTagBodyPrefix));
+        memcpy(dst, kDescriptionTagBodyPrefix, sizeof(kDescriptionTagBodyPrefix));
         SkMD5 md5;
         md5.write(&toXYZD50, sizeof(toXYZD50));
         static_assert(sizeof(fn) == sizeof(float) * 7, "packed");
@@ -293,7 +298,8 @@ static void get_color_profile_tag(char dst[kICCDescriptionTagSize],
 
 sk_sp<SkData> SkWriteICCProfile(const skcms_TransferFunction& fn,
                                 const skcms_Matrix3x3& toXYZD50) {
-    if (!is_valid_transfer_fn(fn)) {
+    // We can't encode HDR transfer functions in ICC
+    if (classify_transfer_fn(fn) != sRGBish_TF) {
         return nullptr;
     }
 

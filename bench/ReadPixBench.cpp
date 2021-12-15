@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkColorSpace.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorSpace.h"
 
 // Time variants of read-pixels
 //  [ colortype ][ alphatype ][ colorspace ]
@@ -35,7 +35,7 @@ protected:
 
         SkISize size = canvas->getBaseLayerSize();
 
-        auto info = SkImageInfo::Make(size.width(), size.height(), fCT, fAT, fCS);
+        auto info = SkImageInfo::Make(size, fCT, fAT, fCS);
         SkBitmap bitmap;
         bitmap.allocPixels(info);
 
@@ -49,7 +49,7 @@ private:
     SkAlphaType fAT;
     sk_sp<SkColorSpace> fCS;
     SkString fName;
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 DEF_BENCH( return new ReadPixBench(kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr); )
 DEF_BENCH( return new ReadPixBench(kRGBA_8888_SkColorType, kUnpremul_SkAlphaType, nullptr); )
@@ -62,8 +62,8 @@ DEF_BENCH( return new ReadPixBench(kBGRA_8888_SkColorType, kPremul_SkAlphaType, 
 DEF_BENCH( return new ReadPixBench(kBGRA_8888_SkColorType, kUnpremul_SkAlphaType, SkColorSpace::MakeSRGB()); )
 
 ////////////////////////////////////////////////////////////////////////////////
-#include "SkBitmap.h"
-#include "SkPixmapPriv.h"
+#include "include/core/SkBitmap.h"
+#include "src/core/SkPixmapPriv.h"
 
 class PixmapOrientBench : public Benchmark {
 public:
@@ -74,7 +74,7 @@ protected:
         const SkImageInfo info = SkImageInfo::MakeN32Premul(2048, 1024);
         fSrc.allocPixels(info);
         fSrc.eraseColor(SK_ColorBLACK);
-        fDst.allocPixels(info.makeWH(info.height(), info.width()));
+        fDst.allocPixels(info.makeDimensions(info.dimensions()));
     }
 
     const char* onGetName() override {
@@ -97,7 +97,7 @@ protected:
 private:
     SkBitmap fSrc, fDst;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 DEF_BENCH( return new PixmapOrientBench(); )
 
@@ -137,7 +137,7 @@ protected:
 private:
     SkBitmap fBM;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 DEF_BENCH( return new GetAlphafBench(kN32_SkColorType, "rgba"); )
 DEF_BENCH( return new GetAlphafBench(kRGB_888x_SkColorType, "rgbx"); )

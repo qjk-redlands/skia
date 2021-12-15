@@ -5,17 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "CommandLineFlags.h"
-#include "PathOpsCubicIntersectionTestData.h"
-#include "PathOpsQuadIntersectionTestData.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkPathOpsCubic.h"
-#include "SkPointPriv.h"
-#include "SkRandom.h"
-#include "SkStrokerPriv.h"
-#include "SkTime.h"
-#include "Test.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkTime.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkPointPriv.h"
+#include "src/core/SkStrokerPriv.h"
+#include "src/pathops/SkPathOpsCubic.h"
+#include "tests/PathOpsCubicIntersectionTestData.h"
+#include "tests/PathOpsQuadIntersectionTestData.h"
+#include "tests/Test.h"
+#include "tools/flags/CommandLineFlags.h"
+
+using namespace PathOpsCubicIntersectionTestData;
 
 static DEFINE_bool(timeout, true, "run until alloted time expires");
 
@@ -207,8 +209,8 @@ DEF_TEST(CubicStrokerUnbounded, reporter) {
                 SkDebugf("fill:\n");
                 fill.dumpHex();
             }
-            bestTan = SkTMax(bestTan, gMaxRecursion[0]);
-            bestCubic = SkTMax(bestCubic, gMaxRecursion[1]);
+            bestTan = std::max(bestTan, gMaxRecursion[0]);
+            bestCubic = std::max(bestCubic, gMaxRecursion[1]);
         }
     #endif
         if (FLAGS_timeout && timer.elapsedMs() > MS_TEST_DURATION) {
@@ -317,8 +319,8 @@ DEF_TEST(CubicStrokerConstrained, reporter) {
                 SkDebugf("fill:\n");
                 fill.dumpHex();
             }
-            bestTan = SkTMax(bestTan, gMaxRecursion[0]);
-            bestCubic = SkTMax(bestCubic, gMaxRecursion[1]);
+            bestTan = std::max(bestTan, gMaxRecursion[0]);
+            bestCubic = std::max(bestCubic, gMaxRecursion[1]);
         }
 #endif
         if (FLAGS_timeout && timer.elapsedMs() > MS_TEST_DURATION) {
@@ -402,8 +404,8 @@ DEF_TEST(CubicStrokerRange, reporter) {
                 SkDebugf("fill:\n");
                 fill.dumpHex();
             }
-            best[0] = SkTMax(best[0], gMaxRecursion[0]);
-            best[1] = SkTMax(best[1], gMaxRecursion[1]);
+            best[0] = std::max(best[0], gMaxRecursion[0]);
+            best[1] = std::max(best[1], gMaxRecursion[1]);
         }
 #endif
         if (FLAGS_timeout && timer.elapsedMs() > MS_TEST_DURATION) {

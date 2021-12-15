@@ -8,15 +8,15 @@
 #ifndef SkRegionPriv_DEFINED
 #define SkRegionPriv_DEFINED
 
-#include "SkMalloc.h"
-#include "SkRegion.h"
-#include "SkTo.h"
+#include "include/core/SkRegion.h"
+#include "include/private/SkMalloc.h"
+#include "include/private/SkTo.h"
 #include <atomic>
 #include <functional>
 
 class SkRegionPriv {
 public:
-    static constexpr int kRunTypeSentinel = 0x7FFFFFFF;
+    inline static constexpr int kRunTypeSentinel = 0x7FFFFFFF;
     typedef SkRegion::RunType RunType;
     typedef SkRegion::RunHead RunHead;
 

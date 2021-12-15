@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2019 Google Inc.
  *
@@ -6,12 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "../MetalWindowContext.h"
-#include "WindowContextFactory_mac.h"
+#include "tools/sk_app/MetalWindowContext.h"
+#include "tools/sk_app/mac/WindowContextFactory_mac.h"
 
-#import <MetalKit/MetalKit.h>
-
-#include <Cocoa/Cocoa.h>
+#import <Cocoa/Cocoa.h>
+#import <QuartzCore/CAConstraintLayoutManager.h>
 
 using sk_app::DisplayParams;
 using sk_app::window_context_factory::MacWindowInfo;
@@ -28,13 +26,16 @@ public:
     bool onInitializeContext() override;
     void onDestroyContext() override;
 
+    void resize(int w, int h) override;
+
 private:
     NSView*              fMainView;
 
-    typedef MetalWindowContext INHERITED;
+    using INHERITED = MetalWindowContext;
 };
 
-MetalWindowContext_mac::MetalWindowContext_mac(const MacWindowInfo& info, const DisplayParams& params)
+MetalWindowContext_mac::MetalWindowContext_mac(const MacWindowInfo& info,
+                                               const DisplayParams& params)
     : INHERITED(params)
     , fMainView(info.fMainView) {
 
@@ -50,68 +51,55 @@ MetalWindowContext_mac::~MetalWindowContext_mac() {
 bool MetalWindowContext_mac::onInitializeContext() {
     SkASSERT(nil != fMainView);
 
-    // create mtkview
-    NSRect rect = fMainView.bounds;
-    fMTKView = [[MTKView alloc] initWithFrame:rect device:fDevice];
-    if (nil == fMTKView) {
-        return false;
-    }
+    fMetalLayer = [CAMetalLayer layer];
+    fMetalLayer.device = fDevice.get();
+    fMetalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
 
-    fMTKView.autoResizeDrawable = NO;
-    fMTKView.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-    fMTKView.drawableSize = rect.size;
+    // resize ignores the passed values and uses the fMainView directly.
+    this->resize(0, 0);
 
-    if (fDisplayParams.fMSAASampleCount > 1) {
-        if (![fDevice supportsTextureSampleCount:fDisplayParams.fMSAASampleCount]) {
-            return false;
-        }
-    }
-    fMTKView.sampleCount = fDisplayParams.fMSAASampleCount;
+    BOOL useVsync = fDisplayParams.fDisableVsync ? NO : YES;
+    fMetalLayer.displaySyncEnabled = useVsync;  // TODO: need solution for 10.12 or lower
+    fMetalLayer.layoutManager = [CAConstraintLayoutManager layoutManager];
+    fMetalLayer.autoresizingMask = kCALayerHeightSizable | kCALayerWidthSizable;
+    fMetalLayer.contentsGravity = kCAGravityTopLeft;
+    fMetalLayer.magnificationFilter = kCAFilterNearest;
+    NSColorSpace* cs = fMainView.window.colorSpace;
+    fMetalLayer.colorspace = cs.CGColorSpace;
 
-    // attach Metal view to main view
-    [fMTKView setTranslatesAutoresizingMaskIntoConstraints:NO];
-
-    [fMainView addSubview:fMTKView];
-    NSDictionary *views = NSDictionaryOfVariableBindings(fMTKView);
-
-    [fMainView addConstraints:
-     [NSLayoutConstraint constraintsWithVisualFormat:@"H:|[fMTKView]|"
-                                             options:0
-                                             metrics:nil
-                                               views:views]];
-
-    [fMainView addConstraints:
-     [NSLayoutConstraint constraintsWithVisualFormat:@"V:|[fMTKView]|"
-                                             options:0
-                                             metrics:nil
-                                               views:views]];
-
-    fSampleCount = [fMTKView sampleCount];
-    fStencilBits = 8;
-
-    CGSize backingSize = [fMTKView drawableSize];
-    fWidth = backingSize.width;
-    fHeight = backingSize.height;
+    fMainView.layer = fMetalLayer;
+    fMainView.wantsLayer = YES;
 
     return true;
 }
 
 void MetalWindowContext_mac::onDestroyContext() {
-    [fMTKView removeFromSuperview];
-    [fMTKView release];
-    fMTKView = nil;
+    fMainView.layer = nil;
+    fMainView.wantsLayer = NO;
+}
+
+void MetalWindowContext_mac::resize(int w, int h) {
+    CGFloat backingScaleFactor = sk_app::GetBackingScaleFactor(fMainView);
+    CGSize backingSize = fMainView.bounds.size;
+    backingSize.width *= backingScaleFactor;
+    backingSize.height *= backingScaleFactor;
+
+    fMetalLayer.drawableSize = backingSize;
+    fMetalLayer.contentsScale = backingScaleFactor;
+
+    fWidth = backingSize.width;
+    fHeight = backingSize.height;
 }
 
 }  // anonymous namespace
 
-
 namespace sk_app {
 namespace window_context_factory {
 
-WindowContext* NewMetalForMac(const MacWindowInfo& info, const DisplayParams& params) {
-    WindowContext* ctx = new MetalWindowContext_mac(info, params);
+std::unique_ptr<WindowContext> MakeMetalForMac(const MacWindowInfo& info,
+                                               const DisplayParams& params) {
+    std::unique_ptr<WindowContext> ctx(new MetalWindowContext_mac(info, params));
     if (!ctx->isValid()) {
-        delete ctx;
         return nullptr;
     }
     return ctx;

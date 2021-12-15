@@ -8,85 +8,64 @@
 #ifndef GrMtlPipelineStateBuilder_DEFINED
 #define GrMtlPipelineStateBuilder_DEFINED
 
-#include "GrPipeline.h"
-#include "GrProgramDesc.h"
-#include "GrMtlUniformHandler.h"
-#include "GrMtlVaryingHandler.h"
-#include "SkSLCompiler.h"
-#include "glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/GrPipeline.h"
+#include "src/gpu/glsl/GrGLSLProgramBuilder.h"
+#include "src/gpu/mtl/GrMtlUniformHandler.h"
+#include "src/gpu/mtl/GrMtlVaryingHandler.h"
+#include "src/sksl/SkSLCompiler.h"
 
-#import <metal/metal.h>
+#import <Metal/Metal.h>
 
+class GrProgramDesc;
+class GrProgramInfo;
+class GrMtlCaps;
 class GrMtlGpu;
 class GrMtlPipelineState;
+class SkReadBuffer;
+
+struct GrMtlPrecompiledLibraries {
+    // TODO: wrap these in sk_cfp<> or unique_ptr<> when we remove ARC
+    id<MTLLibrary> fVertexLibrary;
+    id<MTLLibrary> fFragmentLibrary;
+    bool fRTFlip = false;
+};
 
 class GrMtlPipelineStateBuilder : public GrGLSLProgramBuilder {
 public:
-    /**
-     * For Metal we want to cache the entire pipeline for reuse of draws. The Desc here holds all
-     * the information needed to differentiate one pipeline from another.
-     *
-     * The GrProgramDesc contains all the information need to create the actual shaders for the
-     * pipeline.
-     *
-     * For Metal we need to add to the GrProgramDesc to include the rest of the state on the
-     * pipeline. This includes blending information and primitive type. The pipeline is immutable
-     * so any remaining dynamic state is set via the MtlRenderCmdEncoder.
-     */
-    class Desc : public GrProgramDesc {
-    public:
-        static bool Build(Desc*,
-                          GrRenderTarget*,
-                          const GrPrimitiveProcessor&,
-                          const GrPipeline&,
-                          GrPrimitiveType,
-                          GrMtlGpu* gpu);
-
-        size_t shaderKeyLength() const { return fShaderKeyLength; }
-
-    private:
-        size_t fShaderKeyLength;
-
-        typedef GrProgramDesc INHERITED;
-    };
-
     /** Generates a pipeline state.
      *
-     * The GrMtlPipelineState implements what is specified in the GrPipeline and
-     * GrPrimitiveProcessor as input. After successful generation, the builder result objects are
-     * available to be used. This function may modify the program key by setting the surface origin
-     * key to 0 (unspecified) if it turns out the program does not care about the surface origin.
-     * @return true if generation was successful.
+     * The returned GrMtlPipelineState implements the supplied GrProgramInfo.
+     *
+     * @return the created pipeline if generation was successful; nullptr otherwise
      */
-    static GrMtlPipelineState* CreatePipelineState(GrMtlGpu*,
-                                                   GrRenderTarget*, GrSurfaceOrigin,
-                                                   const GrPrimitiveProcessor&,
-                                                   const GrTextureProxy* const primProcProxies[],
-                                                   const GrPipeline&,
-                                                   Desc*);
+    static GrMtlPipelineState* CreatePipelineState(
+                                       GrMtlGpu*,
+                                       const GrProgramDesc&,
+                                       const GrProgramInfo&,
+                                       const GrMtlPrecompiledLibraries* precompiledLibs = nullptr);
+
+    static bool PrecompileShaders(GrMtlGpu*, const SkData&,
+                                  GrMtlPrecompiledLibraries* precompiledLibs);
 
 private:
-    GrMtlPipelineStateBuilder(GrMtlGpu*, GrRenderTarget*, GrSurfaceOrigin,
-                              const GrPipeline&,
-                              const GrPrimitiveProcessor&,
-                              const GrTextureProxy* const primProcProxies[],
-                              GrProgramDesc*);
+    GrMtlPipelineStateBuilder(GrMtlGpu*, const GrProgramDesc&, const GrProgramInfo&);
 
-    GrMtlPipelineState* finalize(GrRenderTarget* renderTarget,
-                                 const GrPrimitiveProcessor& primProc,
-                                 const GrPipeline& pipeline,
-                                 Desc*);
+    GrMtlPipelineState* finalize(const GrProgramDesc&, const GrProgramInfo&,
+                                 const GrMtlPrecompiledLibraries* precompiledLibraries);
 
     const GrCaps* caps() const override;
+
+    SkSL::Compiler* shaderCompiler() const override;
 
     void finalizeFragmentOutputColor(GrShaderVar& outputColor) override;
 
     void finalizeFragmentSecondaryColor(GrShaderVar& outputColor) override;
 
-    id<MTLLibrary> createMtlShaderLibrary(const GrGLSLShaderBuilder& builder,
-                                          SkSL::Program::Kind kind,
-                                          const SkSL::Program::Settings& settings,
-                                          GrProgramDesc* desc);
+    id<MTLLibrary> compileMtlShaderLibrary(const SkSL::String& shader,
+                                           SkSL::Program::Inputs inputs,
+                                           GrContextOptions::ShaderErrorHandler* errorHandler);
+    void storeShadersInCache(const SkSL::String shaders[], const SkSL::Program::Inputs inputs[],
+                             SkSL::Program::Settings*, sk_sp<SkData>, bool isSkSL);
 
     GrGLSLUniformHandler* uniformHandler() override { return &fUniformHandler; }
     const GrGLSLUniformHandler* uniformHandler() const override { return &fUniformHandler; }
@@ -96,6 +75,6 @@ private:
     GrMtlUniformHandler fUniformHandler;
     GrMtlVaryingHandler fVaryingHandler;
 
-    typedef GrGLSLProgramBuilder INHERITED;
+    using INHERITED = GrGLSLProgramBuilder;
 };
 #endif

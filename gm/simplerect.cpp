@@ -5,11 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlurMask.h"
-#include "SkBlurMaskFilter.h"
-#include "SkPath.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 class SimpleRectGM : public skiagm::GM {
 public:
@@ -45,10 +49,10 @@ protected:
         }
     }
 
-    bool onAnimate(const AnimTimer& timer) override { return true; }
+    bool onAnimate(double nanos) override { return true; }
 
 private:
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 DEF_GM(return new SimpleRectGM;)

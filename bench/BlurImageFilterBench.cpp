@@ -5,15 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkBitmap.h"
-#include "SkBlurImageFilter.h"
-#include "SkOffsetImageFilter.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkRandom.h"
-#include "SkShader.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
+#include "include/effects/SkImageFilters.h"
+#include "include/utils/SkRandom.h"
 
 #define FILTER_WIDTH_SMALL  32
 #define FILTER_HEIGHT_SMALL 32
@@ -35,7 +34,7 @@
 // of the source (not inset). This is intended to exercise blurring a smaller source bitmap to a
 // larger destination.
 
-static SkBitmap make_checkerboard(int width, int height) {
+static sk_sp<SkImage> make_checkerboard(int width, int height) {
     SkBitmap bm;
     bm.allocN32Pixels(width, height);
     SkCanvas canvas(bm);
@@ -56,7 +55,7 @@ static SkBitmap make_checkerboard(int width, int height) {
         }
     }
 
-    return bm;
+    return bm.asImage();
 }
 
 class BlurImageFilterBench : public Benchmark {
@@ -91,25 +90,24 @@ protected:
     }
 
     void onDraw(int loops, SkCanvas* canvas) override {
-        static const SkScalar kX = 0;
-        static const SkScalar kY = 0;
-        const SkRect bmpRect = SkRect::MakeXYWH(kX, kY,
-                                                SkIntToScalar(fCheckerboard.width()),
-                                                SkIntToScalar(fCheckerboard.height()));
-        const SkImageFilter::CropRect cropRect(bmpRect.makeInset(10.f, 10.f));
-        const SkImageFilter::CropRect cropRectLarge(bmpRect);
+        static const int kX = 0;
+        static const int kY = 0;
+        const SkIRect bmpRect = SkIRect::MakeXYWH(kX, kY, fCheckerboard->width(),
+                                                  fCheckerboard->height());
+        const SkIRect bmpRectInset = bmpRect.makeInset(10, 10);
 
         sk_sp<SkImageFilter> input = fIsExpanded
-                                        ? SkOffsetImageFilter::Make(0, 0, nullptr, &cropRect)
+                                        ? SkImageFilters::Offset(0, 0, nullptr, &bmpRectInset)
                                         : nullptr;
 
-        const SkImageFilter::CropRect* crop =
-            fIsExpanded ? &cropRectLarge : fIsCropped ? &cropRect : nullptr;
+        const SkIRect* crop =
+            fIsExpanded ? &bmpRect : fIsCropped ? &bmpRectInset : nullptr;
         SkPaint paint;
-        paint.setImageFilter(SkBlurImageFilter::Make(fSigmaX, fSigmaY, std::move(input), crop));
+        paint.setImageFilter(SkImageFilters::Blur(fSigmaX, fSigmaY, std::move(input), crop));
+        SkSamplingOptions sampling;
 
         for (int i = 0; i < loops; i++) {
-            canvas->drawBitmap(fCheckerboard, kX, kY, &paint);
+            canvas->drawImage(fCheckerboard, kX, kY, sampling, &paint);
         }
     }
 
@@ -120,9 +118,9 @@ private:
     bool fIsCropped;
     bool fIsExpanded;
     bool fInitialized;
-    SkBitmap fCheckerboard;
+    sk_sp<SkImage> fCheckerboard;
     SkScalar fSigmaX, fSigmaY;
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 DEF_BENCH(return new BlurImageFilterBench(BLUR_SIGMA_LARGE, 0, false, false, false);)

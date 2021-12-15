@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=0381a10ac69bdefdf9d15b47cbb9fefe
 REG_FIDDLE(Matrix_setConcat, 256, 256, false, 3) {
 void draw(SkCanvas* canvas) {
@@ -11,6 +11,6 @@ void draw(SkCanvas* canvas) {
     matrix2.setPolyToPoly(perspect, bitmapBounds, 4);
     matrix.setConcat(matrix, matrix2);
     canvas->concat(matrix);
-    canvas->drawBitmap(source, 0, 0);
+    canvas->drawImage(image, 0, 0);
 }
 }  // END FIDDLE

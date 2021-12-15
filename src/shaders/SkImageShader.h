@@ -8,17 +8,24 @@
 #ifndef SkImageShader_DEFINED
 #define SkImageShader_DEFINED
 
-#include "SkBitmapProcShader.h"
-#include "SkImage.h"
-#include "SkShaderBase.h"
+#include "include/core/SkImage.h"
+#include "src/shaders/SkBitmapProcShader.h"
+#include "src/shaders/SkShaderBase.h"
 
 class SkImageShader : public SkShaderBase {
 public:
     static sk_sp<SkShader> Make(sk_sp<SkImage>,
                                 SkTileMode tmx,
                                 SkTileMode tmy,
+                                const SkSamplingOptions&,
                                 const SkMatrix* localMatrix,
                                 bool clampAsIfUnpremul = false);
+
+    static sk_sp<SkShader> MakeRaw(sk_sp<SkImage>,
+                                   SkTileMode tmx,
+                                   SkTileMode tmy,
+                                   const SkSamplingOptions&,
+                                   const SkMatrix* localMatrix);
 
     bool isOpaque() const override;
 
@@ -26,13 +33,17 @@ public:
     std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(const GrFPArgs&) const override;
 #endif
 
+    static SkM44 CubicResamplerMatrix(float B, float C);
+
 private:
     SK_FLATTENABLE_HOOKS(SkImageShader)
 
     SkImageShader(sk_sp<SkImage>,
                   SkTileMode tmx,
                   SkTileMode tmy,
+                  const SkSamplingOptions&,
                   const SkMatrix* localMatrix,
+                  bool raw,
                   bool clampAsIfUnpremul);
 
     void flatten(SkWriteBuffer&) const override;
@@ -42,14 +53,31 @@ private:
     SkImage* onIsAImage(SkMatrix*, SkTileMode*) const override;
 
     bool onAppendStages(const SkStageRec&) const override;
+    SkStageUpdater* onAppendUpdatableStages(const SkStageRec&) const override;
 
-    sk_sp<SkImage>   fImage;
-    const SkTileMode fTileModeX;
-    const SkTileMode fTileModeY;
-    const bool       fClampAsIfUnpremul;
+    SkUpdatableShader* onUpdatableShader(SkArenaAlloc* alloc) const override;
+
+    skvm::Color onProgram(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
+                          const SkMatrixProvider&, const SkMatrix* localM, const SkColorInfo& dst,
+                          skvm::Uniforms* uniforms, SkArenaAlloc*) const override;
+
+    class TransformShader;
+    skvm::Color makeProgram(
+            skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
+            const SkMatrixProvider&, const SkMatrix* localM, const SkColorInfo& dst,
+            skvm::Uniforms* uniforms, const TransformShader* coordShader, SkArenaAlloc*) const;
+
+    bool doStages(const SkStageRec&, TransformShader* = nullptr) const;
+
+    sk_sp<SkImage>          fImage;
+    const SkSamplingOptions fSampling;
+    const SkTileMode        fTileModeX;
+    const SkTileMode        fTileModeY;
+    const bool              fRaw;
+    const bool              fClampAsIfUnpremul;
 
     friend class SkShaderBase;
-    typedef SkShaderBase INHERITED;
+    using INHERITED = SkShaderBase;
 };
 
 #endif

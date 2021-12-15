@@ -8,12 +8,12 @@
 #ifndef GrGLSLProgramDataManager_DEFINED
 #define GrGLSLProgramDataManager_DEFINED
 
-#include "GrResourceHandle.h"
-#include "SkNoncopyable.h"
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkNoncopyable.h"
+#include "src/gpu/GrResourceHandle.h"
 
 class SkMatrix;
-class SkMatrix44;
+class SkM44;
 
 /** Manages the resources used by a shader program.
  * The resources are objects the program uses to communicate with the
@@ -55,17 +55,14 @@ public:
 
     // convenience method for uploading a SkMatrix to a 3x3 matrix uniform
     void setSkMatrix(UniformHandle, const SkMatrix&) const;
-
-    // for nvpr only
-    GR_DEFINE_RESOURCE_HANDLE_CLASS(VaryingHandle);
-    virtual void setPathFragmentInputTransform(VaryingHandle u, int components,
-                                               const SkMatrix& matrix) const = 0;
+    // convenience method for uploading a SkMatrix to a 4x4 matrix uniform
+    void setSkM44(UniformHandle, const SkM44&) const;
 
 protected:
     GrGLSLProgramDataManager() {}
 
 private:
-    typedef SkNoncopyable INHERITED;
+    using INHERITED = SkNoncopyable;
 };
 
 #endif

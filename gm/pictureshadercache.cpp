@@ -5,13 +5,26 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTileMode.h"
+#include "include/third_party/skcms/skcms.h"
 
-#include "SkPaint.h"
-#include "SkPicture.h"
-#include "SkPictureRecorder.h"
-#include "SkShader.h"
-#include "SkSurface.h"
+#include <utility>
 
 class PictureShaderCacheGM : public skiagm::GM {
 public:
@@ -39,7 +52,7 @@ public:
 
     void onOnceBeforeDraw() override {
         SkPictureRecorder recorder;
-        SkCanvas* pictureCanvas = recorder.beginRecording(fTileSize, fTileSize, nullptr, 0);
+        SkCanvas* pictureCanvas = recorder.beginRecording(fTileSize, fTileSize);
         this->drawTile(pictureCanvas);
         fPicture = recorder.finishRecordingAsPicture();
     }
@@ -54,7 +67,8 @@ public:
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint paint;
-        paint.setShader(fPicture->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat));
+        paint.setShader(fPicture->makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
+                                             SkFilterMode::kNearest));
 
         {
             // Render in a funny color space that converts green to yellow.
@@ -80,7 +94,7 @@ private:
     sk_sp<SkPicture> fPicture;
     SkBitmap         fBitmap;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 DEF_GM(return new PictureShaderCacheGM(100);)

@@ -8,7 +8,7 @@
 #ifndef GrMtlVaryingHandler_DEFINED
 #define GrMtlVaryingHandler_DEFINED
 
-#include "glsl/GrGLSLVarying.h"
+#include "src/gpu/glsl/GrGLSLVarying.h"
 
 class GrMtlVaryingHandler : public GrGLSLVaryingHandler {
 public:
@@ -21,7 +21,7 @@ private:
 
     friend class GrMtlPipelineStateBuilder;
 
-    typedef GrGLSLVaryingHandler INHERITED;
+    using INHERITED = GrGLSLVaryingHandler;
 };
 
 #endif

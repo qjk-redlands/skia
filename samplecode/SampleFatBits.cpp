@@ -5,25 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkBlendMode.h"
-#include "SkCanvas.h"
-#include "SkClipOpPriv.h"
-#include "SkColor.h"
-#include "SkImageInfo.h"
-#include "SkMatrix.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkPoint.h"
-#include "SkPointPriv.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkScalar.h"
-#include "SkShader.h"
-#include "SkString.h"
-#include "SkSurface.h"
-#include "SkTypes.h"
-#include "ToolUtils.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkPointPriv.h"
+#include "tools/ToolUtils.h"
 
 class SkEvent;
 
@@ -59,7 +58,7 @@ public:
         fUseTriangle = false;
         fStrokeCap = SkPaint::kButt_Cap;
 
-        fClipRect.set(2, 2, 11, 8 );
+        fClipRect.setLTRB(2, 2, 11, 8 );
     }
 
     int getZoom() const { return fZoom; }
@@ -102,7 +101,7 @@ public:
         fW = width;
         fH = height;
         fZoom = zoom;
-        fBounds.set(0, 0, SkIntToScalar(width * zoom), SkIntToScalar(height * zoom));
+        fBounds.setIWH(width * zoom, height * zoom);
         fMatrix.setScale(SkIntToScalar(zoom), SkIntToScalar(zoom));
         fInverse.setScale(SK_Scalar1 / zoom, SK_Scalar1 / zoom);
         fShader0 = ToolUtils::create_checkerboard_shader(0xFFDDDDDD, 0xFFFFFFFF, zoom);
@@ -172,7 +171,7 @@ private:
         SkCanvas* canvas = fMaxSurface->getCanvas();
         canvas->save();
         canvas->concat(fMatrix);
-        fMinSurface->draw(canvas, 0, 0, nullptr);
+        fMinSurface->draw(canvas, 0, 0);
         canvas->restore();
 
         SkPaint paint;
@@ -271,7 +270,7 @@ void FatBits::drawLine(SkCanvas* canvas, SkPoint pts[]) {
         fMinSurface->getCanvas()->save();
         SkRect r = fClipRect;
         r.inset(SK_Scalar1/3, SK_Scalar1/3);
-        fMinSurface->getCanvas()->clipRect(r, kIntersect_SkClipOp, true);
+        fMinSurface->getCanvas()->clipRect(r, SkClipOp::kIntersect, true);
     }
     fMinSurface->getCanvas()->drawLine(pts[0], pts[1], paint);
     if (fUseClip) {
@@ -284,7 +283,7 @@ void FatBits::drawLine(SkCanvas* canvas, SkPoint pts[]) {
     fMatrix.mapPoints(pts, 2);
     this->drawLineSkeleton(max, pts);
 
-    fMaxSurface->draw(canvas, 0, 0, nullptr);
+    fMaxSurface->draw(canvas, 0, 0);
 }
 
 void FatBits::drawRect(SkCanvas* canvas, SkPoint pts[2]) {
@@ -297,7 +296,7 @@ void FatBits::drawRect(SkCanvas* canvas, SkPoint pts[2]) {
     }
 
     SkRect r;
-    r.set(pts, 2);
+    r.setBounds(pts, 2);
 
     erase(fMinSurface.get());
     this->setupPaint(&paint);
@@ -311,10 +310,10 @@ void FatBits::drawRect(SkCanvas* canvas, SkPoint pts[2]) {
     SkCanvas* max = fMaxSurface->getCanvas();
 
     fMatrix.mapPoints(pts, 2);
-    r.set(pts, 2);
+    r.setBounds(pts, 2);
     this->drawRectSkeleton(max, r);
 
-    fMaxSurface->draw(canvas, 0, 0, nullptr);
+    fMaxSurface->draw(canvas, 0, 0);
 }
 
 void FatBits::drawTriangleSkeleton(SkCanvas* max, const SkPoint pts[]) {
@@ -356,7 +355,7 @@ void FatBits::drawTriangle(SkCanvas* canvas, SkPoint pts[3]) {
     fMatrix.mapPoints(pts, 3);
     this->drawTriangleSkeleton(max, pts);
 
-    fMaxSurface->draw(canvas, 0, 0, nullptr);
+    fMaxSurface->draw(canvas, 0, 0);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -364,7 +363,7 @@ void FatBits::drawTriangle(SkCanvas* canvas, SkPoint pts[3]) {
 class IndexClick : public Sample::Click {
     int fIndex;
 public:
-    IndexClick(Sample* v, int index) : Sample::Click(v), fIndex(index) {}
+    IndexClick(int index) : fIndex(index) {}
 
     static int GetIndex(Sample::Click* click) {
         return ((IndexClick*)click)->fIndex;
@@ -382,7 +381,7 @@ public:
         fPts[0].set(1, 1);
         fPts[1].set(5, 4);
         fPts[2].set(2, 6);
-        SkMatrix::MakeScale(SkIntToScalar(fZoom)).mapPoints(fPts, 3);
+        SkMatrix::Scale(fZoom, fZoom).mapPoints(fPts, 3);
         fIsRect = false;
     }
 
@@ -391,13 +390,9 @@ public:
     }
 
 protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "FatBits");
-            return true;
-        }
-        SkUnichar uni;
-        if (Sample::CharQ(*evt, &uni)) {
+    SkString name() override { return SkString("FatBits"); }
+
+    bool onChar(SkUnichar uni) override {
             switch (uni) {
                 case 'c':
                     fFB.setUseClip(!fFB.getUseClip());
@@ -444,8 +439,7 @@ protected:
                     fFB.fStrokeWidth += 0.125f;
                     return true;
             }
-        }
-        return this->INHERITED::onQuery(evt);
+            return false;
     }
 
     void onDrawContent(SkCanvas* canvas) override {
@@ -473,7 +467,7 @@ protected:
         }
     }
 
-    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned modi) override {
+    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey modi) override {
         SkPoint pt = { x, y };
         int index = -1;
         int count = fFB.getTriangle() ? 3 : 2;
@@ -485,7 +479,7 @@ protected:
                 break;
             }
         }
-        return new IndexClick(this, index);
+        return new IndexClick(index);
     }
 
     bool onClick(Click* click) override {
@@ -504,7 +498,7 @@ protected:
 
 private:
 
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////

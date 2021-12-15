@@ -5,11 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkGradientShader.h"
-#include "SkImage.h"
-#include "SkPatchUtils.h"
-#include "SkPath.h"
+#include "gm/gm.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "src/utils/SkPatchUtils.h"
+#include "tools/Resources.h"
 
 static sk_sp<SkShader> make_shader() {
     const SkColor colors[] = {
@@ -82,13 +93,15 @@ const SkPoint gTexCoords[SkPatchUtils::kNumCorners] = {
 };
 
 
-static void dopatch(SkCanvas* canvas, const SkColor colors[], sk_sp<SkImage> img = nullptr) {
+static void dopatch(SkCanvas* canvas, const SkColor colors[], sk_sp<SkImage> img,
+                    const SkMatrix* localMatrix) {
     SkPaint paint;
+    paint.setColor(SK_ColorGREEN);
 
     const SkBlendMode modes[] = {
         SkBlendMode::kSrc,
         SkBlendMode::kDst,
-        SkBlendMode::kModulate,
+        SkBlendMode::kColorDodge,
     };
 
     SkPoint texStorage[4];
@@ -98,7 +111,7 @@ static void dopatch(SkCanvas* canvas, const SkColor colors[], sk_sp<SkImage> img
     if (img) {
         SkScalar w = img->width();
         SkScalar h = img->height();
-        shader = img->makeShader();
+        shader = img->makeShader(SkSamplingOptions(), localMatrix);
         texStorage[0].set(0, 0);
         texStorage[1].set(w, 0);
         texStorage[2].set(w, h);
@@ -145,20 +158,28 @@ DEF_SIMPLE_GM(patch_primitive, canvas, 1500, 1100) {
     const SkColor colors[SkPatchUtils::kNumCorners] = {
         SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorCYAN
     };
-    dopatch(canvas, colors);
+    dopatch(canvas, colors, nullptr, nullptr);
 }
-#include "Resources.h"
 DEF_SIMPLE_GM(patch_image, canvas, 1500, 1100) {
     const SkColor colors[SkPatchUtils::kNumCorners] = {
         SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorCYAN
     };
-    dopatch(canvas, colors, GetResourceAsImage("images/mandrill_128.png"));
+    dopatch(canvas, colors, GetResourceAsImage("images/mandrill_128.png"), nullptr);
+}
+DEF_SIMPLE_GM(patch_image_persp, canvas, 1500, 1100) {
+    const SkColor colors[SkPatchUtils::kNumCorners] = {
+        SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE, SK_ColorCYAN
+    };
+    SkMatrix localM;
+    localM.reset();
+    localM[6] = 0.00001f;    // force perspective
+    dopatch(canvas, colors, GetResourceAsImage("images/mandrill_128.png"), &localM);
 }
 DEF_SIMPLE_GM(patch_alpha, canvas, 1500, 1100) {
     const SkColor colors[SkPatchUtils::kNumCorners] = {
         SK_ColorRED, 0x0000FF00, SK_ColorBLUE, 0x00FF00FF,
     };
-    dopatch(canvas, colors);
+    dopatch(canvas, colors, nullptr, nullptr);
 }
 
 // These two should look the same (one patch, one simple path)
@@ -169,7 +190,7 @@ DEF_SIMPLE_GM(patch_alpha_test, canvas, 550, 250) {
         0x80FF0000, 0x80FF0000, 0x80FF0000, 0x80FF0000,
     };
     SkPaint paint;
-    canvas->drawPatch(gCubics, colors, nullptr, SkBlendMode::kModulate, paint);
+    canvas->drawPatch(gCubics, colors, nullptr, SkBlendMode::kDst, paint);
 
     canvas->translate(300, 0);
 

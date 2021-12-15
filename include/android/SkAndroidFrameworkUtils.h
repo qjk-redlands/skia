@@ -8,12 +8,13 @@
 #ifndef SkAndroidFrameworkUtils_DEFINED
 #define SkAndroidFrameworkUtils_DEFINED
 
-#include "SkTypes.h"
-#include "SkRefCnt.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
 
 #ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 
 class SkCanvas;
+struct SkIRect;
 struct SkRect;
 class SkSurface;
 
@@ -40,6 +41,10 @@ public:
     static sk_sp<SkSurface> getSurfaceFromCanvas(SkCanvas* canvas);
 
     static int SaveBehind(SkCanvas* canvas, const SkRect* subset);
+
+    // Operating within the canvas' clip stack, this resets the geometry of the clip to be wide
+    // open modula any device clip restriction that was set outside of the clip stack.
+    static void ResetClip(SkCanvas* canvas);
 
     /**
      * Unrolls a chain of nested SkPaintFilterCanvas to return the base wrapped canvas.

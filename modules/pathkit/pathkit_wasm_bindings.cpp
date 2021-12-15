@@ -5,20 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "SkCubicMap.h"
-#include "SkDashPathEffect.h"
-#include "SkFloatBits.h"
-#include "SkFloatingPoint.h"
-#include "SkMatrix.h"
-#include "SkPaint.h"
-#include "SkPaintDefaults.h"
-#include "SkParsePath.h"
-#include "SkPath.h"
-#include "SkPathOps.h"
-#include "SkRect.h"
-#include "SkString.h"
-#include "SkStrokeRec.h"
-#include "SkTrimPathEffect.h"
+#include "include/core/SkCubicMap.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkString.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "include/effects/SkTrimPathEffect.h"
+#include "include/pathops/SkPathOps.h"
+#include "include/private/SkFloatBits.h"
+#include "include/private/SkFloatingPoint.h"
+#include "include/utils/SkParsePath.h"
+#include "src/core/SkPaintDefaults.h"
+#include "src/core/SkPathPriv.h"
 
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
@@ -44,51 +45,37 @@ using JSArray = emscripten::val;
 // Creating/Exporting Paths with cmd arrays
 // =================================================================================
 
-template <typename VisitFunc>
-void VisitPath(const SkPath& p, VisitFunc&& f) {
-    SkPath::RawIter iter(p);
-    SkPoint pts[4];
-    SkPath::Verb verb;
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
-        f(verb, pts, iter);
-    }
-}
-
 JSArray EMSCRIPTEN_KEEPALIVE ToCmds(const SkPath& path) {
     JSArray cmds = emscripten::val::array();
-
-    VisitPath(path, [&cmds](SkPath::Verb verb, const SkPoint pts[4], SkPath::RawIter iter) {
+    for (auto [verb, pts, w] : SkPathPriv::Iterate(path)) {
         JSArray cmd = emscripten::val::array();
         switch (verb) {
-        case SkPath::kMove_Verb:
+        case SkPathVerb::kMove:
             cmd.call<void>("push", MOVE, pts[0].x(), pts[0].y());
             break;
-        case SkPath::kLine_Verb:
+        case SkPathVerb::kLine:
             cmd.call<void>("push", LINE, pts[1].x(), pts[1].y());
             break;
-        case SkPath::kQuad_Verb:
+        case SkPathVerb::kQuad:
             cmd.call<void>("push", QUAD, pts[1].x(), pts[1].y(), pts[2].x(), pts[2].y());
             break;
-        case SkPath::kConic_Verb:
+        case SkPathVerb::kConic:
             cmd.call<void>("push", CONIC,
                            pts[1].x(), pts[1].y(),
-                           pts[2].x(), pts[2].y(), iter.conicWeight());
+                           pts[2].x(), pts[2].y(), *w);
             break;
-        case SkPath::kCubic_Verb:
+        case SkPathVerb::kCubic:
             cmd.call<void>("push", CUBIC,
                            pts[1].x(), pts[1].y(),
                            pts[2].x(), pts[2].y(),
                            pts[3].x(), pts[3].y());
             break;
-        case SkPath::kClose_Verb:
+        case SkPathVerb::kClose:
             cmd.call<void>("push", CLOSE);
-            break;
-        case SkPath::kDone_Verb:
-            SkASSERT(false);
             break;
         }
         cmds.call<void>("push", cmd);
-    });
+    }
     return cmds;
 }
 
@@ -275,7 +262,7 @@ void EMSCRIPTEN_KEEPALIVE ToCanvas(const SkPath& path, emscripten::val /* Path2D
     SkPath::Iter iter(path, false);
     SkPoint pts[4];
     SkPath::Verb verb;
-    while ((verb = iter.next(pts, false)) != SkPath::kDone_Verb) {
+    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
         switch (verb) {
             case SkPath::kMove_Verb:
                 ctx.call<void>("moveTo", pts[0].x(), pts[0].y());
@@ -356,9 +343,9 @@ void ApplyAddPath(SkPath& orig, const SkPath& newPath,
 }
 
 JSString GetFillTypeString(const SkPath& path) {
-    if (path.getFillType() == SkPath::FillType::kWinding_FillType) {
+    if (path.getFillType() == SkPathFillType::kWinding) {
         return emscripten::val("nonzero");
-    } else if (path.getFillType() == SkPath::FillType::kEvenOdd_FillType) {
+    } else if (path.getFillType() == SkPathFillType::kEvenOdd) {
         return emscripten::val("evenodd");
     } else {
         SkDebugf("warning: can't translate inverted filltype to HTML Canvas\n");
@@ -503,7 +490,7 @@ EMSCRIPTEN_BINDINGS(skia) {
         .function("_rect", &ApplyAddRect)
 
         // Extra features
-        .function("setFillType", &SkPath::setFillType)
+        .function("setFillType", select_overload<void(SkPathFillType)>(&SkPath::setFillType))
         .function("getFillType", &SkPath::getFillType)
         .function("getFillTypeString", &GetFillTypeString)
         .function("getBounds", &SkPath::getBounds)
@@ -564,11 +551,11 @@ EMSCRIPTEN_BINDINGS(skia) {
         .value("XOR",                SkPathOp::kXOR_SkPathOp)
         .value("REVERSE_DIFFERENCE", SkPathOp::kReverseDifference_SkPathOp);
 
-    enum_<SkPath::FillType>("FillType")
-        .value("WINDING",            SkPath::FillType::kWinding_FillType)
-        .value("EVENODD",            SkPath::FillType::kEvenOdd_FillType)
-        .value("INVERSE_WINDING",    SkPath::FillType::kInverseWinding_FillType)
-        .value("INVERSE_EVENODD",    SkPath::FillType::kInverseEvenOdd_FillType);
+    enum_<SkPathFillType>("FillType")
+        .value("WINDING",            SkPathFillType::kWinding)
+        .value("EVENODD",            SkPathFillType::kEvenOdd)
+        .value("INVERSE_WINDING",    SkPathFillType::kInverseWinding)
+        .value("INVERSE_EVENODD",    SkPathFillType::kInverseEvenOdd);
 
     constant("MOVE_VERB",  MOVE);
     constant("LINE_VERB",  LINE);

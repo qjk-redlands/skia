@@ -5,12 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkRandom.h"
-#include "SkSurface.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/GrRecordingContext.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 namespace skiagm {
 
@@ -18,11 +27,10 @@ namespace skiagm {
  * This GM exercises SkCanvas::discard() by creating an offscreen SkSurface and repeatedly
  * discarding it, drawing to it, and then drawing it to the main canvas.
  */
-class DiscardGM : public GpuGM {
+class DiscardGM : public GM {
 
 public:
-    DiscardGM() {
-    }
+    DiscardGM() {}
 
 protected:
     SkString onShortName() override {
@@ -33,13 +41,18 @@ protected:
         return SkISize::Make(100, 100);
     }
 
-    DrawResult onDraw(GrContext* context, GrRenderTargetContext*, SkCanvas* canvas,
-                      SkString* errorMsg) override {
+    DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
+        auto dContext = GrAsDirectContext(canvas->recordingContext());
+        if (!dContext || dContext->abandoned()) {
+            *errorMsg = "GM relies on having access to a live direct context.";
+            return DrawResult::kSkip;
+        }
+
         SkISize size = this->getISize();
         size.fWidth /= 10;
         size.fHeight /= 10;
         SkImageInfo info = SkImageInfo::MakeN32Premul(size);
-        auto surface = SkSurface::MakeRenderTarget(context, SkBudgeted::kNo, info);
+        sk_sp<SkSurface> surface = SkSurface::MakeRenderTarget(dContext, SkBudgeted::kNo, info);
         if (nullptr == surface) {
             *errorMsg = "Could not create render target.";
             return DrawResult::kFail;
@@ -66,7 +79,7 @@ protected:
                       surface->getCanvas()->drawPaint(paint);
                       break;
               }
-              surface->draw(canvas, 10.f*x, 10.f*y, nullptr);
+              surface->draw(canvas, 10.f*x, 10.f*y);
             }
         }
 
@@ -75,11 +88,11 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new DiscardGM;)
 
-} // end namespace
+}  // namespace skiagm

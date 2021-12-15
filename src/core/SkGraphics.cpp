@@ -5,28 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "SkGraphics.h"
+#include "include/core/SkGraphics.h"
 
-#include "SkBlitter.h"
-#include "SkCanvas.h"
-#include "SkCpu.h"
-#include "SkGeometry.h"
-#include "SkImageFilter.h"
-#include "SkMath.h"
-#include "SkMatrix.h"
-#include "SkOpts.h"
-#include "SkPath.h"
-#include "SkPathEffect.h"
-#include "SkRefCnt.h"
-#include "SkResourceCache.h"
-#include "SkScalerContext.h"
-#include "SkShader.h"
-#include "SkStream.h"
-#include "SkStrikeCache.h"
-#include "SkTSearch.h"
-#include "SkTime.h"
-#include "SkTypefaceCache.h"
-#include "SkUTF.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkMath.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTime.h"
+#include "src/core/SkBlitter.h"
+#include "src/core/SkCpu.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkImageFilter_Base.h"
+#include "src/core/SkOpts.h"
+#include "src/core/SkResourceCache.h"
+#include "src/core/SkScalerContext.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/core/SkTSearch.h"
+#include "src/core/SkTypefaceCache.h"
 
 #include <stdlib.h>
 
@@ -46,7 +45,7 @@ void SkGraphics::DumpMemoryStatistics(SkTraceMemoryDump* dump) {
 void SkGraphics::PurgeAllCaches() {
     SkGraphics::PurgeFontCache();
     SkGraphics::PurgeResourceCache();
-    SkImageFilter::PurgeCache();
+    SkImageFilter_Base::PurgeCache();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -121,15 +120,13 @@ int SkGraphics::GetFontCacheCountUsed() {
     return SkStrikeCache::GlobalStrikeCache()->getCacheCountUsed();
 }
 
-int SkGraphics::GetFontCachePointSizeLimit() {
-    return SkStrikeCache::GlobalStrikeCache()->getCachePointSizeLimit();
-}
-
-int SkGraphics::SetFontCachePointSizeLimit(int limit) {
-    return SkStrikeCache::GlobalStrikeCache()->setCachePointSizeLimit(limit);
-}
-
 void SkGraphics::PurgeFontCache() {
     SkStrikeCache::GlobalStrikeCache()->purgeAll();
     SkTypefaceCache::PurgeAll();
+}
+
+extern bool gSkVMAllowJIT;
+
+void SkGraphics::AllowJIT() {
+    gSkVMAllowJIT = true;
 }

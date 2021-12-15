@@ -4,10 +4,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkString.h"
 
 /**
    Benchmarks that try to emulate a particular Skia call pattern observed in Chrome.
@@ -460,8 +460,8 @@ public:
 
 protected:
 
-    virtual const char* onGetName() { return "chrome_scrollGmail"; }
-    virtual void onDraw(int loops, SkCanvas* canvas) {
+    const char* onGetName() override { return "chrome_scrollGmail"; }
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkDEBUGCODE(this->validateBounds(canvas));
         SkPaint paint;
         this->setupPaint(&paint);
@@ -473,11 +473,11 @@ protected:
             }
         }
     }
-    virtual SkIPoint onGetSize() { return SkIPoint::Make(W, H); }
+    SkIPoint onGetSize() override { return SkIPoint::Make(W, H); }
 
     void setRectangle(SkRect& current, int i) {
-        current.set(0, 0,
-                    SkIntToScalar(gmailScrollingRectSpec[i*3+1]), SkIntToScalar(gmailScrollingRectSpec[i*3+2]));
+        current.setWH(SkIntToScalar(gmailScrollingRectSpec[i*3+1]),
+                      SkIntToScalar(gmailScrollingRectSpec[i*3+2]));
     }
     void validateBounds(SkCanvas* canvas) {
 #ifdef SK_DEBUG
@@ -489,7 +489,7 @@ protected:
 
 
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 // Disabled this benchmark: it takes 15x longer than any other benchmark

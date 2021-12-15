@@ -7,8 +7,8 @@
 #ifndef SkSampledCodec_DEFINED
 #define SkSampledCodec_DEFINED
 
-#include "SkAndroidCodec.h"
-#include "SkCodec.h"
+#include "include/codec/SkAndroidCodec.h"
+#include "include/codec/SkCodec.h"
 
 /**
  *  This class implements the functionality of SkAndroidCodec.  Scaling will
@@ -16,7 +16,7 @@
  */
 class SkSampledCodec : public SkAndroidCodec {
 public:
-    explicit SkSampledCodec(SkCodec*, ExifOrientationBehavior);
+    explicit SkSampledCodec(SkCodec*);
 
     ~SkSampledCodec() override {}
 
@@ -54,6 +54,6 @@ private:
     SkCodec::Result sampledDecode(const SkImageInfo& info, void* pixels, size_t rowBytes,
             const AndroidOptions& options);
 
-    typedef SkAndroidCodec INHERITED;
+    using INHERITED = SkAndroidCodec;
 };
 #endif // SkSampledCodec_DEFINED

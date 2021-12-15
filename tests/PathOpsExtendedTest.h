@@ -7,11 +7,11 @@
 #ifndef PathOpsExtendedTest_DEFINED
 #define PathOpsExtendedTest_DEFINED
 
-#include "SkBitmap.h"
-#include "SkPath.h"
-#include "SkPathOpsTypes.h"
-#include "SkStream.h"
-#include "Test.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkStream.h"
+#include "src/pathops/SkPathOpsTypes.h"
+#include "tests/Test.h"
 
 struct PathOpsThreadState;
 
@@ -57,7 +57,6 @@ void RunTestSet(skiatest::Reporter* reporter, TestDesc tests[], size_t count,
                 void (*firstTest)(skiatest::Reporter* , const char* filename),
                 void (*skipTest)(skiatest::Reporter* , const char* filename),
                 void (*stopTest)(skiatest::Reporter* , const char* filename), bool reverse);
-void ShowTestName(PathOpsThreadState* data, int a, int b, int c, int d);
 void ShowFunctionHeader(const char* name);
 void ShowPath(const SkPath& path, const char* pathName);
 void ShowOp(SkPathOp op, const char* pathOne, const char* pathTwo);

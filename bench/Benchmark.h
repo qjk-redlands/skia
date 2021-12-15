@@ -8,10 +8,10 @@
 #ifndef Benchmark_DEFINED
 #define Benchmark_DEFINED
 
-#include "SkPoint.h"
-#include "SkRefCnt.h"
-#include "SkString.h"
-#include "../tools/Registry.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkString.h"
+#include "tools/Registry.h"
 
 #define DEF_BENCH3(code, N) \
     static BenchRegistry gBench##N([](void*) -> Benchmark* { code; });
@@ -28,6 +28,7 @@
  */
 
 struct GrContextOptions;
+class GrRecordingContext;
 class SkCanvas;
 class SkPaint;
 
@@ -79,7 +80,15 @@ public:
 
     virtual void getGpuStats(SkCanvas*, SkTArray<SkString>* keys, SkTArray<double>* values) {}
 
+    // Replaces the GrRecordingContext's dmsaaStats() with a single frame of this benchmark.
+    virtual bool getDMSAAStats(GrRecordingContext*) { return false; }
+
+    // Count of units (pixels, whatever) being exercised, to scale timing by.
+    int getUnits() const { return fUnits; }
+
 protected:
+    void setUnits(int units) { SkASSERT(units > 0); fUnits = units; }
+
     virtual void setupPaint(SkPaint* paint);
 
     virtual const char* onGetName() = 0;
@@ -96,7 +105,9 @@ protected:
     virtual SkIPoint onGetSize();
 
 private:
-    typedef SkRefCnt INHERITED;
+    int fUnits = 1;
+
+    using INHERITED = SkRefCnt;
 };
 
 typedef sk_tools::Registry<Benchmark*(*)(void*)> BenchRegistry;

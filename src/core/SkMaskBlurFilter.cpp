@@ -5,15 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkMaskBlurFilter.h"
+#include "src/core/SkMaskBlurFilter.h"
 
-#include "SkArenaAlloc.h"
-#include "SkColorPriv.h"
-#include "SkGaussFilter.h"
-#include "SkMalloc.h"
-#include "SkNx.h"
-#include "SkTemplates.h"
-#include "SkTo.h"
+#include "include/core/SkColorPriv.h"
+#include "include/private/SkMalloc.h"
+#include "include/private/SkNx.h"
+#include "include/private/SkTPin.h"
+#include "include/private/SkTemplates.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkGaussFilter.h"
 
 #include <cmath>
 #include <climits>
@@ -195,7 +196,7 @@ public:
         }
 
     private:
-        static constexpr uint64_t kHalf = static_cast<uint64_t>(1) << 31;
+        inline static constexpr uint64_t kHalf = static_cast<uint64_t>(1) << 31;
 
         uint8_t finalScale(uint32_t sum) const {
             return SkTo<uint8_t>((fWeight * sum + kHalf) >> 32);
@@ -236,21 +237,23 @@ public:
 
 } // namespace
 
-// NB 136 is the largest sigma that will not cause a buffer full of 255 mask values to overflow
-// using the Gauss filter. It also limits the size of buffers used hold intermediate values.
+// NB 135 is the largest sigma that will not cause a buffer full of 255 mask values to overflow
+// using the Gauss filter. It also limits the size of buffers used hold intermediate values. The
+// additional + 1 added to window represents adding one more leading element before subtracting the
+// trailing element.
 // Explanation of maximums:
-//   sum0 = window * 255
-//   sum1 = window * sum0 -> window * window * 255
-//   sum2 = window * sum1 -> window * window * window * 255 -> window^3 * 255
+//   sum0 = (window + 1) * 255
+//   sum1 = (window + 1) * sum0 -> (window + 1) * (window + 1) * 255
+//   sum2 = (window + 1) * sum1 -> (window + 1) * (window + 1) * (window + 1) * 255 -> window^3 * 255
 //
-//   The value window^3 * 255 must fit in a uint32_t. So,
-//      window^3 < 2^32. window = 255.
+//   The value (window + 1)^3 * 255 must fit in a uint32_t. So,
+//      (window + 1)^3 * 255 < 2^32. window = 255.
 //
-//   window = floor(sigma * 3 * sqrt(2 * kPi) / 4 + 0.5)
-//   For window <= 255, the largest value for sigma is 136.
+//   window = floor(sigma * 3 * sqrt(2 * kPi) / 4)
+//   For window <= 255, the largest value for sigma is 135.
 SkMaskBlurFilter::SkMaskBlurFilter(double sigmaW, double sigmaH)
-    : fSigmaW{SkTPin(sigmaW, 0.0, 136.0)}
-    , fSigmaH{SkTPin(sigmaH, 0.0, 136.0)}
+    : fSigmaW{SkTPin(sigmaW, 0.0, 135.0)}
+    , fSigmaH{SkTPin(sigmaH, 0.0, 135.0)}
 {
     SkASSERT(sigmaW >= 0);
     SkASSERT(sigmaH >= 0);
@@ -989,6 +992,10 @@ SkIPoint SkMaskBlurFilter::blur(const SkMask& src, SkMask* dst) const {
     int tmpW = srcH,
         tmpH = dstW;
 
+    // Make sure not to overflow the multiply for the tmp buffer size.
+    if (tmpH > std::numeric_limits<int>::max() / tmpW) {
+        return {0, 0};
+    }
     auto tmp = alloc.makeArrayDefault<uint8_t>(tmpW * tmpH);
 
     // Blur horizontally, and transpose.

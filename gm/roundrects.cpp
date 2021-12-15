@@ -5,17 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlurDrawLooper.h"
-#include "SkBlurMaskFilter.h"
-#include "SkColorFilter.h"
-#include "SkGradientShader.h"
-#include "SkMatrix.h"
-#include "SkRRect.h"
-#include "SkRandom.h"
-#include "SkRect.h"
-#include "SkTArray.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/private/SkTArray.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 namespace skiagm {
 
@@ -140,9 +147,9 @@ protected:
     void onDraw(SkCanvas* canvas) override {
         SkRandom rand(1);
         canvas->translate(20 * SK_Scalar1, 20 * SK_Scalar1);
-        const SkRect rect = SkRect::MakeLTRB(-20, -30, 20, 30);
-        SkRRect circleRect;
-        circleRect.setRectXY(rect, 5, 5);
+        const SkRect kRect = SkRect::MakeLTRB(-20, -30, 20, 30);
+        SkRRect circleRRect;
+        circleRRect.setRectXY(kRect, 5, 5);
 
         const SkScalar kXStart = 60.0f;
         const SkScalar kYStart = 80.0f;
@@ -171,8 +178,8 @@ protected:
                 SkColor color = gen_color(&rand);
                 fPaints[i].setColor(color);
 
-                canvas->drawRect(rect, rectPaint);
-                canvas->drawRRect(circleRect, fPaints[i]);
+                canvas->drawRect(kRect, rectPaint);
+                canvas->drawRRect(circleRRect, fPaints[i]);
 
                 canvas->restore();
 
@@ -276,8 +283,8 @@ protected:
             fPaints[i].setColor(color);
             fPaints[i].setShader(shader);
 
-            canvas->drawRect(rect, rectPaint);
-            canvas->drawRRect(circleRect, fPaints[i]);
+            canvas->drawRect(kRect, rectPaint);
+            canvas->drawRRect(circleRRect, fPaints[i]);
 
             fPaints[i].setShader(nullptr);
 
@@ -299,7 +306,7 @@ protected:
 
             for (int i = 0; i < 4; ++i) {
                 SkRRect circleRect;
-                circleRect.setRectXY(rect, radii[i][0], radii[i][1]);
+                circleRect.setRectXY(kRect, radii[i][0], radii[i][1]);
 
                 canvas->save();
                 // position the roundrect, and make it at off-integer coords.
@@ -368,11 +375,11 @@ private:
     SkTArray<SkPaint> fPaints;
     SkTArray<SkMatrix> fMatrices;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new RoundRectGM; )
 
-}
+}  // namespace skiagm

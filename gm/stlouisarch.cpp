@@ -5,10 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkTArray.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/private/SkTArray.h"
 
 namespace skiagm {
 
@@ -87,11 +91,11 @@ protected:
 
 private:
     SkTArray<SkPath> fPaths;
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new StLouisArchGM; )
 
-}
+}  // namespace skiagm

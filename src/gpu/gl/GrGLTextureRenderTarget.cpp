@@ -5,34 +5,37 @@
  * found in the LICENSE file.
  */
 
-#include "GrGLTextureRenderTarget.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrGLGpu.h"
-#include "GrTexturePriv.h"
-#include "SkTraceMemoryDump.h"
+#include "src/gpu/gl/GrGLTextureRenderTarget.h"
+
+#include "include/core/SkTraceMemoryDump.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrTexture.h"
+#include "src/gpu/gl/GrGLGpu.h"
 
 GrGLTextureRenderTarget::GrGLTextureRenderTarget(GrGLGpu* gpu,
                                                  SkBudgeted budgeted,
-                                                 const GrSurfaceDesc& desc,
-                                                 const GrGLTexture::IDDesc& texIDDesc,
-                                                 const GrGLRenderTarget::IDDesc& rtIDDesc,
-                                                 GrMipMapsStatus mipMapsStatus)
-        : GrSurface(gpu, desc)
-        , GrGLTexture(gpu, desc, texIDDesc, mipMapsStatus)
-        , GrGLRenderTarget(gpu, desc, texIDDesc.fInfo.fFormat, rtIDDesc) {
+                                                 int sampleCount,
+                                                 const GrGLTexture::Desc& texDesc,
+                                                 const GrGLRenderTarget::IDs& rtIDs,
+                                                 GrMipmapStatus mipmapStatus)
+        : GrSurface(gpu, texDesc.fSize, GrProtected::kNo)
+        , GrGLTexture(gpu, texDesc, nullptr, mipmapStatus)
+        , GrGLRenderTarget(gpu, texDesc.fSize, texDesc.fFormat, sampleCount, rtIDs) {
     this->registerWithCache(budgeted);
 }
 
 GrGLTextureRenderTarget::GrGLTextureRenderTarget(GrGLGpu* gpu,
-                                                 const GrSurfaceDesc& desc,
-                                                 const GrGLTexture::IDDesc& texIDDesc,
-                                                 const GrGLRenderTarget::IDDesc& rtIDDesc,
+                                                 int sampleCount,
+                                                 const GrGLTexture::Desc& texDesc,
+                                                 sk_sp<GrGLTextureParameters> parameters,
+                                                 const GrGLRenderTarget::IDs& rtIDs,
                                                  GrWrapCacheable cacheable,
-                                                 GrMipMapsStatus mipMapsStatus)
-        : GrSurface(gpu, desc)
-        , GrGLTexture(gpu, desc, texIDDesc, mipMapsStatus)
-        , GrGLRenderTarget(gpu, desc, texIDDesc.fInfo.fFormat, rtIDDesc) {
+                                                 GrMipmapStatus mipmapStatus)
+        : GrSurface(gpu, texDesc.fSize, GrProtected::kNo)
+        , GrGLTexture(gpu, texDesc, std::move(parameters), mipmapStatus)
+        , GrGLRenderTarget(gpu, texDesc.fSize, texDesc.fFormat, sampleCount,
+                           rtIDs) {
     this->registerWithCacheWrapped(cacheable);
 }
 
@@ -50,22 +53,26 @@ void GrGLTextureRenderTarget::dumpMemoryStatistics(
 #endif
 }
 
-bool GrGLTextureRenderTarget::canAttemptStencilAttachment() const {
-    // The RT FBO of GrGLTextureRenderTarget is never created from a
-    // wrapped FBO, so we only care about the flag.
-    return !this->getGpu()->getContext()->priv().caps()->avoidStencilBuffers();
+bool GrGLTextureRenderTarget::canAttemptStencilAttachment(bool useMultisampleFBO) const {
+    // This cap should have been handled at a higher level.
+    SkASSERT(!this->getGpu()->getContext()->priv().caps()->avoidStencilBuffers());
+    // The RT FBO of GrGLTextureRenderTarget is never created from a wrapped FBO.
+    return true;
 }
 
 sk_sp<GrGLTextureRenderTarget> GrGLTextureRenderTarget::MakeWrapped(
-        GrGLGpu* gpu, const GrSurfaceDesc& desc, const GrGLTexture::IDDesc& texIDDesc,
-        const GrGLRenderTarget::IDDesc& rtIDDesc, GrWrapCacheable cacheable,
-        GrMipMapsStatus mipMapsStatus) {
-    return sk_sp<GrGLTextureRenderTarget>(
-            new GrGLTextureRenderTarget(gpu, desc, texIDDesc, rtIDDesc, cacheable, mipMapsStatus));
+        GrGLGpu* gpu,
+        int sampleCount,
+        const GrGLTexture::Desc& texDesc,
+        sk_sp<GrGLTextureParameters> parameters,
+        const GrGLRenderTarget::IDs& rtIDs,
+        GrWrapCacheable cacheable,
+        GrMipmapStatus mipmapStatus) {
+    return sk_sp<GrGLTextureRenderTarget>(new GrGLTextureRenderTarget(
+            gpu, sampleCount, texDesc, std::move(parameters), rtIDs, cacheable, mipmapStatus));
 }
 
 size_t GrGLTextureRenderTarget::onGpuMemorySize() const {
-    return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
-                                    this->numSamplesOwnedPerPixel(),
-                                    this->texturePriv().mipMapped());
+    return GrSurface::ComputeSize(this->backendFormat(), this->dimensions(),
+                                  this->totalMemorySamplesPerPixel(), this->mipmapped());
 }

@@ -5,16 +5,19 @@
  * found in the LICENSE file.
  */
 
-#include "SkAutoMalloc.h"
-#include "SkBlendMode.h"
-#include "SkColor.h"
-#include "SkColorFilter.h"
-#include "SkRandom.h"
-#include "SkReadBuffer.h"
-#include "SkRefCnt.h"
-#include "SkWriteBuffer.h"
-#include "SkTypes.h"
-#include "Test.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkColorMatrix.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkColorFilterPriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "tests/Test.h"
 
 class SkFlattenable;
 
@@ -32,26 +35,6 @@ static sk_sp<SkColorFilter> reincarnate_colorfilter(SkFlattenable* obj) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-
-static sk_sp<SkColorFilter> make_filter() {
-    // pick a filter that cannot compose with itself via newComposed()
-    return SkColorFilters::Blend(SK_ColorRED, SkBlendMode::kColorBurn);
-}
-
-static void test_composecolorfilter_limit(skiatest::Reporter* reporter) {
-    // Test that CreateComposeFilter() has some finite limit (i.e. that the factory can return null)
-    const int way_too_many = 100;
-    auto parent(make_filter());
-    for (int i = 2; i < way_too_many; ++i) {
-        auto filter(make_filter());
-        parent = parent->makeComposed(filter);
-        if (nullptr == parent) {
-            REPORTER_ASSERT(reporter, i > 2); // we need to have succeeded at least once!
-            return;
-        }
-    }
-    REPORTER_ASSERT(reporter, false); // we never saw a nullptr :(
-}
 
 #define ILLEGAL_MODE    ((SkBlendMode)-1)
 
@@ -82,7 +65,7 @@ DEF_TEST(ColorFilter, reporter) {
 
 //        SkDebugf("--- mc [%d %x] ", mode, color);
 
-        REPORTER_ASSERT(reporter, cf->asColorMode(&c, (SkBlendMode*)&m));
+        REPORTER_ASSERT(reporter, cf->asAColorMode(&c, (SkBlendMode*)&m));
         // handle special-case folding by the factory
         if (SkBlendMode::kClear == (SkBlendMode)mode) {
             if (c != expectedColor) {
@@ -104,11 +87,44 @@ DEF_TEST(ColorFilter, reporter) {
 
             SkColor c2 = ~color;
             SkBlendMode m2 = ILLEGAL_MODE;
-            REPORTER_ASSERT(reporter, cf2->asColorMode(&c2, (SkBlendMode*)&m2));
+            REPORTER_ASSERT(reporter, cf2->asAColorMode(&c2, (SkBlendMode*)&m2));
             REPORTER_ASSERT(reporter, c2 == expectedColor);
             REPORTER_ASSERT(reporter, m2 == expectedMode);
         }
     }
+}
 
-    test_composecolorfilter_limit(reporter);
+DEF_TEST(WorkingFormatFilterFlags, r) {
+    {
+        // A matrix with final row 0,0,0,1,0 shouldn't change alpha.
+        sk_sp<SkColorFilter> cf = SkColorFilters::Matrix({1,0,0,0,0,
+                                                          0,1,0,0,0,
+                                                          0,0,1,0,0,
+                                                          0,0,0,1,0});
+        REPORTER_ASSERT(r, cf->isAlphaUnchanged());
+
+        // No working format change will itself change alpha.
+        SkAlphaType unpremul = kUnpremul_SkAlphaType;
+        cf = SkColorFilterPriv::WithWorkingFormat(std::move(cf),
+                                                  &SkNamedTransferFn::kLinear,
+                                                  &SkNamedGamut::kDisplayP3,
+                                                  &unpremul);
+        REPORTER_ASSERT(r, cf->isAlphaUnchanged());
+    }
+
+    {
+        // Here's a matrix that definitely does change alpha.
+        sk_sp<SkColorFilter> cf = SkColorFilters::Matrix({1,0,0,0,0,
+                                                          0,1,0,0,0,
+                                                          0,0,1,0,0,
+                                                          0,0,0,0,1});
+        REPORTER_ASSERT(r, !cf->isAlphaUnchanged());
+
+        SkAlphaType unpremul = kUnpremul_SkAlphaType;
+        cf = SkColorFilterPriv::WithWorkingFormat(std::move(cf),
+                                                  &SkNamedTransferFn::kLinear,
+                                                  &SkNamedGamut::kDisplayP3,
+                                                  &unpremul);
+        REPORTER_ASSERT(r, !cf->isAlphaUnchanged());
+    }
 }

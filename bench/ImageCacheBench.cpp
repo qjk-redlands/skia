@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkResourceCache.h"
+#include "bench/Benchmark.h"
+#include "src/core/SkResourceCache.h"
 
 namespace {
 static void* gGlobalAddress;
@@ -33,7 +33,7 @@ struct TestRec : public SkResourceCache::Rec {
         return true;
     }
 };
-}
+}  // namespace
 
 class ImageCacheBench : public Benchmark {
     SkResourceCache fCache;
@@ -69,7 +69,7 @@ protected:
     }
 
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

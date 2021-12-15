@@ -4,14 +4,14 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "SkBlurMask.h"
-#include "SkCanvas.h"
-#include "SkColorMatrixFilter.h"
-#include "SkDiscretePathEffect.h"
-#include "SkEmbossMaskFilter.h"
-#include "SkGradientShader.h"
-#include "SkPaint.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/effects/SkColorMatrixFilter.h"
+#include "include/effects/SkDiscretePathEffect.h"
+#include "include/effects/SkGradientShader.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkBlurMask.h"
+#include "src/effects/SkEmbossMaskFilter.h"
 
 
 //#define COLOR 0xFFFF8844
@@ -82,23 +82,13 @@ public:
             gPaintProcs[i](&fPaint[i]);
         }
 
-        SkColorMatrix cm;
-        cm.setRotate(SkColorMatrix::kG_Axis, 180);
-        cm.setIdentity();
-
         this->setBGColor(0xFFDDDDDD);
     }
 
 protected:
-    virtual bool onQuery(Sample::Event* evt) {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "Effects");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("Effects"); }
 
-    virtual void onDrawContent(SkCanvas* canvas) {
+    void onDrawContent(SkCanvas* canvas) override {
         canvas->scale(3, 3);
         canvas->translate(10, 30);
         for (size_t i = 0; i < SK_ARRAY_COUNT(fPaint); i++) {
@@ -108,7 +98,7 @@ protected:
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

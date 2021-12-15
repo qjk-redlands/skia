@@ -4,8 +4,18 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "gm.h"
-#include "SkRandom.h"
+
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
+
+#include <stddef.h>
 
 namespace skiagm {
 
@@ -62,11 +72,42 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
-
-//////////////////////////////////////////////////////////////////////////////
-
 DEF_GM( return new PointsGM; )
+}  // namespace skiagm
 
+#include "include/core/SkMaskFilter.h"
+
+DEF_SIMPLE_GM(points_maskfilter, canvas, 512, 256) {
+    constexpr int N = 30;
+    SkPoint pts[N];
+
+    SkRandom rand;
+    for (SkPoint& p : pts) {
+        p.fX = rand.nextF() * 220 + 18;
+        p.fY = rand.nextF() * 220 + 18;
+    }
+
+    auto mf = SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, 6);
+    const SkPaint::Cap caps[] = { SkPaint::kSquare_Cap, SkPaint::kRound_Cap };
+
+    SkPaint paint;
+    paint.setAntiAlias(true);
+    paint.setStroke(true);
+    paint.setStrokeWidth(10);
+
+    for (auto cap : caps) {
+        paint.setStrokeCap(cap);
+
+        paint.setMaskFilter(mf);
+        paint.setColor(SK_ColorBLACK);
+        canvas->drawPoints(SkCanvas::kPoints_PointMode, N, pts, paint);
+
+        paint.setMaskFilter(nullptr);
+        paint.setColor(SK_ColorRED);
+        canvas->drawPoints(SkCanvas::kPoints_PointMode, N, pts, paint);
+
+        canvas->translate(256, 0);
+    }
 }

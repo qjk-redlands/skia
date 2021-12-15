@@ -5,16 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "tools/ToolUtils.h"
 
-#include "Resources.h"
-#include "SkCanvas.h"
-#include "SkFontMetrics.h"
-#include "SkStream.h"
-#include "SkTextBlob.h"
-#include "SkTo.h"
-#include "SkTypeface.h"
+#include <string.h>
+#include <initializer_list>
 
 static sk_sp<SkTextBlob> make_hpos_test_blob_utf8(const char* text, const SkFont& font) {
     constexpr SkTextEncoding enc = SkTextEncoding::kUTF8;
@@ -69,14 +76,13 @@ protected:
             font.setSize(textSize);
             font.getMetrics(&metrics);
             y += -metrics.fAscent;
-            canvas->drawSimpleText(text, strlen(text), kUTF8_SkTextEncoding, 10, y, font, paint);
+            canvas->drawSimpleText(text, strlen(text), SkTextEncoding::kUTF8, 10, y, font, paint);
             y += metrics.fDescent + metrics.fLeading;
         }
-
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 class ScaledEmojiPosGM : public GM {
@@ -131,16 +137,81 @@ protected:
 
             y += metrics.fDescent + metrics.fLeading;
         }
-
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
+};
+
+class ScaledEmojiPerspectiveGM : public GM {
+public:
+    ScaledEmojiPerspectiveGM() {}
+
+protected:
+    struct EmojiFont {
+        sk_sp<SkTypeface> fTypeface;
+        const char* fText;
+    } fEmojiFont;
+
+    void onOnceBeforeDraw() override {
+        fEmojiFont.fTypeface = ToolUtils::emoji_typeface();
+        fEmojiFont.fText     = ToolUtils::emoji_sample_text();
+    }
+
+    SkString onShortName() override {
+        return SkString("scaledemojiperspective");
+    }
+
+    SkISize onISize() override { return SkISize::Make(1200, 1200); }
+
+    void onDraw(SkCanvas* canvas) override {
+
+        canvas->drawColor(SK_ColorGRAY);
+        SkMatrix taper;
+        taper.setPerspY(-0.0025f);
+
+        SkPaint paint;
+        SkFont font;
+        font.setTypeface(fEmojiFont.fTypeface);
+        font.setSize(40);
+        const char* text = "\xF0\x9F\x98\x80"
+                           "\xE2\x99\xA2";  // 😀♢;
+        sk_sp<SkTextBlob> blob = make_hpos_test_blob_utf8(text, font);
+
+        // draw text at different point sizes
+        // Testing GPU bitmap path, SDF path with no scaling,
+        // SDF path with scaling, path rendering with scaling
+        SkFontMetrics metrics;
+        font.getMetrics(&metrics);
+        for (auto rotate : {0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0}) {
+            canvas->save();
+            SkMatrix perspective;
+            perspective.postTranslate(-600, -600);
+            perspective.postConcat(taper);
+            perspective.postRotate(rotate);
+            perspective.postTranslate(600, 600);
+            canvas->concat(perspective);
+            SkScalar y = 670;
+            for (int i = 0; i < 5; i++) {
+
+                y += -metrics.fAscent;
+
+                // Draw with an origin.
+                canvas->drawTextBlob(blob, 565, y, paint);
+
+                y += metrics.fDescent + metrics.fLeading;
+            }
+            canvas->restore();
+        }
+    }
+
+private:
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new ScaledEmojiGM;)
 DEF_GM(return new ScaledEmojiPosGM;)
-
-}
+DEF_GM(return new ScaledEmojiPerspectiveGM;)
+}  // namespace skiagm

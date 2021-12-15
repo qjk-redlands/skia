@@ -8,121 +8,201 @@
 #ifndef GrMtlCaps_DEFINED
 #define GrMtlCaps_DEFINED
 
-#include "GrCaps.h"
-#include "GrMtlStencilAttachment.h"
-#include "SkTDArray.h"
+#include "include/private/SkTDArray.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/mtl/GrMtlAttachment.h"
 
 #import <Metal/Metal.h>
 
-class GrShaderCaps;
+class GrMtlRenderTarget;
 
 /**
  * Stores some capabilities of a Mtl backend.
  */
 class GrMtlCaps : public GrCaps {
 public:
-    typedef GrMtlStencilAttachment::Format StencilFormat;
+    GrMtlCaps(const GrContextOptions& contextOptions, id<MTLDevice> device);
 
-    GrMtlCaps(const GrContextOptions& contextOptions, id<MTLDevice> device,
-              MTLFeatureSet featureSet);
+    bool isFormatSRGB(const GrBackendFormat&) const override;
 
-    bool isConfigTexturable(GrPixelConfig config) const override {
-        return SkToBool(fConfigTable[config].fFlags & ConfigInfo::kTextureable_Flag);
-    }
+    bool isFormatTexturable(const GrBackendFormat&, GrTextureType) const override;
+    bool isFormatTexturable(MTLPixelFormat) const;
 
-    int getRenderTargetSampleCount(int requestedCount, GrPixelConfig) const override;
-    int maxRenderTargetSampleCount(GrPixelConfig) const override;
+    bool isFormatCopyable(const GrBackendFormat&) const override { return true; }
 
-    bool surfaceSupportsReadPixels(const GrSurface*) const override { return true; }
+    bool isFormatAsColorTypeRenderable(GrColorType ct, const GrBackendFormat& format,
+                                       int sampleCount = 1) const override;
+    bool isFormatRenderable(const GrBackendFormat& format, int sampleCount) const override;
+    bool isFormatRenderable(MTLPixelFormat, int sampleCount) const;
 
-    bool isConfigCopyable(GrPixelConfig config) const override {
-        return true;
-    }
+    int getRenderTargetSampleCount(int requestedCount, const GrBackendFormat&) const override;
+    int getRenderTargetSampleCount(int requestedCount, MTLPixelFormat) const;
+
+    int maxRenderTargetSampleCount(const GrBackendFormat&) const override;
+    int maxRenderTargetSampleCount(MTLPixelFormat) const;
+
+    SupportedWrite supportedWritePixelsColorType(GrColorType surfaceColorType,
+                                                 const GrBackendFormat& surfaceFormat,
+                                                 GrColorType srcColorType) const override;
+
+    SurfaceReadPixelsSupport surfaceSupportsReadPixels(const GrSurface*) const override;
+
+    DstCopyRestrictions getDstCopyRestrictions(const GrRenderTargetProxy* src,
+                                               GrColorType ct) const override;
 
     /**
      * Returns both a supported and most prefered stencil format to use in draws.
      */
-    const StencilFormat& preferredStencilFormat() const {
+    MTLPixelFormat preferredStencilFormat() const {
         return fPreferredStencilFormat;
     }
 
-    bool canCopyAsBlit(GrPixelConfig dstConfig, int dstSampleCount, GrSurfaceOrigin dstOrigin,
-                       GrPixelConfig srcConfig, int srcSampleCount, GrSurfaceOrigin srcOrigin,
+    bool canCopyAsBlit(MTLPixelFormat dstFormat, int dstSampleCount,
+                       MTLPixelFormat srcFormat, int srcSampleCount,
                        const SkIRect& srcRect, const SkIPoint& dstPoint,
                        bool areDstSrcSameObj) const;
 
-    bool canCopyAsDraw(GrPixelConfig dstConfig, bool dstIsRenderable,
-                       GrPixelConfig srcConfig, bool srcIsTextureable) const;
+    bool canCopyAsResolve(MTLPixelFormat dstFormat, int dstSampleCount,
+                          MTLPixelFormat srcFormat, int srcSampleCount,
+                          bool srcIsRenderTarget, const SkISize srcDimensions,
+                          const SkIRect& srcRect,
+                          const SkIPoint& dstPoint,
+                          bool areDstSrcSameObj) const;
 
-    bool canCopyAsDrawThenBlit(GrPixelConfig dstConfig, GrPixelConfig srcConfig,
-                               bool srcIsTextureable) const;
+    GrBackendFormat getBackendFormatFromCompressionType(SkImage::CompressionType) const override;
 
-    bool initDescForDstCopy(const GrRenderTargetProxy* src, GrSurfaceDesc* desc, GrSurfaceOrigin*,
-                            bool* rectsMustMatch, bool* disallowSubrect) const override {
-        return false;
+    MTLPixelFormat getFormatFromColorType(GrColorType colorType) const {
+        int idx = static_cast<int>(colorType);
+        return fColorTypeToFormatTable[idx];
     }
 
-    GrPixelConfig validateBackendRenderTarget(const GrBackendRenderTarget&,
-                                              SkColorType) const override;
+    GrSwizzle getWriteSwizzle(const GrBackendFormat&, GrColorType) const override;
 
-    GrPixelConfig getConfigFromBackendFormat(const GrBackendFormat&, SkColorType) const override;
+    uint64_t computeFormatKey(const GrBackendFormat&) const override;
 
-    GrPixelConfig getYUVAConfigFromBackendFormat(const GrBackendFormat&) const override;
+    GrProgramDesc makeDesc(GrRenderTarget*,
+                           const GrProgramInfo&,
+                           ProgramDescOverrideFlags) const override;
+    MTLPixelFormat getStencilPixelFormat(const GrProgramDesc& desc);
 
-    GrBackendFormat getBackendFormatFromGrColorType(GrColorType ct,
-                                                    GrSRGBEncoded srgbEncoded) const override;
+    bool isMac() const { return fGPUFamily == GPUFamily::kMac; }
+    bool isApple() const { return fGPUFamily == GPUFamily::kApple; }
+
+    size_t getMinBufferAlignment() const { return this->isMac() ? 4 : 1; }
+
+    // if true, MTLStoreActionStoreAndMultiplesampleResolve is available
+    bool storeAndMultisampleResolveSupport() const { return fStoreAndMultisampleResolveSupport; }
+
+    // If true when doing MSAA draws, we will prefer to discard the MSAA attachment on load
+    // and stores. The use of this feature for specific draws depends on the render target having a
+    // resolve attachment, and if we need to load previous data the resolve attachment must
+    // be readable in a shader. Otherwise we will just write out and store the MSAA attachment
+    // like normal.
+    bool preferDiscardableMSAAAttachment() const { return fPreferDiscardableMSAAAttachment; }
+    bool renderTargetSupportsDiscardableMSAA(const GrMtlRenderTarget*) const;
+
+#if GR_TEST_UTILS
+    std::vector<TestFormatColorTypeCombination> getTestingCombinations() const override;
+#endif
+    void onDumpJSON(SkJSONWriter*) const override;
 
 private:
-    void initFeatureSet(MTLFeatureSet featureSet);
+    void initGPUFamily(id<MTLDevice> device);
 
-    void initStencilFormat(const id<MTLDevice> device);
+    void initStencilFormat(id<MTLDevice> device);
 
-    void initGrCaps(const id<MTLDevice> device);
+    void initGrCaps(id<MTLDevice> device);
     void initShaderCaps();
 
-    void initConfigTable();
+    void applyDriverCorrectnessWorkarounds(const GrContextOptions&, const id<MTLDevice>);
+
+    void initFormatTable();
 
     bool onSurfaceSupportsWritePixels(const GrSurface*) const override;
     bool onCanCopySurface(const GrSurfaceProxy* dst, const GrSurfaceProxy* src,
                           const SkIRect& srcRect, const SkIPoint& dstPoint) const override;
-    size_t onTransferFromOffsetAlignment(GrColorType bufferColorType) const override {
-        // Transfer buffers not yet supported.
-        return 0;
-    }
+    GrBackendFormat onGetDefaultBackendFormat(GrColorType) const override;
+    bool onAreColorTypeAndFormatCompatible(GrColorType, const GrBackendFormat&) const override;
 
-    struct ConfigInfo {
-        ConfigInfo() : fFlags(0) {}
+    SupportedRead onSupportedReadPixelsColorType(GrColorType, const GrBackendFormat&,
+                                                 GrColorType) const override;
+
+    GrSwizzle onGetReadSwizzle(const GrBackendFormat&, GrColorType) const override;
+
+    // ColorTypeInfo for a specific format
+    struct ColorTypeInfo {
+        GrColorType fColorType = GrColorType::kUnknown;
+        enum {
+            kUploadData_Flag = 0x1,
+            // Does Ganesh itself support rendering to this colorType & format pair. Renderability
+            // still additionally depends on if the format itself is renderable.
+            kRenderable_Flag = 0x2,
+        };
+        uint32_t fFlags = 0;
+
+        GrSwizzle fReadSwizzle;
+        GrSwizzle fWriteSwizzle;
+    };
+
+    struct FormatInfo {
+        uint32_t colorTypeFlags(GrColorType colorType) const {
+            for (int i = 0; i < fColorTypeInfoCount; ++i) {
+                if (fColorTypeInfos[i].fColorType == colorType) {
+                    return fColorTypeInfos[i].fFlags;
+                }
+            }
+            return 0;
+        }
 
         enum {
-            kTextureable_Flag = 0x1,
+            kTexturable_Flag  = 0x1,
             kRenderable_Flag  = 0x2, // Color attachment and blendable
             kMSAA_Flag        = 0x4,
             kResolve_Flag     = 0x8,
         };
-        // TODO: Put kMSAA_Flag back when MSAA is implemented
-        static const uint16_t kAllFlags = kTextureable_Flag | kRenderable_Flag |
-                                          /*kMSAA_Flag |*/ kResolve_Flag;
+        static const uint16_t kAllFlags = kTexturable_Flag | kRenderable_Flag |
+                                          kMSAA_Flag | kResolve_Flag;
 
-        uint16_t fFlags;
+        uint16_t fFlags = 0;
+
+        std::unique_ptr<ColorTypeInfo[]> fColorTypeInfos;
+        int fColorTypeInfoCount = 0;
     };
-    ConfigInfo fConfigTable[kGrPixelConfigCnt];
+#ifdef SK_BUILD_FOR_IOS
+    inline static constexpr size_t kNumMtlFormats = 17;
+#else
+    inline static constexpr size_t kNumMtlFormats = 16;
+#endif
+    static size_t GetFormatIndex(MTLPixelFormat);
+    FormatInfo fFormatTable[kNumMtlFormats];
 
-    enum class Platform {
+    const FormatInfo& getFormatInfo(const MTLPixelFormat pixelFormat) const {
+        size_t index = GetFormatIndex(pixelFormat);
+        return fFormatTable[index];
+    }
+
+    MTLPixelFormat fColorTypeToFormatTable[kGrColorTypeCnt];
+    void setColorType(GrColorType, std::initializer_list<MTLPixelFormat> formats);
+
+    enum class GPUFamily {
         kMac,
-        kIOS
+        kApple,
     };
-    bool isMac() { return Platform::kMac == fPlatform; }
-    bool isIOS() { return Platform::kIOS == fPlatform; }
+    bool getGPUFamily(id<MTLDevice> device, GPUFamily* gpuFamily, int* group);
+    bool getGPUFamilyFromFeatureSet(id<MTLDevice> device, GrMtlCaps::GPUFamily* gpuFamily,
+                                    int* group);
 
-    Platform fPlatform;
+    GPUFamily fGPUFamily;
     int fFamilyGroup;
-    int fVersion;
 
     SkTDArray<int> fSampleCounts;
 
-    StencilFormat fPreferredStencilFormat;
+    MTLPixelFormat fPreferredStencilFormat;
 
-    typedef GrCaps INHERITED;
+    bool fStoreAndMultisampleResolveSupport : 1;
+    bool fPreferDiscardableMSAAAttachment : 1;
+
+    using INHERITED = GrCaps;
 };
 
 #endif

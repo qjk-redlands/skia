@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkBlendModePriv.h"
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "SkPaint.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/effects/SkGradientShader.h"
+#include "src/core/SkBlendModePriv.h"
 
 #include <ctype.h>
 
@@ -40,7 +40,6 @@ static inline SkColor start_color(ColorType ct) {
             return SK_ColorWHITE;
     }
     SK_ABORT("Shouldn't reach here.");
-    return 0;
 }
 
 static inline SkColor advance_color(SkColor old, ColorType ct, int step) {
@@ -60,7 +59,6 @@ static inline SkColor advance_color(SkColor old, ColorType ct, int step) {
             SK_ABORT("Can't get here");
     }
     SK_ABORT("Shouldn't reach here.");
-    return 0;
 }
 
 static SkString to_lower(const char* str) {
@@ -184,7 +182,7 @@ private:
     SkBlendMode fMode;
     SkString    fName;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 #define DEF_FOR_COLOR_TYPES(aa, blend) \

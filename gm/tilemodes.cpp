@@ -4,20 +4,31 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkColorFilter.h"
-#include "SkMaskFilter.h"
-#include "SkPath.h"
-#include "SkRegion.h"
-#include "SkShader.h"
-#include "SkTextUtils.h"
-#include "SkUTF.h"
-#include "ToolUtils.h"
-#include "gm.h"
-// effects
-#include "SkGradientShader.h"
-#include "SkBlurDrawLooper.h"
 
-#include "Resources.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/utils/SkTextUtils.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
+
+#include <functional>
 
 static void makebm(SkBitmap* bm, SkColorType ct, int w, int h) {
     bm->allocPixels(SkImageInfo::Make(w, h, ct, kPremul_SkAlphaType));
@@ -35,10 +46,9 @@ static void makebm(SkBitmap* bm, SkColorType ct, int w, int h) {
     canvas.drawPaint(paint);
 }
 
-static void setup(SkPaint* paint, const SkBitmap& bm, bool filter,
+static void setup(SkPaint* paint, const SkBitmap& bm, SkFilterMode fm,
                   SkTileMode tmx, SkTileMode tmy) {
-    paint->setShader(bm.makeShader(tmx, tmy));
-    paint->setFilterQuality(filter ? kLow_SkFilterQuality : kNone_SkFilterQuality);
+    paint->setShader(bm.makeShader(tmx, tmy, SkSamplingOptions(fm)));
 }
 
 constexpr SkColorType gColorTypes[] = {
@@ -80,7 +90,7 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         SkPaint textPaint;
-        SkFont  font(ToolUtils::create_portable_typeface(), 12);
+        SkFont  font(ToolUtils::create_portable_typeface());
 
         int size = fPowerOfTwoSize ? kPOTSize : kNPOTSize;
 
@@ -88,7 +98,7 @@ protected:
 
         const char* gConfigNames[] = { "8888", "565", "4444" };
 
-        constexpr bool gFilters[] = { false, true };
+        constexpr SkFilterMode gFilters[] = { SkFilterMode::kNearest, SkFilterMode::kLinear };
         static const char* gFilterNames[] = { "point", "bilinear" };
 
         constexpr SkTileMode gModes[] = {
@@ -103,7 +113,6 @@ protected:
                 SkPaint p;
                 p.setDither(true);
                 SkString str;
-                SkFont   font(ToolUtils::create_portable_typeface());
                 str.printf("[%s,%s]", gModeNames[kx], gModeNames[ky]);
 
                 SkTextUtils::DrawString(canvas, str.c_str(), x + r.width()/2, y, font, p,
@@ -148,7 +157,7 @@ protected:
 
 private:
     bool fPowerOfTwoSize;
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 DEF_GM( return new TilingGM(true); )
 DEF_GM( return new TilingGM(false); )
@@ -159,7 +168,7 @@ constexpr int gHeight = 32;
 static sk_sp<SkShader> make_bm(SkTileMode tx, SkTileMode ty) {
     SkBitmap bm;
     makebm(&bm, kN32_SkColorType, gWidth, gHeight);
-    return bm.makeShader(tx, ty);
+    return bm.makeShader(tx, ty, SkSamplingOptions());
 }
 
 static sk_sp<SkShader> make_grad(SkTileMode tx, SkTileMode ty) {
@@ -185,17 +194,13 @@ typedef sk_sp<SkShader> (*ShaderProc)(SkTileMode, SkTileMode);
 
 class Tiling2GM : public skiagm::GM {
     ShaderProc fProc;
-    SkString   fName;
+    const char* fName;
+
 public:
-    Tiling2GM(ShaderProc proc, const char name[]) : fProc(proc) {
-        fName.printf("tilemode_%s", name);
-    }
+    Tiling2GM(ShaderProc proc, const char name[]) : fProc(proc), fName(name) {}
 
-protected:
-
-    SkString onShortName() override {
-        return fName;
-    }
+private:
+    SkString onShortName() override { return SkString(fName); }
 
     SkISize onISize() override { return SkISize::Make(650, 610); }
 
@@ -249,16 +254,12 @@ protected:
             y += r.height() * 4 / 3;
         }
     }
-
-private:
-    typedef skiagm::GM INHERITED;
 };
-DEF_GM( return new Tiling2GM(make_bm, "bitmap"); )
-DEF_GM( return new Tiling2GM(make_grad, "gradient"); )
+
+DEF_GM( return new Tiling2GM(make_bm,   "tilemode_bitmap"); )
+DEF_GM( return new Tiling2GM(make_grad, "tilemode_gradient"); )
 
 ////////////////////
-
-#include "SkGradientShader.h"
 
 DEF_SIMPLE_GM(tilemode_decal, canvas, 720, 1100) {
     auto img = GetResourceAsImage("images/mandrill_128.png");
@@ -271,18 +272,15 @@ DEF_SIMPLE_GM(tilemode_decal, canvas, 720, 1100) {
     std::function<void(SkPaint*, SkTileMode, SkTileMode)> shader_procs[] = {
         [img](SkPaint* paint, SkTileMode tx, SkTileMode ty) {
             // Test no filtering with decal mode
-            paint->setShader(img->makeShader(tx, ty));
-            paint->setFilterQuality(kNone_SkFilterQuality);
+            paint->setShader(img->makeShader(tx, ty, SkSamplingOptions(SkFilterMode::kNearest)));
         },
         [img](SkPaint* paint, SkTileMode tx, SkTileMode ty) {
             // Test bilerp approximation for decal mode (or clamp to border HW)
-            paint->setShader(img->makeShader(tx, ty));
-            paint->setFilterQuality(kLow_SkFilterQuality);
+            paint->setShader(img->makeShader(tx, ty, SkSamplingOptions(SkFilterMode::kLinear)));
         },
         [img](SkPaint* paint, SkTileMode tx, SkTileMode ty) {
             // Test bicubic filter with decal mode
-            paint->setShader(img->makeShader(tx, ty));
-            paint->setFilterQuality(kHigh_SkFilterQuality);
+            paint->setShader(img->makeShader(tx, ty, SkSamplingOptions(SkCubicResampler::Mitchell())));
         },
         [img](SkPaint* paint, SkTileMode tx, SkTileMode ty) {
             SkColor colors[] = { SK_ColorRED, SK_ColorBLUE };

@@ -5,33 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
+#include "bench/Benchmark.h"
 
-#include "SkCanvas.h"
-#include "SkShader.h"
-#include "SkGradientShader.h"
-#include "SkString.h"
-#include "SkColor.h"
-#include "SkPaint.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
+#include "include/effects/SkGradientShader.h"
 
-static const char* get_tilemode_name(SkTileMode tilemode) {
-    switch (tilemode) {
-        case SkTileMode::kClamp:
-            return "clamp";
-        case SkTileMode::kRepeat:
-            return "repeat";
-        case SkTileMode::kMirror:
-            return "mirror";
-        case SkTileMode::kDecal:
-            return "decal";
-    }
-    return "";
-}
+#include "tools/ToolUtils.h"
 
 class HardStopGradientBench_ScaleNumColors : public Benchmark {
 public:
     HardStopGradientBench_ScaleNumColors(SkTileMode tilemode, int count) {
-        fName.printf("hardstop_scale_num_colors_%s_%03d_colors", get_tilemode_name(tilemode), count);
+        fName.printf("hardstop_scale_num_colors_%s_%03d_colors",
+                     ToolUtils::tilemode_name(tilemode), count);
 
         fTileMode   = tilemode;
         fColorCount = count;
@@ -108,7 +97,7 @@ private:
     int         fColorCount;
     SkPaint     fPaint;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 // Clamp

@@ -3,20 +3,18 @@
 *.iml
 .DS_Store
 .android_config
-.deps_sha1
 .gclient*
-.gm-actuals
 .gradle
 .idea
 .cproject
 .project
 .recipe_deps/
 .settings/
+.vscode/
+.win_toolchain/
 TAGS
 bower_components
-common
 imgui.ini
-infra/bots/README.recipes.md
 infra/bots/gen_tasks_aux.go
 infra/bots/tools/luci-go/linux64/cipd
 infra/bots/tools/luci-go/linux64/isolate
@@ -29,29 +27,27 @@ platform_tools/android/apps/build
 platform_tools/android/apps/*.properties
 platform_tools/android/apps/*/build
 platform_tools/android/apps/*/src/main/libs
+platform_tools/android/apps/*/*/src/main/libs
 platform_tools/android/apps/*.hprof
 platform_tools/android/apps/*/.externalNativeBuild
 
-sampleapp_prefs.txt
+/mskps
 /skps
 /svgs
-third_party/externals
 tools/skp/page_sets/data/*.json
 tools/skp/page_sets/data/*.wpr
-xcodebuild
 
-/build
+common
 buildtools
-tools/clang
-third_party/llvm-build
+third_party/externals
+
 bin/gn
 bin/gn.exe
 bin/clang-format
 bin/clang-format.exe
-bin/clang_win
-
-vulkan-out
-gl-out
+bin/sk
+bin/sk.exe
+bin/sk.version
 
 node_modules
 tools/lottiecap/filmstrip.png
@@ -91,3 +87,4 @@ ipch/
 *.files
 *.includes
 moc/
+bazel-*

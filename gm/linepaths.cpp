@@ -5,16 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "tools/ToolUtils.h"
 
 static void drawPath(SkPath& path,SkCanvas* canvas,SkColor color,
                      const SkRect& clip,SkPaint::Cap cap, SkPaint::Join join,
-                     SkPaint::Style style, SkPath::FillType fill,
+                     SkPaint::Style style, SkPathFillType fill,
                      SkScalar strokeWidth) {
         path.setFillType(fill);
         SkPaint paint;
@@ -31,14 +37,14 @@ static void drawPath(SkPath& path,SkCanvas* canvas,SkColor color,
 
 static void draw(SkCanvas* canvas, bool doClose) {
         struct FillAndName {
-            SkPath::FillType fFill;
+            SkPathFillType fFill;
             const char*      fName;
         };
         constexpr FillAndName gFills[] = {
-            {SkPath::kWinding_FillType, "Winding"},
-            {SkPath::kEvenOdd_FillType, "Even / Odd"},
-            {SkPath::kInverseWinding_FillType, "Inverse Winding"},
-            {SkPath::kInverseEvenOdd_FillType, "Inverse Even / Odd"},
+            {SkPathFillType::kWinding, "Winding"},
+            {SkPathFillType::kEvenOdd, "Even / Odd"},
+            {SkPathFillType::kInverseWinding, "Inverse Winding"},
+            {SkPathFillType::kInverseEvenOdd, "Inverse Even / Odd"},
         };
         struct StyleAndName {
             SkPaint::Style fStyle;

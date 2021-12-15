@@ -5,14 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "GrCaps.h"
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrSurfaceContext.h"
-#include "SkCanvas.h"
-#include "SkGr.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrImageInfo.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/SurfaceContext.h"
+#include "tests/Test.h"
+#include "tests/TestUtils.h"
 
 // using anonymous namespace because these functions are used as template params.
 namespace {
@@ -33,7 +35,7 @@ float linear_to_srgb(float linear) {
         return 1.055f * powf(linear, 1.f / 2.4f) - 0.055f;
     }
 }
-}
+}  // namespace
 
 /** tests a conversion with an error tolerance */
 template <float (*CONVERT)(float)> static bool check_conversion(uint32_t input, uint32_t output,
@@ -45,8 +47,8 @@ template <float (*CONVERT)(float)> static bool check_conversion(uint32_t input, 
 
     for (int c = 0; c < 3; ++c) {
         uint8_t inputComponent = (uint8_t) ((input & (0xff << (c*8))) >> (c*8));
-        float lower = SkTMax(0.f, (float) inputComponent - error);
-        float upper = SkTMin(255.f, (float) inputComponent + error);
+        float lower = std::max(0.f, (float) inputComponent - error);
+        float upper = std::min(255.f, (float) inputComponent + error);
         lower = CONVERT(lower / 255.f);
         upper = CONVERT(upper / 255.f);
         SkASSERT(lower >= 0.f && lower <= 255.f);
@@ -70,16 +72,16 @@ static bool check_double_conversion(uint32_t input, uint32_t output, float error
 
     for (int c = 0; c < 3; ++c) {
         uint8_t inputComponent = (uint8_t) ((input & (0xff << (c*8))) >> (c*8));
-        float lower = SkTMax(0.f, (float) inputComponent - error);
-        float upper = SkTMin(255.f, (float) inputComponent + error);
+        float lower = std::max(0.f, (float) inputComponent - error);
+        float upper = std::min(255.f, (float) inputComponent + error);
         lower = FORWARD(lower / 255.f);
         upper = FORWARD(upper / 255.f);
         SkASSERT(lower >= 0.f && lower <= 255.f);
         SkASSERT(upper >= 0.f && upper <= 255.f);
         uint8_t upperComponent = SkScalarCeilToInt(upper * 255.f);
         uint8_t lowerComponent = SkScalarFloorToInt(lower * 255.f);
-        lower = SkTMax(0.f, (float) lowerComponent - error);
-        upper = SkTMin(255.f, (float) upperComponent + error);
+        lower = std::max(0.f, (float) lowerComponent - error);
+        upper = std::min(255.f, (float) upperComponent + error);
         lower = BACKWARD(lowerComponent / 255.f);
         upper = BACKWARD(upperComponent / 255.f);
         SkASSERT(lower >= 0.f && lower <= 255.f);
@@ -118,16 +120,17 @@ static bool check_no_conversion(uint32_t input, uint32_t output, float error) {
 
 typedef bool (*CheckFn) (uint32_t orig, uint32_t actual, float error);
 
-void read_and_check_pixels(skiatest::Reporter* reporter, GrSurfaceContext* context,
+void read_and_check_pixels(skiatest::Reporter* reporter,
+                           GrDirectContext* dContext,
+                           skgpu::SurfaceContext* sc,
                            uint32_t* origData,
                            const SkImageInfo& dstInfo, CheckFn checker, float error,
                            const char* subtestName) {
-    int w = dstInfo.width();
-    int h = dstInfo.height();
-    SkAutoTMalloc<uint32_t> readData(w * h);
-    memset(readData.get(), 0, sizeof(uint32_t) * w * h);
+    auto [w, h] = dstInfo.dimensions();
+    GrPixmap readPM = GrPixmap::Allocate(dstInfo);
+    memset(readPM.addr(), 0, sizeof(uint32_t)*w*h);
 
-    if (!context->readPixels(dstInfo, readData.get(), 0, 0, 0)) {
+    if (!sc->readPixels(dContext, readPM, {0, 0})) {
         ERRORF(reporter, "Could not read pixels for %s.", subtestName);
         return;
     }
@@ -135,7 +138,7 @@ void read_and_check_pixels(skiatest::Reporter* reporter, GrSurfaceContext* conte
     for (int j = 0; j < h; ++j) {
         for (int i = 0; i < w; ++i) {
             uint32_t orig = origData[j * w + i];
-            uint32_t read = readData[j * w + i];
+            uint32_t read = static_cast<uint32_t*>(readPM.addr())[j * w + i];
 
             if (!checker(orig, read, error)) {
                 ERRORF(reporter, "Original 0x%08x, read back as 0x%08x in %s at %d, %d).", orig,
@@ -152,7 +155,7 @@ enum class Encoding {
     kLinear,
     kSRGB,
 };
-}
+}  // namespace
 
 static sk_sp<SkColorSpace> encoding_as_color_space(Encoding encoding) {
     switch (encoding) {
@@ -161,15 +164,6 @@ static sk_sp<SkColorSpace> encoding_as_color_space(Encoding encoding) {
         case Encoding::kSRGB:     return SkColorSpace::MakeSRGB();
     }
     return nullptr;
-}
-
-static GrPixelConfig encoding_as_pixel_config(Encoding encoding) {
-    switch (encoding) {
-        case Encoding::kUntagged: return kRGBA_8888_GrPixelConfig;
-        case Encoding::kLinear:   return kRGBA_8888_GrPixelConfig;
-        case Encoding::kSRGB:     return kSRGBA_8888_GrPixelConfig;
-    }
-    return kUnknown_GrPixelConfig;
 }
 
 static const char* encoding_as_str(Encoding encoding) {
@@ -194,39 +188,37 @@ static std::unique_ptr<uint32_t[]> make_data() {
     return data;
 }
 
-static sk_sp<GrSurfaceContext> make_surface_context(Encoding contextEncoding, GrContext* context,
-                                                    skiatest::Reporter* reporter) {
-    GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = kW;
-    desc.fHeight = kH;
-    desc.fConfig = encoding_as_pixel_config(contextEncoding);
+static std::unique_ptr<skgpu::SurfaceContext> make_surface_context(Encoding contextEncoding,
+                                                                   GrRecordingContext* rContext,
+                                                                   skiatest::Reporter* reporter) {
+    GrImageInfo info(GrColorType::kRGBA_8888,
+                     kPremul_SkAlphaType,
+                     encoding_as_color_space(contextEncoding),
+                     kW, kH);
 
-    GrSRGBEncoded srgbEncoded = GrSRGBEncoded::kNo;
-    GrColorType colorType = GrPixelConfigToColorTypeAndEncoding(desc.fConfig, &srgbEncoded);
-    const GrBackendFormat format =
-            context->priv().caps()->getBackendFormatFromGrColorType(colorType, srgbEncoded);
-
-    auto surfaceContext = context->priv().makeDeferredSurfaceContext(
-            format, desc, kBottomLeft_GrSurfaceOrigin, GrMipMapped::kNo, SkBackingFit::kExact,
-            SkBudgeted::kNo, encoding_as_color_space(contextEncoding));
-    if (!surfaceContext) {
+    auto sc = CreateSurfaceContext(rContext,
+                                   info,
+                                   SkBackingFit::kExact,
+                                   kBottomLeft_GrSurfaceOrigin,
+                                   GrRenderable::kYes);
+    if (!sc) {
         ERRORF(reporter, "Could not create %s surface context.", encoding_as_str(contextEncoding));
     }
-    return surfaceContext;
+    return sc;
 }
 
 static void test_write_read(Encoding contextEncoding, Encoding writeEncoding, Encoding readEncoding,
-                            float error, CheckFn check, GrContext* context,
+                            float error, CheckFn check, GrDirectContext* dContext,
                             skiatest::Reporter* reporter) {
-    auto surfaceContext = make_surface_context(contextEncoding, context, reporter);
+    auto surfaceContext = make_surface_context(contextEncoding, dContext, reporter);
     if (!surfaceContext) {
         return;
     }
     auto writeII = SkImageInfo::Make(kW, kH, kRGBA_8888_SkColorType, kPremul_SkAlphaType,
                                      encoding_as_color_space(writeEncoding));
     auto data = make_data();
-    if (!surfaceContext->writePixels(writeII, data.get(), 0, 0, 0)) {
+    GrCPixmap dataPM(writeII, data.get(), kW*sizeof(uint32_t));
+    if (!surfaceContext->writePixels(dContext, dataPM, {0, 0})) {
         ERRORF(reporter, "Could not write %s to %s surface context.",
                encoding_as_str(writeEncoding), encoding_as_str(contextEncoding));
         return;
@@ -237,16 +229,16 @@ static void test_write_read(Encoding contextEncoding, Encoding writeEncoding, En
     SkString testName;
     testName.printf("write %s data to a %s context and read as %s.", encoding_as_str(writeEncoding),
                     encoding_as_str(contextEncoding), encoding_as_str(readEncoding));
-    read_and_check_pixels(reporter, surfaceContext.get(), data.get(), readII, check, error,
-                          testName.c_str());
+    read_and_check_pixels(reporter, dContext, surfaceContext.get(), data.get(), readII, check,
+                          error, testName.c_str());
 }
 
 // Test all combinations of writePixels/readPixels where the surface context/write source/read dst
 // are sRGB, linear, or untagged RGBA_8888.
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SRGBReadWritePixels, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
-    if (!context->priv().caps()->isConfigRenderable(kSRGBA_8888_GrPixelConfig) &&
-        !context->priv().caps()->isConfigTexturable(kSRGBA_8888_GrPixelConfig)) {
+    auto context = ctxInfo.directContext();
+    if (!context->priv().caps()->getDefaultBackendFormat(GrColorType::kRGBA_8888_SRGB,
+                                                         GrRenderable::kNo).isValid()) {
         return;
     }
     // We allow more error on GPUs with lower precision shader variables.

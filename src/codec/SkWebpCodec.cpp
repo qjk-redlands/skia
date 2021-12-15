@@ -5,19 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "SkWebpCodec.h"
+#include "src/codec/SkWebpCodec.h"
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkCodecAnimation.h"
-#include "SkCodecAnimationPriv.h"
-#include "SkCodecPriv.h"
-#include "SkMakeUnique.h"
-#include "SkRasterPipeline.h"
-#include "SkSampler.h"
-#include "SkStreamPriv.h"
-#include "SkTemplates.h"
-#include "SkTo.h"
+#include "include/codec/SkCodecAnimation.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/private/SkTemplates.h"
+#include "include/private/SkTo.h"
+#include "src/codec/SkCodecPriv.h"
+#include "src/codec/SkParseEncodedOrigin.h"
+#include "src/codec/SkSampler.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkStreamPriv.h"
 
 // A WebP decoder on top of (subset of) libwebp
 // For more information on WebP image format, and libwebp library, see:
@@ -77,7 +76,7 @@ std::unique_ptr<SkCodec> SkWebpCodec::MakeFromStream(std::unique_ptr<SkStream> s
     const int width = WebPDemuxGetI(demux, WEBP_FF_CANVAS_WIDTH);
     const int height = WebPDemuxGetI(demux, WEBP_FF_CANVAS_HEIGHT);
 
-    // Sanity check for image size that's about to be decoded.
+    // Validate the image size that's about to be decoded.
     {
         const int64_t size = sk_64_mul(width, height);
         // now check that if we are 4-bytes per pixel, we also don't overflow
@@ -106,7 +105,7 @@ std::unique_ptr<SkCodec> SkWebpCodec::MakeFromStream(std::unique_ptr<SkStream> s
         WebPChunkIterator chunkIterator;
         SkAutoTCallVProc<WebPChunkIterator, WebPDemuxReleaseChunkIterator> autoCI(&chunkIterator);
         if (WebPDemuxGetChunk(demux, "EXIF", 1, &chunkIterator)) {
-            is_orientation_marker(chunkIterator.chunk.bytes, chunkIterator.chunk.size, &origin);
+            SkParseEncodedOrigin(chunkIterator.chunk.bytes, chunkIterator.chunk.size, &origin);
         }
     }
 
@@ -143,7 +142,7 @@ std::unique_ptr<SkCodec> SkWebpCodec::MakeFromStream(std::unique_ptr<SkStream> s
             // sense to guess kBGRA which is likely closer to the final
             // output.  Otherwise, we might end up converting
             // BGRA->YUVA->BGRA.
-            // Fallthrough:
+            [[fallthrough]];
         case 2:
             // This is the lossless format (BGRA).
             if (hasAlpha) {
@@ -219,12 +218,13 @@ int SkWebpCodec::onGetRepetitionCount() {
         return 0;
     }
 
-    const int repCount = WebPDemuxGetI(fDemux.get(), WEBP_FF_LOOP_COUNT);
-    if (0 == repCount) {
+    int loopCount = WebPDemuxGetI(fDemux.get(), WEBP_FF_LOOP_COUNT);
+    if (0 == loopCount) {
         return kRepetitionCountInfinite;
     }
 
-    return repCount;
+    loopCount--;
+    return loopCount;
 }
 
 int SkWebpCodec::onGetFrameCount() {
@@ -265,7 +265,7 @@ int SkWebpCodec::onGetFrameCount() {
                 SkCodecAnimation::DisposalMethod::kKeep);
         frame->setDuration(iter.duration);
         if (WEBP_MUX_BLEND != iter.blend_method) {
-            frame->setBlend(SkCodecAnimation::Blend::kBG);
+            frame->setBlend(SkCodecAnimation::Blend::kSrc);
         }
         fFrameHolder.setAlphaAndRequiredFrame(frame);
     }
@@ -294,14 +294,9 @@ bool SkWebpCodec::onGetFrameInfo(int i, FrameInfo* frameInfo) const {
     }
 
     if (frameInfo) {
-        frameInfo->fRequiredFrame = frame->getRequiredFrame();
-        frameInfo->fDuration = frame->getDuration();
         // libwebp only reports fully received frames for an
         // animated image.
-        frameInfo->fFullyReceived = true;
-        frameInfo->fAlphaType = frame->hasAlpha() ? kUnpremul_SkAlphaType
-                                                  : kOpaque_SkAlphaType;
-        frameInfo->fDisposalMethod = frame->getDisposalMethod();
+        frame->fillIn(frameInfo, true);
     }
 
     return true;
@@ -390,12 +385,12 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
         SkASSERT(SkIsAlign2(subset.fLeft) && SkIsAlign2(subset.fTop));
         SkASSERT(this->getValidSubset(&subset) && subset == *options.fSubset);
 
-        if (!SkIRect::IntersectsNoEmptyCheck(subset, frameRect)) {
+        if (!SkIRect::Intersects(subset, frameRect)) {
             return kSuccess;
         }
 
-        int minXOffset = SkTMin(dstX, subset.x());
-        int minYOffset = SkTMin(dstY, subset.y());
+        int minXOffset = std::min(dstX, subset.x());
+        int minYOffset = std::min(dstY, subset.y());
         dstX -= minXOffset;
         dstY -= minYOffset;
         frameRect.offset(-minXOffset, -minYOffset);
@@ -450,10 +445,12 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
     const bool blendWithPrevFrame = !independent && frame.blend_method == WEBP_MUX_BLEND
         && frame.has_alpha;
 
-    SkBitmap webpDst;
     auto webpInfo = dstInfo;
     if (!frame.has_alpha) {
         webpInfo = webpInfo.makeAlphaType(kOpaque_SkAlphaType);
+    } else if (this->colorXform() || blendWithPrevFrame) {
+        // the colorXform and blend_line expect unpremul.
+        webpInfo = webpInfo.makeAlphaType(kUnpremul_SkAlphaType);
     }
     if (this->colorXform()) {
         // Swizzling between RGBA and BGRA is zero cost in a color transform.  So when we have a
@@ -462,12 +459,9 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
         // Lossy webp is encoded as YUV (so RGBA and BGRA are the same cost).  Lossless webp is
         // encoded as BGRA. This means decoding to BGRA is either faster or the same cost as RGBA.
         webpInfo = webpInfo.makeColorType(kBGRA_8888_SkColorType);
-
-        if (webpInfo.alphaType() == kPremul_SkAlphaType) {
-            webpInfo = webpInfo.makeAlphaType(kUnpremul_SkAlphaType);
-        }
     }
 
+    SkBitmap webpDst;
     if ((this->colorXform() && !is_8888(dstInfo.colorType())) || blendWithPrevFrame) {
         // We will decode the entire image and then perform the color transform.  libwebp
         // does not provide a row-by-row API.  This is a shame particularly when we do not want
@@ -479,7 +473,7 @@ SkCodec::Result SkWebpCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst, 
     }
 
     config.output.colorspace = webp_decode_mode(webpInfo.colorType(),
-            frame.has_alpha && dstInfo.alphaType() == kPremul_SkAlphaType && !this->colorXform());
+            webpInfo.alphaType() == kPremul_SkAlphaType);
     config.output.is_external_memory = 1;
 
     config.output.u.RGBA.rgba = reinterpret_cast<uint8_t*>(webpDst.getAddr(dstX, dstY));

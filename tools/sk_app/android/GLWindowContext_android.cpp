@@ -8,9 +8,9 @@
 
 #include <EGL/egl.h>
 #include <GLES/gl.h>
-#include "../GLWindowContext.h"
-#include "WindowContextFactory_android.h"
-#include "gl/GrGLInterface.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "tools/sk_app/GLWindowContext.h"
+#include "tools/sk_app/android/WindowContextFactory_android.h"
 
 using sk_app::GLWindowContext;
 using sk_app::DisplayParams;
@@ -37,7 +37,7 @@ private:
     // For setDisplayParams and resize which call onInitializeContext with null platformData
     ANativeWindow* fNativeWindow = nullptr;
 
-    typedef GLWindowContext INHERITED;
+    using INHERITED = GLWindowContext;
 };
 
 GLWindowContext_android::GLWindowContext_android(ANativeWindow* window,
@@ -115,7 +115,7 @@ sk_sp<const GrGLInterface> GLWindowContext_android::onInitializeContext() {
 
     eglGetConfigAttrib(fDisplay, surfaceConfig, EGL_STENCIL_SIZE, &fStencilBits);
     eglGetConfigAttrib(fDisplay, surfaceConfig, EGL_SAMPLES, &fSampleCount);
-    fSampleCount = SkTMax(fSampleCount, 1);
+    fSampleCount = std::max(fSampleCount, 1);
 
     eglSwapInterval(fDisplay, fDisplayParams.fDisableVsync ? 0 : 1);
 
@@ -144,10 +144,10 @@ void GLWindowContext_android::onSwapBuffers() {
 namespace sk_app {
 namespace window_context_factory {
 
-WindowContext* NewGLForAndroid(ANativeWindow* window, const DisplayParams& params) {
-    WindowContext* ctx = new GLWindowContext_android(window, params);
+std::unique_ptr<WindowContext> MakeGLForAndroid(ANativeWindow* window,
+                                                const DisplayParams& params) {
+    std::unique_ptr<WindowContext> ctx(new GLWindowContext_android(window, params));
     if (!ctx->isValid()) {
-        delete ctx;
         return nullptr;
     }
     return ctx;

@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkStream.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkStream.h"
 
 class StreamBench : public Benchmark {
     SkString    fName;
@@ -41,7 +41,7 @@ protected:
     }
 
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

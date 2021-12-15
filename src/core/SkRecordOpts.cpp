@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkRecordOpts.h"
+#include "src/core/SkRecordOpts.h"
 
-#include "SkCanvasPriv.h"
-#include "SkRecordPattern.h"
-#include "SkRecords.h"
-#include "SkTDArray.h"
+#include "include/private/SkTDArray.h"
+#include "src/core/SkCanvasPriv.h"
+#include "src/core/SkRecordPattern.h"
+#include "src/core/SkRecords.h"
 
 using namespace SkRecords;
 
@@ -94,11 +94,9 @@ static bool fold_opacity_layer_color_to_paint(const SkPaint* layerPaint,
     // true, we assume paint is too.
 
     // The alpha folding can proceed if the filter layer paint does not have properties which cause
-    // the resulting filter layer to be "blended" in complex ways to the parent layer. For example,
-    // looper drawing unmodulated filter layer twice and then modulating the result produces
-    // different image to drawing modulated filter layer twice.
-    // TODO: most likely the looper and only some xfer modes are the hard constraints
-    if (!paint->isSrcOver() || paint->getLooper()) {
+    // the resulting filter layer to be "blended" in complex ways to the parent layer.
+    // TODO: most likely only some xfer modes are the hard constraints
+    if (!paint->isSrcOver()) {
         return false;
     }
 
@@ -134,7 +132,6 @@ static bool fold_opacity_layer_color_to_paint(const SkPaint* layerPaint,
             !layerPaint->isSrcOver()     ||
             layerPaint->getMaskFilter()  ||
             layerPaint->getColorFilter() ||
-            layerPaint->getLooper()      ||
             layerPaint->getImageFilter()) {
             return false;
         }
@@ -179,7 +176,7 @@ static bool effectively_srcover(const SkPaint* paint) {
     }
     // src-mode with opaque and no effects (which might change opaqueness) is ok too.
     return !paint->getShader() && !paint->getColorFilter() && !paint->getImageFilter() &&
-           0xFF == paint->getAlpha() && paint->getBlendMode() == SkBlendMode::kSrc;
+           0xFF == paint->getAlpha() && paint->asBlendMode() == SkBlendMode::kSrc;
 }
 
 // For some SaveLayer-[drawing command]-Restore patterns, merge the SaveLayer's alpha into the
@@ -188,14 +185,8 @@ struct SaveLayerDrawRestoreNooper {
     typedef Pattern<Is<SaveLayer>, IsDraw, Is<Restore>> Match;
 
     bool onMatch(SkRecord* record, Match* match, int begin, int end) {
-        if (match->first<SaveLayer>()->backdrop || match->first<SaveLayer>()->clipMask) {
-            // can't throw away the layer if we have a backdrop or clip mask
-            return false;
-        }
-
-        if (match->first<SaveLayer>()->saveLayerFlags &
-                SkCanvasPriv::kDontClipToLayer_SaveLayerFlag) {
-            // can't throw away the layer if set
+        if (match->first<SaveLayer>()->backdrop) {
+            // can't throw away the layer if we have a backdrop
             return false;
         }
 

@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkRect.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkRect.h"
 
 static const SkScalar kCellWidth = SkIntToScalar(20);
 static const SkScalar kCellHeight = SkIntToScalar(10);
@@ -29,11 +29,11 @@ public:
     static const int kNumCols = 32;
 
 protected:
-    virtual const char* onGetName() {
+    const char* onGetName() override {
         return "tablebench";
     }
 
-    virtual void onDraw(int loops, SkCanvas* canvas) {
+    void onDraw(int loops, SkCanvas* canvas) override {
         SkPaint cellPaint;
         cellPaint.setColor(0xFFFFFFF);
 
@@ -66,7 +66,7 @@ protected:
     }
 
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 DEF_BENCH( return new TableBench(); )

@@ -5,12 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "ToolUtils.h"
-#include "gm.h"
-
-#include "SkCanvas.h"
-#include "SkSurface.h"
-#include "SkTextBlob.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "tools/ToolUtils.h"
 
 // This tests that we don't try to reuse textblobs from the GPU textblob cache across pixel geometry
 // changes when we have LCD.  crbug/486744
@@ -56,17 +65,17 @@ protected:
         // (i.e., unknown pixel geometry)
         c->clear(0x00ffffff);
         c->drawTextBlob(blob, 10, 150, SkPaint());
-        surface->draw(canvas, 0, 0, nullptr);
+        surface->draw(canvas, 0, 0);
     }
 
 private:
-    static constexpr int kWidth = 200;
-    static constexpr int kHeight = 200;
+    inline static constexpr int kWidth = 200;
+    inline static constexpr int kHeight = 200;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new TextBlobGeometryChange;)
-}
+}  // namespace skiagm

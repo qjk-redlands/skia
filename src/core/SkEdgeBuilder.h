@@ -7,11 +7,11 @@
 #ifndef SkEdgeBuilder_DEFINED
 #define SkEdgeBuilder_DEFINED
 
-#include "SkAnalyticEdge.h"
-#include "SkArenaAlloc.h"
-#include "SkEdge.h"
-#include "SkRect.h"
-#include "SkTDArray.h"
+#include "include/core/SkRect.h"
+#include "include/private/SkTDArray.h"
+#include "src/core/SkAnalyticEdge.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkEdge.h"
 
 class SkPath;
 
@@ -46,7 +46,7 @@ private:
     virtual void addLine (const SkPoint pts[]) = 0;
     virtual void addQuad (const SkPoint pts[]) = 0;
     virtual void addCubic(const SkPoint pts[]) = 0;
-    virtual Combine addPolyLine(SkPoint pts[], char* edge, char** edgePtr) = 0;
+    virtual Combine addPolyLine(const SkPoint pts[], char* edge, char** edgePtr) = 0;
 };
 
 class SkBasicEdgeBuilder final : public SkEdgeBuilder {
@@ -64,7 +64,7 @@ private:
     void addLine (const SkPoint pts[]) override;
     void addQuad (const SkPoint pts[]) override;
     void addCubic(const SkPoint pts[]) override;
-    Combine addPolyLine(SkPoint pts[], char* edge, char** edgePtr) override;
+    Combine addPolyLine(const SkPoint pts[], char* edge, char** edgePtr) override;
 
     const int fClipShift;
 };
@@ -84,6 +84,6 @@ private:
     void addLine (const SkPoint pts[]) override;
     void addQuad (const SkPoint pts[]) override;
     void addCubic(const SkPoint pts[]) override;
-    Combine addPolyLine(SkPoint pts[], char* edge, char** edgePtr) override;
+    Combine addPolyLine(const SkPoint pts[], char* edge, char** edgePtr) override;
 };
 #endif

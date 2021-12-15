@@ -8,9 +8,11 @@
 #ifndef SkColor_DEFINED
 #define SkColor_DEFINED
 
-#include "SkImageInfo.h"
-#include "SkScalar.h"
-#include "SkTypes.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+
+#include <array>
 
 /** \file SkColor.h
 
@@ -75,7 +77,7 @@ static constexpr inline SkColor SkColorSetARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU 
     @param a  alpha: transparent at zero, fully opaque at 255
     @return   color with transparency
 */
-static constexpr inline SkColor SkColorSetA(SkColor c, U8CPU a) {
+static constexpr inline SkColor SK_WARN_UNUSED_RESULT SkColorSetA(SkColor c, U8CPU a) {
     return (c & 0x00FFFFFF) | (a << 24);
 }
 
@@ -218,6 +220,33 @@ SK_API SkPMColor SkPreMultiplyARGB(U8CPU a, U8CPU r, U8CPU g, U8CPU b);
 */
 SK_API SkPMColor SkPreMultiplyColor(SkColor c);
 
+/** \enum SkColorChannel
+    Describes different color channels one can manipulate
+*/
+enum class SkColorChannel {
+    kR,  // the red channel
+    kG,  // the green channel
+    kB,  // the blue channel
+    kA,  // the alpha channel
+
+    kLastEnum = kA,
+};
+
+/** Used to represent the channels available in a color type or texture format as a mask. */
+enum SkColorChannelFlag : uint32_t {
+    kRed_SkColorChannelFlag    = 1 << static_cast<uint32_t>(SkColorChannel::kR),
+    kGreen_SkColorChannelFlag  = 1 << static_cast<uint32_t>(SkColorChannel::kG),
+    kBlue_SkColorChannelFlag   = 1 << static_cast<uint32_t>(SkColorChannel::kB),
+    kAlpha_SkColorChannelFlag  = 1 << static_cast<uint32_t>(SkColorChannel::kA),
+    kGray_SkColorChannelFlag   = 0x10,
+    // Convenience values
+    kGrayAlpha_SkColorChannelFlags = kGray_SkColorChannelFlag | kAlpha_SkColorChannelFlag,
+    kRG_SkColorChannelFlags        = kRed_SkColorChannelFlag | kGreen_SkColorChannelFlag,
+    kRGB_SkColorChannelFlags       = kRG_SkColorChannelFlags | kBlue_SkColorChannelFlag,
+    kRGBA_SkColorChannelFlags      = kRGB_SkColorChannelFlags | kAlpha_SkColorChannelFlag,
+};
+static_assert(0 == (kGray_SkColorChannelFlag & kRGBA_SkColorChannelFlags), "bitfield conflict");
+
 /** \struct SkRGBA4f
     RGBA color value, holding four floating point components. Color components are always in
     a known order. kAT determines if the SkRGBA4f's R, G, and B components are premultiplied
@@ -282,6 +311,9 @@ struct SkRGBA4f {
     */
     float* vec() { return &fR; }
 
+    /** As a std::array<float, 4> */
+    std::array<float, 4> array() const { return {fR, fG, fB, fA}; }
+
     /** Returns one component. Asserts if index is out of range and SK_DEBUG is defined.
 
         @param index  one of: 0 (fR), 1 (fG), 2 (fB), 3 (fA)
@@ -324,12 +356,16 @@ struct SkRGBA4f {
 
         @param color   Color with Alpha, red, blue, and green components
         @return        SkColor as SkRGBA4f
+
+        example: https://fiddle.skia.org/c/@RGBA4f_FromColor
     */
     static SkRGBA4f FromColor(SkColor color);  // impl. depends on kAT
 
     /** Returns closest SkColor to SkRGBA4f. Only allowed if SkRGBA4f is unpremultiplied.
 
         @return       color as SkColor
+
+        example: https://fiddle.skia.org/c/@RGBA4f_toSkColor
     */
     SkColor toSkColor() const;  // impl. depends on kAT
 
@@ -385,4 +421,18 @@ using SkColor4f = SkRGBA4f<kUnpremul_SkAlphaType>;
 template <> SK_API SkColor4f SkColor4f::FromColor(SkColor);
 template <> SK_API SkColor   SkColor4f::toSkColor() const;
 
+namespace SkColors {
+constexpr SkColor4f kTransparent = {0, 0, 0, 0};
+constexpr SkColor4f kBlack       = {0, 0, 0, 1};
+constexpr SkColor4f kDkGray      = {0.25f, 0.25f, 0.25f, 1};
+constexpr SkColor4f kGray        = {0.50f, 0.50f, 0.50f, 1};
+constexpr SkColor4f kLtGray      = {0.75f, 0.75f, 0.75f, 1};
+constexpr SkColor4f kWhite       = {1, 1, 1, 1};
+constexpr SkColor4f kRed         = {1, 0, 0, 1};
+constexpr SkColor4f kGreen       = {0, 1, 0, 1};
+constexpr SkColor4f kBlue        = {0, 0, 1, 1};
+constexpr SkColor4f kYellow      = {1, 1, 0, 1};
+constexpr SkColor4f kCyan        = {0, 1, 1, 1};
+constexpr SkColor4f kMagenta     = {1, 0, 1, 1};
+}  // namespace SkColors
 #endif

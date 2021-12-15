@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkTLazy.h"
-#include "Test.h"
+#include "src/core/SkTLazy.h"
+#include "tests/Test.h"
 
 DEF_TEST(TLazy_copy, r) {
     SkTLazy<int> lazy;
@@ -15,7 +15,7 @@ DEF_TEST(TLazy_copy, r) {
     REPORTER_ASSERT(r, lazy.getMaybeNull() == nullptr);
 
     {
-        SkTLazy<int> lazy_copy(lazy);
+        SkTLazy<int> lazy_copy(lazy);  // NOLINT(performance-unnecessary-copy-initialization)
         REPORTER_ASSERT(r, !lazy_copy.isValid());
         REPORTER_ASSERT(r, lazy_copy.getMaybeNull() == nullptr);
     }
@@ -26,7 +26,7 @@ DEF_TEST(TLazy_copy, r) {
     REPORTER_ASSERT(r, 42 == *lazy.get());
 
     {
-        SkTLazy<int> lazy_copy(lazy);
+        SkTLazy<int> lazy_copy(lazy);  // NOLINT(performance-unnecessary-copy-initialization)
         REPORTER_ASSERT(r, lazy_copy.isValid());
         REPORTER_ASSERT(r, 42 == *lazy_copy.get());
         REPORTER_ASSERT(r, lazy.get() != lazy_copy.get());

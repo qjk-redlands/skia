@@ -8,8 +8,8 @@
 #ifndef SkColorTable_DEFINED
 #define SkColorTable_DEFINED
 
-#include "SkColor.h"
-#include "SkRefCnt.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkRefCnt.h"
 
 /** \class SkColorTable
 
@@ -44,7 +44,7 @@ private:
     SkPMColor*  fColors;
     int         fCount;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 #endif

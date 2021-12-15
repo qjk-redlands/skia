@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkData.h"
-#include "SkJSON.h"
-#include "SkStream.h"
+#include "include/core/SkData.h"
+#include "include/core/SkStream.h"
+#include "src/utils/SkJSON.h"
 
 void FuzzJSON(sk_sp<SkData> bytes) {
     skjson::DOM dom(static_cast<const char*>(bytes->data()), bytes->size());
@@ -15,7 +15,8 @@ void FuzzJSON(sk_sp<SkData> bytes) {
     dom.write(&wstream);
 }
 
-#if defined(IS_FUZZING_WITH_LIBFUZZER)
+// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
+#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     auto bytes = SkData::MakeWithoutCopy(data, size);
     FuzzJSON(bytes);

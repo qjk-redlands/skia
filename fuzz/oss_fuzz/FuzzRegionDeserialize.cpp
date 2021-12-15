@@ -6,10 +6,10 @@
  */
 
 
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkRegionPriv.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkRegionPriv.h"
 
 bool FuzzRegionDeserialize(sk_sp<SkData> bytes) {
     SkRegion region;
@@ -34,8 +34,12 @@ bool FuzzRegionDeserialize(sk_sp<SkData> bytes) {
     return true;
 }
 
-#if defined(IS_FUZZING_WITH_LIBFUZZER)
+// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
+#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    if (size > 512) {
+        return 0;
+    }
     auto bytes = SkData::MakeWithoutCopy(data, size);
     FuzzRegionDeserialize(bytes);
     return 0;

@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "SkPDFResourceDict.h"
-#include "SkPDFTypes.h"
-#include "SkStream.h"
+#include "include/core/SkStream.h"
+#include "src/pdf/SkPDFResourceDict.h"
+#include "src/pdf/SkPDFTypes.h"
 
-// Sanity check that the values of enum ResourceType correspond to the
-// expected values as defined in the arrays below.
+// Verify that the values of enum ResourceType correspond to the expected values
+// as defined in the arrays below.
 // If these are failing, you may need to update the kResourceTypePrefixes
 // and kResourceTypeNames arrays below.
 static_assert(0 == (int)SkPDFResourceType::kExtGState, "resource_type_mismatch");
@@ -19,7 +19,7 @@ static_assert(2 == (int)SkPDFResourceType::kXObject,   "resource_type_mismatch")
 static_assert(3 == (int)SkPDFResourceType::kFont,      "resource_type_mismatch");
 
 // One extra character for the Prefix.
-constexpr size_t kMaxResourceNameLength = 1 + SkStrAppendS32_MaxSize;
+constexpr size_t kMaxResourceNameLength = 1 + kSkStrAppendS32_MaxSize;
 
 // returns pointer just past end of what's written into `dst`.
 static char* get_resource_name(char dst[kMaxResourceNameLength], SkPDFResourceType type, int key) {
@@ -87,7 +87,7 @@ std::unique_ptr<SkPDFDict> SkPDFMakeResourceDict(
         const std::vector<SkPDFIndirectReference>& xObjectResources,
         const std::vector<SkPDFIndirectReference>& fontResources) {
     auto dict = SkPDFMakeDict();
-    dict->insertObject("ProcSets", make_proc_set());
+    dict->insertObject("ProcSet", make_proc_set());
     add_subdict(graphicStateResources, SkPDFResourceType::kExtGState, dict.get());
     add_subdict(shaderResources,       SkPDFResourceType::kPattern,   dict.get());
     add_subdict(xObjectResources,      SkPDFResourceType::kXObject,   dict.get());

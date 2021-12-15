@@ -8,13 +8,12 @@
 #ifndef GrDeferredProxyUploader_DEFINED
 #define GrDeferredProxyUploader_DEFINED
 
-#include "SkAutoPixmapStorage.h"
-#include "SkMakeUnique.h"
-#include "SkRefCnt.h"
-#include "SkSemaphore.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/SkSemaphore.h"
+#include "src/core/SkAutoPixmapStorage.h"
 
-#include "GrOpFlushState.h"
-#include "GrTextureProxyPriv.h"
+#include "src/gpu/GrOpFlushState.h"
+#include "src/gpu/GrTextureProxyPriv.h"
 
 /**
  * GrDeferredProxyUploader assists with threaded generation of textures. Currently used by both
@@ -59,8 +58,11 @@ public:
             // If the worker thread was unable to allocate pixels, this check will fail, and we'll
             // end up drawing with an uninitialized mask texture, but at least we won't crash.
             if (this->fPixels.addr()) {
-                writePixelsFn(proxy, 0, 0, this->fPixels.width(), this->fPixels.height(),
-                              pixelColorType, this->fPixels.addr(), this->fPixels.rowBytes());
+                writePixelsFn(proxy,
+                              SkIRect::MakeSize(fPixels.dimensions()),
+                              pixelColorType,
+                              this->fPixels.addr(),
+                              this->fPixels.rowBytes());
             }
             // Upload has finished, so tell the proxy to release this GrDeferredProxyUploader
             proxy->texPriv().resetDeferredUploader();
@@ -98,7 +100,7 @@ class GrTDeferredProxyUploader : public GrDeferredProxyUploader {
 public:
     template <typename... Args>
     GrTDeferredProxyUploader(Args&&... args)
-        : fData(skstd::make_unique<T>(std::forward<Args>(args)...)) {
+        : fData(std::make_unique<T>(std::forward<Args>(args)...)) {
     }
 
     ~GrTDeferredProxyUploader() override {

@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkEdgeClipper.h"
-#include "SkGeometry.h"
-#include "SkLineClipper.h"
-#include "SkMacros.h"
+#include "include/private/SkMacros.h"
+#include "src/core/SkEdgeClipper.h"
+#include "src/core/SkGeometry.h"
+#include "src/core/SkLineClipper.h"
 
 #include <utility>
 
@@ -209,7 +209,9 @@ void SkEdgeClipper::clipMonoQuad(const SkPoint srcPts[3], const SkRect& clip) {
         } else {
             // if chopMonoQuadAtY failed, then we may have hit inexact numerics
             // so we just clamp against the right
-            this->appendVLine(clip.fRight, pts[0].fY, pts[2].fY, reverse);
+            pts[1].fX = std::min(pts[1].fX, clip.fRight);
+            pts[2].fX = std::min(pts[2].fX, clip.fRight);
+            this->appendQuad(pts, reverse);
         }
     } else {    // wholly inside the clip
         this->appendQuad(pts, reverse);
@@ -221,7 +223,7 @@ bool SkEdgeClipper::clipQuad(const SkPoint srcPts[3], const SkRect& clip) {
     fCurrVerb = fVerbs;
 
     SkRect  bounds;
-    bounds.set(srcPts, 3);
+    bounds.setBounds(srcPts, 3);
 
     if (!quick_reject(bounds, clip)) {
         SkPoint monoY[5];
@@ -397,7 +399,7 @@ void SkEdgeClipper::clipMonoCubic(const SkPoint src[4], const SkRect& clip) {
 
 static SkRect compute_cubic_bounds(const SkPoint pts[4]) {
     SkRect r;
-    r.set(pts, 4);
+    r.setBounds(pts, 4);
     return r;
 }
 
@@ -555,3 +557,45 @@ void sk_assert_monotonic_x(const SkPoint pts[], int count) {
     }
 }
 #endif
+
+#include "src/core/SkPathPriv.h"
+
+void SkEdgeClipper::ClipPath(const SkPath& path, const SkRect& clip, bool canCullToTheRight,
+                             void (*consume)(SkEdgeClipper*, bool newCtr, void* ctx), void* ctx) {
+    SkASSERT(path.isFinite());
+
+    SkAutoConicToQuads quadder;
+    const SkScalar conicTol = SK_Scalar1 / 4;
+
+    SkPathEdgeIter iter(path);
+    SkEdgeClipper clipper(canCullToTheRight);
+
+    while (auto e = iter.next()) {
+        switch (e.fEdge) {
+            case SkPathEdgeIter::Edge::kLine:
+                if (clipper.clipLine(e.fPts[0], e.fPts[1], clip)) {
+                    consume(&clipper, e.fIsNewContour, ctx);
+                }
+                break;
+            case SkPathEdgeIter::Edge::kQuad:
+                if (clipper.clipQuad(e.fPts, clip)) {
+                    consume(&clipper, e.fIsNewContour, ctx);
+                }
+                break;
+            case SkPathEdgeIter::Edge::kConic: {
+                const SkPoint* quadPts = quadder.computeQuads(e.fPts, iter.conicWeight(), conicTol);
+                for (int i = 0; i < quadder.countQuads(); ++i) {
+                    if (clipper.clipQuad(quadPts, clip)) {
+                        consume(&clipper, e.fIsNewContour, ctx);
+                    }
+                    quadPts += 2;
+                }
+            } break;
+            case SkPathEdgeIter::Edge::kCubic:
+                if (clipper.clipCubic(e.fPts, clip)) {
+                    consume(&clipper, e.fIsNewContour, ctx);
+                }
+                break;
+        }
+    }
+}

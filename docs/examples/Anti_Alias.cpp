@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=a6575a49467ce8d28bb01cc7638fa04d
 REG_FIDDLE(Anti_Alias, 512, 256, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -18,7 +18,7 @@ void draw(SkCanvas* canvas) {
         canvas->drawLine(5, 5, 15, 30, paint);
         canvas->save();
         canvas->scale(10, 10);
-        canvas->drawBitmap(bitmap, antialias ? 12 : 0, 0);
+        canvas->drawImage(bitmap.asImage(), antialias ? 12 : 0, 0);
         canvas->restore();
         canvas->translate(15, 0);
     }
