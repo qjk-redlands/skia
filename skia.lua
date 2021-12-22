@@ -383,7 +383,6 @@ local common_android = {
 local common_cocoa = {
   common_unix,
   "src/ports/SkFontHost_mac.cpp",
-  "src/utils/mac/SkStream_mac.cpp",
 }
 
 -- Opts SSE
