@@ -26,6 +26,7 @@
 #include "src/utils/win/SkObjBase.h"
 #include "src/utils/win/SkTScopedComPtr.h"
 
+#include <winuser.h>
 #include <dwrite.h>
 #include <dwrite_2.h>
 #include <dwrite_3.h>
