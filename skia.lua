@@ -501,6 +501,7 @@ end
 if (_PLATFORM_WINUWP) then
   defines {
     "_CRT_SECURE_NO_WARNINGS",
+    "SK_WINUWP", -- required for UWP code paths
   }
 
   includedirs {

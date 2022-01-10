@@ -1237,10 +1237,11 @@ SK_API sk_sp<SkFontMgr> SkFontMgr_New_DirectWrite(IDWriteFactory* factory,
 
     const WCHAR* defaultFamilyName = L"";
     int defaultFamilyNameLen = 1;
+
+#ifndef SK_WINUWP
     NONCLIENTMETRICSW metrics;
     metrics.cbSize = sizeof(metrics);
 
-#ifndef SK_WINUWP
     if (nullptr == fallback) {
         if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0)) {
             defaultFamilyName = metrics.lfMessageFont.lfFaceName;
