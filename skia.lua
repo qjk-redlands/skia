@@ -7,6 +7,7 @@ configuration { "*" }
 uuid "0A843431-DAE5-47CB-8301-5A731AE23379"
 
 defines {
+  "SK_CODEC_DECODES_JPEG",
   "SK_CODEC_DECODES_PNG",
   "SK_ENCODE_JPEG",
   "SK_ENCODE_PNG",
@@ -36,6 +37,7 @@ files {
   "src/codec/SkJpegUtility.cpp",
   "src/codec/SkMasks.cpp",
   "src/codec/SkMaskSwizzler.cpp",
+  "src/codec/SkParseEncodedOrigin.cpp",
   "src/codec/SkPngCodec.cpp",
   "src/codec/SkSampler.cpp",
   "src/codec/SkStreamBuffer.cpp",
