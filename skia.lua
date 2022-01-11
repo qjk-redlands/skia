@@ -382,6 +382,7 @@ local common_android = {
 
 local common_cocoa = {
   common_unix,
+  "src/ports/SkFontMgr_mac_ct_factory.cpp",
 }
 
 -- Opts SSE
