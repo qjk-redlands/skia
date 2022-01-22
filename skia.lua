@@ -11,6 +11,7 @@ defines {
   "SK_CODEC_DECODES_PNG",
   "SK_ENCODE_JPEG",
   "SK_ENCODE_PNG",
+  "SK_HAS_WUFFS_LIBRARY",
 }
 
 includedirs {
@@ -18,6 +19,7 @@ includedirs {
   _3RDPARTY_DIR .. "/libpng",
   _3RDPARTY_DIR .. "/skia",
   _3RDPARTY_DIR .. "/skia/**",
+  _3RDPARTY_DIR .. "/wuffs/release/c",
   _3RDPARTY_DIR .. "/zlib",
 }
 
@@ -43,6 +45,7 @@ files {
   "src/codec/SkStreamBuffer.cpp",
   "src/codec/SkSwizzler.cpp",
   "src/codec/SkWbmpCodec.cpp",
+  "src/codec/SkWuffsCodec.cpp",
   "src/core/SkAAClip.cpp",
   "src/core/SkAlphaRuns.cpp",
   "src/core/SkAnalyticEdge.cpp",
