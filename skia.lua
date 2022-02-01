@@ -472,7 +472,7 @@ end
 
 if (_PLATFORM_LINUX) then
   includedirs {
-    "/usr/include/freetype2",
+    _3RDPARTY_DIR .. "/freetype/include",
   }
 
   files {
