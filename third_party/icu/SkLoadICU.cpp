@@ -40,7 +40,11 @@ static void* win_mmap(const char* dataFile) {
     }
     struct CloseHandleWrapper { void operator()(HANDLE h) { CloseHandle(h); } };
     std::unique_ptr<void, CloseHandleWrapper> mmapHandle(
+#if SK_WINUWP
+        CreateFileMapping2(file, nullptr, FILE_MAP_READ, PAGE_READONLY, 0, 0, nullptr, nullptr, 0));
+#else
         CreateFileMapping(file, nullptr, PAGE_READONLY, 0, 0, nullptr));
+#endif
     if (!mmapHandle) {
         fprintf(stderr, "SkIcuLoader: datafile mmap error.\n");
         return nullptr;

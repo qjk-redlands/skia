@@ -126,15 +126,21 @@ void* sk_fdmmap(int fileno, size_t* length) {
     if (!SkTFitsIn<size_t>(fileSize.QuadPart)) {
         return nullptr;
     }
-
+#if SK_WINUWP
+    SkAutoWinMMap mmapCreateFileMapping2(file, nullptr, FILE_MAP_READ, PAGE_READONLY, 0, 0, nullptr, nullptr, 0);
+#else
     SkAutoWinMMap mmap(CreateFileMapping(file, nullptr, PAGE_READONLY, 0, 0, nullptr));
+#endif
     if (!mmap.isValid()) {
         //TODO: use SK_TRACEHR(GetLastError(), "Could not create file mapping.") to report.
         return nullptr;
     }
-
+#if SK_WINUWP
+    void* addr = MapViewOfFile2(mmap, GetCurrentProcess(), 0, nullptr, 0, 0, PAGE_READONLY);
+#else
     // Eventually call UnmapViewOfFile
     void* addr = MapViewOfFile(mmap, FILE_MAP_READ, 0, 0, 0);
+#endif
     if (nullptr == addr) {
         //TODO: use SK_TRACEHR(GetLastError(), "Could not map view of file.") to report.
         return nullptr;
