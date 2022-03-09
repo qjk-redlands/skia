@@ -127,7 +127,7 @@ void* sk_fdmmap(int fileno, size_t* length) {
         return nullptr;
     }
 #if SK_WINUWP
-    SkAutoWinMMap mmapCreateFileMapping2(file, nullptr, FILE_MAP_READ, PAGE_READONLY, 0, 0, nullptr, nullptr, 0);
+    SkAutoWinMMap mmap(CreateFileMapping2(file, nullptr, FILE_MAP_READ, PAGE_READONLY, 0, 0, nullptr, nullptr, 0);
 #else
     SkAutoWinMMap mmap(CreateFileMapping(file, nullptr, PAGE_READONLY, 0, 0, nullptr));
 #endif
