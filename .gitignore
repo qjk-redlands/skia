@@ -52,6 +52,8 @@ bin/sk.version
 node_modules
 tools/lottiecap/filmstrip.png
 
+bazel-*
+
 # RTC ignores
 # Premake generated files #
 ###########################
@@ -87,4 +89,3 @@ ipch/
 *.files
 *.includes
 moc/
-bazel-*
