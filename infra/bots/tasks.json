@@ -2394,17 +2394,12 @@
         "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-PreAbandonGpuContext"
       ]
     },
-    "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-OOPRDDL_ASAN": {
+    "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan": {
       "tasks": [
         "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-Vulkan"
       ]
     },
-    "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-OOPRDDL_Vulkan": {
-      "tasks": [
-        "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-OOPRDDL_Vulkan"
-      ]
-    },
-    "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-PreAbandonGpuContext": {
+    "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All": {
       "tasks": [
         "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All"
       ]
@@ -2417,16 +2412,6 @@
     "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-OOPRDDL_TSAN": {
       "tasks": [
         "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-OOPRDDL_TSAN"
-      ]
-    },
-    "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-OOPRDDL_TSAN": {
-      "tasks": [
-        "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-OOPRDDL_TSAN"
-      ]
-    },
-    "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-OOPRDDL_TSAN_Vulkan": {
-      "tasks": [
-        "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-OOPRDDL_TSAN_Vulkan"
       ]
     },
     "Test-Ubuntu18-Clang-Golo-GPU-QuadroP400-x86_64-Release-All-PreAbandonGpuContext": {
@@ -3918,7 +3903,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci-auth/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -4191,7 +4176,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -5374,7 +5359,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -17408,36 +17393,6 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/3pp/tools/cpython/linux-amd64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/linux-amd64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/3pp/tools/git/linux-amd64",
-          "path": "cipd_bin_packages",
-          "version": "version:2@2.34.1.chromium.6"
-        },
-        {
-          "name": "infra/tools/git/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/git-credential-luci/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
           "name": "infra/tools/luci/kitchen/${platform}",
           "path": ".",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
@@ -18791,7 +18746,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/git/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -18806,7 +18761,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci/git-credential-luci/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -18860,6 +18815,9 @@
           "cipd_bin_packages/cpython3/bin",
           "cipd_bin_packages",
           "cipd_bin_packages/bin"
+        ],
+        "VPYTHON_VIRTUALENV_ROOT": [
+          "cache/vpython"
         ]
       },
       "execution_timeout_ns": 21600000000000,
@@ -19024,7 +18982,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci/git-credential-luci/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         }
@@ -19379,10 +19337,6 @@
         "os:Debian-10.3",
         "pool:Skia"
       ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
       "env_prefixes": {
         "GOROOT": [
           "go/go"
@@ -20100,16 +20054,8 @@
         "pool:Skia",
         "docker_installed:true"
       ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
       "env_prefixes": {
         "PATH": [
-          "cipd_bin_packages/cpython",
-          "cipd_bin_packages/cpython/bin",
-          "cipd_bin_packages/cpython3",
-          "cipd_bin_packages/cpython3/bin",
           "cipd_bin_packages",
           "cipd_bin_packages/bin"
         ]
@@ -20179,10 +20125,6 @@
         "pool:Skia",
         "docker_installed:true"
       ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
       "env_prefixes": {
         "PATH": [
           "cipd_bin_packages",
@@ -20252,9 +20194,6 @@
           "cipd_bin_packages/cpython3",
           "cipd_bin_packages/cpython3/bin"
         ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
-        ],
         "VPYTHON_VIRTUALENV_ROOT": [
           "cache/vpython"
         ]
@@ -20311,7 +20250,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -20379,9 +20318,6 @@
           "cipd_bin_packages/cpython3/bin",
           "cipd_bin_packages",
           "cipd_bin_packages/bin"
-        ],
-        "VPYTHON_DEFAULT_SPEC": [
-          "skia/.vpython"
         ],
         "VPYTHON_VIRTUALENV_ROOT": [
           "cache/vpython"
@@ -25061,69 +24997,9 @@
     "Perf-Debian10-Clang-GCE-CPU-AVX512-x86_64-Release-All": {
       "caches": [
         {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "skia/bots/node",
-          "path": "node",
-          "version": "version:3"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:352"
+          "name": "vpython",
+          "path": "cache/vpython"
         }
-      ],
-      "command": [
-        "./perf_puppeteer_canvas",
-        "--project_id",
-        "skia-swarming-bots",
-        "--git_hash",
-        "<(REVISION)",
-        "--task_id",
-        "<(TASK_ID)",
-        "--task_name",
-        "Perf-Debian10-EMCC-GCE-CPU-AVX2-wasm-Release-All-Puppeteer_CanvasPerf",
-        "--canvaskit_bin_path",
-        "./build",
-        "--node_bin_path",
-        "./node/node/bin",
-        "--benchmark_path",
-        "./tools/perf-canvaskit-puppeteer",
-        "--output_path",
-        "perf",
-        "--os_trace",
-        "Debian10",
-        "--model_trace",
-        "GCE",
-        "--cpu_or_gpu_trace",
-        "CPU",
-        "--cpu_or_gpu_value_trace",
-        "AVX2",
-        "--webgl_version",
-        "2"
-      ],
-      "dependencies": [
-        "Build-Debian10-EMCC-wasm-Release-CanvasKit_CPU",
-        "Housekeeper-PerCommit-BuildTaskDrivers_linux_amd64"
-      ],
-      "dimensions": [
-        "cpu:x86-64-Haswell_GCE",
-        "machine_type:n1-standard-16",
-        "os:Debian-10.3",
-        "pool:Skia"
-      ],
-      "env_prefixes": {
-        "PATH": [
-          "node/node/bin"
-        ]
-      },
-      "execution_timeout_ns": 3600000000000,
-      "io_timeout_ns": 3600000000000,
-      "outputs": [
-        "perf"
       ],
       "casSpec": "perf",
       "cipd_packages": [
@@ -26608,10 +26484,6 @@
         "os:Debian-10.3",
         "pool:Skia"
       ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
       "env_prefixes": {
         "PATH": [
           "node/node/bin"
@@ -27561,8 +27433,8 @@
           "cache/vpython"
         ]
       },
-      "execution_timeout_ns": 32400000000000,
-      "expiration_ns": 172800000000000,
+      "execution_timeout_ns": 14400000000000,
+      "expiration_ns": 72000000000000,
       "extra_tags": {
         "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
       },
@@ -27679,58 +27551,9 @@
     "Perf-Mac10.15.1-Clang-MacBookAir7.2-GPU-IntelHD6000-x86_64-Release-All-Metal": {
       "caches": [
         {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "skia/bots/node",
-          "path": "node",
-          "version": "version:3"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:352"
+          "name": "vpython",
+          "path": "cache/vpython"
         }
-      ],
-      "command": [
-        "./perf_puppeteer_canvas",
-        "--project_id",
-        "skia-swarming-bots",
-        "--git_hash",
-        "<(REVISION)",
-        "--task_id",
-        "<(TASK_ID)",
-        "--task_name",
-        "Perf-Ubuntu18-EMCC-Golo-GPU-QuadroP400-wasm-Release-All-Puppeteer_CanvasPerf_WebGL1",
-        "--canvaskit_bin_path",
-        "./build",
-        "--node_bin_path",
-        "./node/node/bin",
-        "--benchmark_path",
-        "./tools/perf-canvaskit-puppeteer",
-        "--output_path",
-        "perf",
-        "--os_trace",
-        "Ubuntu18",
-        "--model_trace",
-        "Golo",
-        "--cpu_or_gpu_trace",
-        "GPU",
-        "--cpu_or_gpu_value_trace",
-        "QuadroP400",
-        "--webgl_version",
-        "1"
-      ],
-      "dependencies": [
-        "Build-Debian10-EMCC-wasm-Release-CanvasKit",
-        "Housekeeper-PerCommit-BuildTaskDrivers_linux_amd64"
-      ],
-      "dimensions": [
-        "gpu:10de:1cb3-430.14",
-        "os:Ubuntu-18.04",
-        "pool:Skia"
       ],
       "casSpec": "perf",
       "cipd_packages": [
@@ -27760,73 +27583,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "skia/bots/node",
-          "path": "node",
-          "version": "version:3"
-        },
-        {
-          "name": "skia/bots/skp",
-          "path": "skp",
-          "version": "version:352"
-        }
-      ],
-      "command": [
-        "./perf_puppeteer_render_skps",
-        "--project_id",
-        "skia-swarming-bots",
-        "--git_hash",
-        "<(REVISION)",
-        "--task_id",
-        "<(TASK_ID)",
-        "--task_name",
-        "Perf-Ubuntu18-EMCC-Golo-GPU-QuadroP400-wasm-Release-All-Puppeteer_RenderSKP_WebGL1",
-        "--canvaskit_bin_path",
-        "./build",
-        "--skps_path",
-        "./skp",
-        "--node_bin_path",
-        "./node/node/bin",
-        "--benchmark_path",
-        "./tools/perf-canvaskit-puppeteer",
-        "--output_path",
-        "perf",
-        "--os_trace",
-        "Ubuntu18",
-        "--model_trace",
-        "Golo",
-        "--cpu_or_gpu_trace",
-        "GPU",
-        "--cpu_or_gpu_value_trace",
-        "QuadroP400",
-        "--webgl_version",
-        "1"
-      ],
-      "dependencies": [
-        "Build-Debian10-EMCC-wasm-Release-CanvasKit",
-        "Housekeeper-PerCommit-BuildTaskDrivers_linux_amd64"
-      ],
-      "dimensions": [
-        "gpu:10de:1cb3-430.14",
-        "os:Ubuntu-18.04",
-        "pool:Skia"
-      ],
-      "env_prefixes": {
-        "PATH": [
-          "node/node/bin"
-        ]
-      },
-      "execution_timeout_ns": 3600000000000,
-      "io_timeout_ns": 3600000000000,
-      "outputs": [
-        "perf"
-      ],
-      "service_account": "skia-external-compile-tasks@skia-swarming-bots.iam.gserviceaccount.com"
-    },
-    "Perf-Ubuntu18-EMCC-Golo-GPU-QuadroP400-wasm-Release-All-Puppeteer_RenderSKP_WebGL2": {
-      "casSpec": "puppeteer",
-      "cipd_packages": [
-        {
-          "name": "infra/tools/luci-auth/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -29166,10 +28923,6 @@
         "os:Ubuntu-18.04",
         "pool:Skia"
       ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
       "env_prefixes": {
         "PATH": [
           "node/node/bin"
@@ -29402,7 +29155,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci-auth/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -29515,7 +29268,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci-auth/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -29619,7 +29372,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci-auth/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -33217,12 +32970,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -33319,12 +33067,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -33421,12 +33164,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -33523,12 +33261,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -33625,12 +33358,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -33727,12 +33455,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -33829,12 +33552,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -33931,12 +33649,7 @@
           "version": "version:2@3.8.10.chromium.19"
         },
         {
-          "name": "infra/3pp/tools/cpython3/linux-arm64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -38758,8 +38471,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Android-Clang-Pixel4a-GPU-Adreno618-arm64-Debug-All-Android_HWASAN": {
       "caches": [
@@ -38853,8 +38565,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Android-Clang-Pixel5-GPU-Adreno620-arm64-Debug-All-Android": {
       "caches": [
@@ -39339,7 +39050,7 @@
           "cache/vpython"
         ]
       },
-      "execution_timeout_ns": 21600000000000,
+      "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
       "extra_tags": {
         "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
@@ -41512,7 +41223,7 @@
           "version": "version:4.46"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -41586,7 +41297,7 @@
           "cache/vpython"
         ]
       },
-      "execution_timeout_ns": 32400000000000,
+      "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
       "extra_tags": {
         "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
@@ -41734,7 +41445,7 @@
           "version": "version:4.46"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -41845,7 +41556,7 @@
           "version": "version:4.46"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -41955,7 +41666,7 @@
           "version": "version:4.46"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -42065,7 +41776,7 @@
           "version": "version:4.46"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -42175,7 +41886,7 @@
           "version": "version:4.46"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -42285,7 +41996,7 @@
           "version": "version:4.46"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -42479,8 +42190,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Debian10-Clang-GCE-GPU-SwiftShader-x86_64-Release-All-SwiftShader": {
       "caches": [
@@ -42507,7 +42217,7 @@
           "version": "version:4.46"
         },
         {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci-auth/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -43877,8 +43587,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Debug-All-OOPRDDL_ASAN_Vulkan": {
       "caches": [
@@ -43997,8 +43706,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Release-All": {
       "caches": [
@@ -44227,8 +43935,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Release-All-DDL3_TSAN_Vulkan": {
       "caches": [
@@ -44347,8 +44054,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Release-All-OOPRDDL_TSAN": {
       "caches": [
@@ -44385,7 +44091,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -44462,8 +44168,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Release-All-OOPRDDL_TSAN_Vulkan": {
       "caches": [
@@ -44500,7 +44205,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -44582,8 +44287,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Release-All-TSAN": {
       "caches": [
@@ -44620,7 +44324,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -44697,8 +44401,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-Release-All-Vulkan": {
       "caches": [
@@ -44740,7 +44443,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/gsutil",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -44860,12 +44563,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -44928,7 +44626,7 @@
           "cache/vpython"
         ]
       },
-      "execution_timeout_ns": 21600000000000,
+      "execution_timeout_ns": 14400000000000,
       "expiration_ns": 72000000000000,
       "extra_tags": {
         "log_location": "logdog://logs.chromium.org/skia/${SWARMING_TASK_ID}/+/annotations"
@@ -44980,12 +44678,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -45100,12 +44793,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -45220,12 +44908,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
@@ -47008,8 +46691,7 @@
       "max_attempts": 1,
       "outputs": [
         "test"
-      ],
-      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      ]
     },
     "Test-Mac10.13-Clang-MacBookPro11.5-GPU-RadeonHD8870M-x86_64-Debug-All-CommandBuffer": {
       "caches": [
@@ -47034,21 +46716,6 @@
           "name": "infra/gsutil",
           "path": "cipd_bin_packages",
           "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/3pp/tools/cpython/mac-amd64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/mac-amd64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
         },
         {
           "name": "infra/tools/luci-auth/${platform}",
@@ -47145,26 +46812,6 @@
       ],
       "casSpec": "test",
       "cipd_packages": [
-        {
-          "name": "infra/3pp/tools/cpython/mac-amd64",
-          "path": "cipd_bin_packages/cpython",
-          "version": "version:2@2.7.18.chromium.39"
-        },
-        {
-          "name": "infra/3pp/tools/cpython3/mac-amd64",
-          "path": "cipd_bin_packages/cpython3",
-          "version": "version:2@3.8.10.chromium.19"
-        },
-        {
-          "name": "infra/gsutil",
-          "path": "cipd_bin_packages",
-          "version": "version:4.46"
-        },
-        {
-          "name": "infra/tools/luci-auth/${platform}",
-          "path": "cipd_bin_packages",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
         {
           "name": "infra/3pp/tools/cpython/mac-amd64",
           "path": "cipd_bin_packages/cpython",
@@ -52169,10 +51816,6 @@
         "os:Ubuntu-18.04",
         "pool:Skia"
       ],
-      "environment": {
-        "RECIPES_USE_PY3": "true",
-        "VPYTHON_LOG_TRACE": "1"
-      },
       "env_prefixes": {
         "PATH": [
           "node/node/bin"
@@ -69215,12 +68858,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci/kitchen/${platform}",
-          "path": ".",
-          "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
-        },
-        {
-          "name": "infra/tools/luci/vpython-native/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         }
@@ -75967,7 +75605,7 @@
       },
       "io_timeout_ns": 3600000000000,
       "max_attempts": 2,
-      "service_account": "skia-external-nano-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "Upload-Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-All-ANGLE": {
       "caches": [
@@ -76060,7 +75698,7 @@
       },
       "io_timeout_ns": 3600000000000,
       "max_attempts": 2,
-      "service_account": "skia-external-nano-uploader@skia-swarming-bots.iam.gserviceaccount.com"
+      "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
     "Upload-Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Debug-All-Vulkan": {
       "caches": [
@@ -76434,7 +76072,7 @@
       "max_attempts": 2,
       "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
-    "Upload-Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Release-All-ANGLE": {
+    "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All": {
       "caches": [
         {
           "name": "vpython",
@@ -76490,7 +76128,7 @@
       ],
       "dependencies": [
         "Housekeeper-PerCommit-BundleRecipes",
-        "Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Release-All-ANGLE"
+        "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -76527,7 +76165,7 @@
       "max_attempts": 2,
       "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
-    "Upload-Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Release-All-Vulkan": {
+    "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE": {
       "caches": [
         {
           "name": "vpython",
@@ -76583,7 +76221,7 @@
       ],
       "dependencies": [
         "Housekeeper-PerCommit-BundleRecipes",
-        "Test-Win10-Clang-AlphaR2-GPU-RadeonR9M470X-x86_64-Release-All-Vulkan"
+        "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-ANGLE"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -76620,7 +76258,7 @@
       "max_attempts": 2,
       "service_account": "skia-external-gm-uploader@skia-swarming-bots.iam.gserviceaccount.com"
     },
-    "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All": {
+    "Upload-Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-BonusConfigs": {
       "caches": [
         {
           "name": "vpython",
@@ -76676,7 +76314,7 @@
       ],
       "dependencies": [
         "Housekeeper-PerCommit-BundleRecipes",
-        "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All"
+        "Test-Win10-Clang-Golo-GPU-QuadroP400-x86_64-Debug-All-BonusConfigs"
       ],
       "dimensions": [
         "cpu:x86-64-Haswell_GCE",
@@ -76753,7 +76391,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci-auth/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         }
@@ -76846,7 +76484,7 @@
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         },
         {
-          "name": "infra/tools/luci-auth/${platform}",
+          "name": "infra/tools/luci/vpython/${platform}",
           "path": "cipd_bin_packages",
           "version": "git_revision:bad9cab78683fb56589867eaf035a048da903374"
         }

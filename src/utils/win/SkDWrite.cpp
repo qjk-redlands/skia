@@ -29,9 +29,8 @@ static void release_dwrite_factory() {
 
 static void create_dwrite_factory(IDWriteFactory** factory) {
     typedef decltype(DWriteCreateFactory)* DWriteCreateFactoryProc;
-#ifdef RTC_WINDOWS_DESKTOP
     DWriteCreateFactoryProc dWriteCreateFactoryProc = reinterpret_cast<DWriteCreateFactoryProc>(
-            GetProcAddress(LoadLibraryW(L"dwrite.dll"), "DWriteCreateFactory"));
+        GetProcAddress(LoadLibraryW(L"dwrite.dll"), "DWriteCreateFactory"));
 
     if (!dWriteCreateFactoryProc) {
         HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
@@ -46,14 +45,8 @@ static void create_dwrite_factory(IDWriteFactory** factory) {
                                  reinterpret_cast<IUnknown**>(factory)),
          "Could not create DirectWrite factory.");
     atexit(release_dwrite_factory);
-#else  // RTC_WINDOWS_UNIVERSAL
-    HRVM(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
-                             __uuidof(IDWriteFactory),
-                             reinterpret_cast<IUnknown**>(factory)),
-         "Could not create DirectWrite factory.");
-    atexit(release_dwrite_factory);
-#endif
 }
+
 
 IDWriteFactory* sk_get_dwrite_factory() {
     static SkOnce once;
@@ -125,14 +118,9 @@ HRESULT sk_get_locale_string(IDWriteLocalizedStrings* names, const WCHAR* prefer
 }
 
 HRESULT SkGetGetUserDefaultLocaleNameProc(SkGetUserDefaultLocaleNameProc* proc) {
-#ifdef RTC_WINDOWS_DESKTOP
     *proc = reinterpret_cast<SkGetUserDefaultLocaleNameProc>(
-            GetProcAddress(LoadLibraryW(L"Kernel32.dll"), "GetUserDefaultLocaleName"));
-#else  // RTC_WINDOWS_UNIVERSAL
-    *proc = reinterpret_cast<SkGetUserDefaultLocaleNameProc>(
-            GetProcAddress(LoadPackagedLibrary(L"Kernel32.dll", 0), "GetUserDefaultLocaleName"));
-#endif
-
+        GetProcAddress(LoadLibraryW(L"Kernel32.dll"), "GetUserDefaultLocaleName")
+    );
     if (!*proc) {
         HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
         if (!IS_ERROR(hr)) {
