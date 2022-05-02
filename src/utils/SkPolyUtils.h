@@ -15,8 +15,6 @@
 
 struct SkRect;
 
-struct SkRect;
-
 /**
  * Generates a polygon that is inset a constant from the boundary of a given convex polygon.
  *
