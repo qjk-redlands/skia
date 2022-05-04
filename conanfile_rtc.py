@@ -27,7 +27,7 @@ class SkiaConan(ConanFile):
         self.copy("*.h*", src=base + "src/shaders", dst=relative + "src/shaders")
         self.copy("*.h*", src=base + "src/utils", dst=relative + "src/utils")
 
-        self.copy("skcms.h", src=base + "third_party/skcms", dst=relative + "third_party/skcms")
+        self.copy("skcms.h", src=base + "include/third_party/skcms", dst=relative + "include/third_party/skcms")
 
         # libraries
         output = "output/" + str(self.settings.platform_architecture_target) + "/staticlib"
