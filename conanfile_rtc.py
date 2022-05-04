@@ -22,12 +22,11 @@ class SkiaConan(ConanFile):
         self.copy("*.h*", src=base + "include/effects", dst=relative + "include/effects")
         self.copy("*.h*", src=base + "include/gpu", dst=relative + "include/gpu")
         self.copy("*.h*", src=base + "include/private", dst=relative + "include/private")
+        self.copy("skcms.h", src=base + "include/third_party/skcms", dst=relative + "include/third_party/skcms")
 
         self.copy("*.h*", src=base + "src/core", dst=relative + "src/core")
         self.copy("*.h*", src=base + "src/shaders", dst=relative + "src/shaders")
         self.copy("*.h*", src=base + "src/utils", dst=relative + "src/utils")
-
-        self.copy("skcms.h", src=base + "include/third_party/skcms", dst=relative + "include/third_party/skcms")
 
         # libraries
         output = "output/" + str(self.settings.platform_architecture_target) + "/staticlib"
