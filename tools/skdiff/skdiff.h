@@ -8,11 +8,11 @@
 #ifndef skdiff_DEFINED
 #define skdiff_DEFINED
 
-#include "SkBitmap.h"
-#include "SkColor.h"
-#include "SkColorPriv.h"
-#include "SkString.h"
-#include "../private/SkTDArray.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkString.h"
+#include "include/private/SkTArray.h"
 
 #if defined(SK_BUILD_FOR_WIN)
     #define PATH_DIV_STR "\\"
@@ -154,13 +154,13 @@ struct DiffRecord {
     Result fResult;
 };
 
-typedef SkTDArray<DiffRecord*> RecordArray;
+typedef SkTArray<DiffRecord> RecordArray;
 
 /// A wrapper for any sortProc (comparison routine) which applies a first-order
 /// sort beforehand, and a tiebreaker if the sortProc returns 0.
 template<typename T> static int compare(const void* untyped_lhs, const void* untyped_rhs) {
-    const DiffRecord* lhs = *reinterpret_cast<DiffRecord* const *>(untyped_lhs);
-    const DiffRecord* rhs = *reinterpret_cast<DiffRecord* const *>(untyped_rhs);
+    const DiffRecord* lhs = reinterpret_cast<DiffRecord const *>(untyped_lhs);
+    const DiffRecord* rhs = reinterpret_cast<DiffRecord const *>(untyped_rhs);
 
     // First-order sort... these comparisons should be applied before comparing
     // pixel values, no matter what.

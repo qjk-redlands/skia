@@ -5,15 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "AnimTimer.h"
-#include "SkCanvas.h"
-#include "SkDashPathEffect.h"
-#include "SkParsePath.h"
-#include "SkPath.h"
-#include "SkTArray.h"
-#include "SkTrimPathEffect.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkDashPathEffect.h"
+#include "include/effects/SkTrimPathEffect.h"
+#include "include/private/SkTArray.h"
+#include "include/utils/SkParsePath.h"
+#include "tools/timer/TimeUtils.h"
 
+#include <math.h>
 #include <utility>
 
 /*
@@ -23,7 +31,7 @@ static void flower(SkCanvas* canvas, const SkPath& path, SkScalar intervals[2],
                    SkPaint::Join join) {
     SkPaint paint;
     paint.setAntiAlias(true);
-    paint.setStyle(SkPaint::kStroke_Style);
+    paint.setStroke(true);
     paint.setStrokeJoin(join);
     paint.setStrokeWidth(42);
     canvas->drawPath(path, paint);
@@ -66,7 +74,9 @@ DEF_SIMPLE_GM(dashcubics, canvas, 865, 750) {
 
 class TrimGM : public skiagm::GM {
 public:
-    TrimGM() {
+    TrimGM() {}
+
+    void onOnceBeforeDraw() override {
         SkAssertResult(SkParsePath::FromSVGString(
             "M   0,100 C  10, 50 190, 50 200,100"
             "M 200,100 C 210,150 390,150 400,100"
@@ -111,7 +121,7 @@ protected:
 
         SkPaint hairlinePaint;
         hairlinePaint.setAntiAlias(true);
-        hairlinePaint.setStyle(SkPaint::kStroke_Style);
+        hairlinePaint.setStroke(true);
         hairlinePaint.setStrokeCap(SkPaint::kRound_Cap);
         hairlinePaint.setStrokeWidth(2);
         SkPaint normalPaint = hairlinePaint;
@@ -153,8 +163,8 @@ protected:
         }
     }
 
-    bool onAnimate(const AnimTimer& t) override {
-        fOffset = t.msec() / 2000.0f;
+    bool onAnimate(double nanos) override {
+        fOffset = TimeUtils::NanosToMSec(nanos) / 2000.0f;
         fOffset -= floorf(fOffset);
         return true;
     }
@@ -163,7 +173,7 @@ private:
     SkTArray<SkPath> fPaths;
     SkScalar         fOffset = 0;
 
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 DEF_GM(return new TrimGM;)
 

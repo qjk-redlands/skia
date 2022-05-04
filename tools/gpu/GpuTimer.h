@@ -8,8 +8,7 @@
 #ifndef GpuTimer_DEFINED
 #define GpuTimer_DEFINED
 
-#include "SkTypes.h"
-#include "SkExchange.h"
+#include "include/core/SkTypes.h"
 
 #include <chrono>
 
@@ -51,7 +50,7 @@ public:
     PlatformTimerQuery SK_WARN_UNUSED_RESULT queueStop() {
         SkASSERT(fActiveTimer);
         this->onQueueTimerStop(fActiveTimer);
-        return skstd::exchange(fActiveTimer, kInvalidTimerQuery);
+        return std::exchange(fActiveTimer, kInvalidTimerQuery);
     }
 
     enum class QueryStatus {

@@ -4,10 +4,10 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Benchmark.h"
-#include "SkColorData.h"
-#include "SkRandom.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkString.h"
+#include "include/private/SkColorData.h"
+#include "include/utils/SkRandom.h"
 
 template <bool kFast, bool kScale>
 class FourByteInterpBench : public Benchmark {
@@ -41,7 +41,7 @@ public:
 
     void onDraw(int loops, SkCanvas*) override {
         // We xor results of FourByteInterp into junk to make sure the function runs.
-        volatile SkPMColor junk = 0;
+        SK_MAYBE_UNUSED volatile SkPMColor junk = 0;
 
         for (int loop = 0; loop < loops; loop++) {
             for (int i = 0; i < kInputs; i++) {

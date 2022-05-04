@@ -4,13 +4,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "PathOpsExtendedTest.h"
-#include "PathOpsTestCommon.h"
-#include "SkIntersections.h"
-#include "SkPathOpsLine.h"
-#include "SkPathOpsQuad.h"
-#include "SkReduceOrder.h"
-#include "Test.h"
+#include "src/pathops/SkIntersections.h"
+#include "src/pathops/SkPathOpsLine.h"
+#include "src/pathops/SkPathOpsQuad.h"
+#include "src/pathops/SkReduceOrder.h"
+#include "tests/PathOpsExtendedTest.h"
+#include "tests/PathOpsTestCommon.h"
+#include "tests/Test.h"
 
 #include <utility>
 
@@ -98,7 +98,6 @@ static void testOneOffs(skiatest::Reporter* reporter) {
             SkDPoint lineXY = line.ptAtT(lineT);
             if (!quadXY.approximatelyEqual(lineXY)) {
                 quadXY.approximatelyEqual(lineXY);
-                SkDebugf("");
             }
             REPORTER_ASSERT(reporter, quadXY.approximatelyEqual(lineXY));
         }

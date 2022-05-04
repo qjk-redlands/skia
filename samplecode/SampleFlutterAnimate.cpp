@@ -5,21 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "AnimTimer.h"
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkColorFilter.h"
-#include "SkColorPriv.h"
-#include "SkFont.h"
-#include "SkImage.h"
-#include "SkRandom.h"
-#include "SkTime.h"
-#include "SkTypeface.h"
-#include "Timer.h"
-
-#if SK_SUPPORT_GPU
-#include "GrContext.h"
-#endif
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkTime.h"
+#include "include/core/SkTypeface.h"
+#include "include/utils/SkRandom.h"
+#include "samplecode/Sample.h"
+#include "tools/timer/Timer.h"
 
 // Create an animation of a bunch of letters that rotate in place. This is intended to stress
 // the glyph atlas and test that we don't see corruption or bad slowdowns.
@@ -33,19 +28,11 @@ protected:
         initChars();
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "FlutterAnimate");
-            return true;
-        }
-
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("FlutterAnimate"); }
 
     void onDrawContent(SkCanvas* canvas) override {
         SkFont font(fTypeface, 50);
         SkPaint paint;
-        paint.setFilterQuality(kMedium_SkFilterQuality);
 
         // rough center of each glyph
         static constexpr auto kMidX = 35;
@@ -64,11 +51,11 @@ protected:
         }
     }
 
-    bool onAnimate(const AnimTimer& timer) override {
-        fCurrTime = timer.secs() - fResetTime;
+    bool onAnimate(double nanos) override {
+        fCurrTime = 1e-9 * nanos - fResetTime;
         if (fCurrTime > kDuration) {
             this->initChars();
-            fResetTime = timer.secs();
+            fResetTime = 1e-9 * nanos;
             fCurrTime = 0;
         }
 
@@ -87,7 +74,7 @@ private:
         }
     }
 
-    static constexpr double kDuration = 5.0;
+    inline static constexpr double kDuration = 5.0;
     double fCurrTime;
     double fResetTime;
     SkRandom fRand;
@@ -99,10 +86,10 @@ private:
         SkScalar fEndRotation;
     };
     sk_sp<SkTypeface> fTypeface;
-    static constexpr int kNumChars = 40;
+    inline static constexpr int kNumChars = 40;
     AnimatedChar fChars[kNumChars];
 
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -5,45 +5,44 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkBlendMode.h"
-#include "SkBlurDrawLooper.h"
-#include "SkBlurMask.h"
-#include "SkBlurPriv.h"
-#include "SkBlurTypes.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkColorPriv.h"
-#include "SkDrawLooper.h"
-#include "SkEmbossMaskFilter.h"
-#include "SkFloatBits.h"
-#include "SkImageInfo.h"
-#include "SkLayerDrawLooper.h"
-#include "SkMask.h"
-#include "SkMaskFilter.h"
-#include "SkMaskFilterBase.h"
-#include "SkMath.h"
-#include "SkMathPriv.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkPerlinNoiseShader.h"
-#include "SkPixmap.h"
-#include "SkPoint.h"
-#include "SkRRect.h"
-#include "SkRectPriv.h"
-#include "SkRefCnt.h"
-#include "SkScalar.h"
-#include "SkShader.h"
-#include "SkSize.h"
-#include "SkSurface.h"
-#include "SkTypes.h"
-#include "Test.h"
-#include "ToolUtils.h"
-
-#include "GrContextFactory.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkBlurTypes.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkMath.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkPerlinNoiseShader.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/SkFloatBits.h"
+#include "include/private/SkTPin.h"
+#include "src/core/SkBlurMask.h"
+#include "src/core/SkGpuBlurUtils.h"
+#include "src/core/SkMask.h"
+#include "src/core/SkMaskFilterBase.h"
+#include "src/core/SkMathPriv.h"
+#include "src/effects/SkEmbossMaskFilter.h"
+#include "tests/Test.h"
+#include "tools/ToolUtils.h"
+#include "tools/gpu/GrContextFactory.h"
 
 #include <math.h>
 #include <string.h>
+#include <initializer_list>
 #include <utility>
 
 #define WRITE_CSV 0
@@ -180,7 +179,7 @@ static void ground_truth_2d(int width, int height,
                             int* result, int resultCount) {
     SkMask src, dst;
 
-    src.fBounds.set(0, 0, width, height);
+    src.fBounds.setWH(width, height);
     src.fFormat = SkMask::kA8_Format;
     src.fRowBytes = src.fBounds.width();
     src.fImage = SkMask::AllocImage(src.computeTotalImageSize());
@@ -237,7 +236,7 @@ static void brute_force_1d(SkScalar stepMin, SkScalar stepMax,
             sum += gaussian(j, gaussianSigma) * step(i-j, stepMin, stepMax);
         }
 
-        result[i] = SkClampMax(SkClampPos(int(sum + 0.5f)), 255);
+        result[i] = SkTPin(SkClampPos(int(sum + 0.5f)), 0, 255);
     }
 }
 
@@ -357,91 +356,6 @@ DEF_TEST(BlurSigmaRange, reporter) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
-static void test_blurDrawLooper(skiatest::Reporter* reporter, SkScalar sigma, SkBlurStyle style) {
-    if (kNormal_SkBlurStyle != style) {
-        return; // blurdrawlooper only supports normal
-    }
-
-    const SkColor color = 0xFF335577;
-    const SkScalar dx = 10;
-    const SkScalar dy = -5;
-    sk_sp<SkDrawLooper> lp(SkBlurDrawLooper::Make(color, sigma, dx, dy));
-    const bool expectSuccess = sigma > 0;
-
-    if (nullptr == lp) {
-        REPORTER_ASSERT(reporter, sigma <= 0);
-    } else {
-        SkDrawLooper::BlurShadowRec rec;
-        bool success = lp->asABlurShadow(&rec);
-        REPORTER_ASSERT(reporter, success == expectSuccess);
-        if (success) {
-            REPORTER_ASSERT(reporter, rec.fSigma == sigma);
-            REPORTER_ASSERT(reporter, rec.fOffset.x() == dx);
-            REPORTER_ASSERT(reporter, rec.fOffset.y() == dy);
-            REPORTER_ASSERT(reporter, rec.fColor == color);
-            REPORTER_ASSERT(reporter, rec.fStyle == style);
-        }
-    }
-}
-
-static void test_looper(skiatest::Reporter* reporter, sk_sp<SkDrawLooper> lp, SkScalar sigma,
-                        SkBlurStyle style, bool expectSuccess) {
-    SkDrawLooper::BlurShadowRec rec;
-    bool success = lp->asABlurShadow(&rec);
-    REPORTER_ASSERT(reporter, success == expectSuccess);
-    if (success != expectSuccess) {
-        lp->asABlurShadow(&rec);
-    }
-    if (success) {
-        REPORTER_ASSERT(reporter, rec.fSigma == sigma);
-        REPORTER_ASSERT(reporter, rec.fStyle == style);
-    }
-}
-
-static void make_noop_layer(SkLayerDrawLooper::Builder* builder) {
-    SkLayerDrawLooper::LayerInfo info;
-
-    info.fPaintBits = 0;
-    info.fColorMode = SkBlendMode::kDst;
-    builder->addLayer(info);
-}
-
-static void make_blur_layer(SkLayerDrawLooper::Builder* builder, sk_sp<SkMaskFilter> mf) {
-    SkLayerDrawLooper::LayerInfo info;
-
-    info.fPaintBits = SkLayerDrawLooper::kMaskFilter_Bit;
-    info.fColorMode = SkBlendMode::kSrc;
-    SkPaint* paint = builder->addLayer(info);
-    paint->setMaskFilter(std::move(mf));
-}
-
-static void test_layerDrawLooper(skiatest::Reporter* reporter, sk_sp<SkMaskFilter> mf,
-                                 SkScalar sigma, SkBlurStyle style, bool expectSuccess) {
-
-    SkLayerDrawLooper::LayerInfo info;
-    SkLayerDrawLooper::Builder builder;
-
-    // 1 layer is too few
-    make_noop_layer(&builder);
-    test_looper(reporter, builder.detach(), sigma, style, false);
-
-    // 2 layers is good, but need blur
-    make_noop_layer(&builder);
-    make_noop_layer(&builder);
-    test_looper(reporter, builder.detach(), sigma, style, false);
-
-    // 2 layers is just right
-    make_noop_layer(&builder);
-    make_blur_layer(&builder, mf);
-    test_looper(reporter, builder.detach(), sigma, style, expectSuccess);
-
-    // 3 layers is too many
-    make_noop_layer(&builder);
-    make_blur_layer(&builder, mf);
-    make_noop_layer(&builder);
-    test_looper(reporter, builder.detach(), sigma, style, false);
-}
-
 DEF_TEST(BlurAsABlur, reporter) {
     const SkBlurStyle styles[] = {
         kNormal_SkBlurStyle, kSolid_SkBlurStyle, kOuter_SkBlurStyle, kInner_SkBlurStyle
@@ -472,9 +386,14 @@ DEF_TEST(BlurAsABlur, reporter) {
                     } else {
                         REPORTER_ASSERT(reporter, !success);
                     }
-                    test_layerDrawLooper(reporter, std::move(mf), sigma, style, success);
+
+                    const SkRect src = {0, 0, 100, 100};
+                    const auto dst = mf->approximateFilteredBounds(src);
+
+                    // This is a very conservative test. With more knowledge, we could
+                    // consider more stringent tests.
+                    REPORTER_ASSERT(reporter, dst.contains(src));
                 }
-                test_blurDrawLooper(reporter, sigma, style);
             }
         }
     }
@@ -502,7 +421,7 @@ DEF_TEST(BlurAsABlur, reporter) {
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(SmallBoxBlurBug, reporter, ctxInfo) {
 
     SkImageInfo info = SkImageInfo::MakeN32Premul(128, 128);
-    auto surface(SkSurface::MakeRenderTarget(ctxInfo.grContext(), SkBudgeted::kNo, info));
+    auto surface(SkSurface::MakeRenderTarget(ctxInfo.directContext(), SkBudgeted::kNo, info));
     SkCanvas* canvas = surface->getCanvas();
 
     SkRect r = SkRect::MakeXYWH(10, 10, 100, 100);
@@ -521,12 +440,10 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
     bool ninePatchable;
     SkRRect rrectToDraw;
     SkISize size;
-    SkScalar rectXs[kSkBlurRRectMaxDivisions],
-             rectYs[kSkBlurRRectMaxDivisions];
-    SkScalar texXs[kSkBlurRRectMaxDivisions],
-             texYs[kSkBlurRRectMaxDivisions];
-    int numX, numY;
-    uint32_t skipMask;
+    SkScalar rectXs[SkGpuBlurUtils::kBlurRRectMaxDivisions],
+             rectYs[SkGpuBlurUtils::kBlurRRectMaxDivisions];
+    SkScalar texXs[SkGpuBlurUtils::kBlurRRectMaxDivisions],
+             texYs[SkGpuBlurUtils::kBlurRRectMaxDivisions];
 
     // not nine-patchable
     {
@@ -535,11 +452,9 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
         SkRRect rr;
         rr.setRectRadii(r, radii);
 
-        ninePatchable = SkComputeBlurredRRectParams(rr, rr, SkRect::MakeEmpty(),
-                                                    kBlurRad, kBlurRad,
-                                                    &rrectToDraw, &size,
-                                                    rectXs, rectYs, texXs, texYs,
-                                                    &numX, &numY, &skipMask);
+        ninePatchable = SkGpuBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
+                                                                  &rrectToDraw, &size,
+                                                                  rectXs, rectYs, texXs, texYs);
         REPORTER_ASSERT(reporter, !ninePatchable);
     }
 
@@ -549,18 +464,14 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
         SkRRect rr;
         rr.setRectXY(r, kCornerRad, kCornerRad);
 
-        ninePatchable = SkComputeBlurredRRectParams(rr, rr, SkRect::MakeEmpty(),
-                                                    kBlurRad, kBlurRad,
-                                                    &rrectToDraw, &size,
-                                                    rectXs, rectYs, texXs, texYs,
-                                                    &numX, &numY, &skipMask);
+        ninePatchable = SkGpuBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
+                                                                  &rrectToDraw, &size,
+                                                                  rectXs, rectYs, texXs, texYs);
 
         static const SkScalar kAns = 12.0f * kBlurRad + 2.0f * kCornerRad + 1.0f;
         REPORTER_ASSERT(reporter, ninePatchable);
         REPORTER_ASSERT(reporter, SkScalarNearlyEqual(SkIntToScalar(size.fWidth), kAns));
         REPORTER_ASSERT(reporter, SkScalarNearlyEqual(SkIntToScalar(size.fHeight), kAns));
-        REPORTER_ASSERT(reporter, 4 == numX && 4 == numY);
-        REPORTER_ASSERT(reporter, !skipMask);
     }
 
     // simple elliptical
@@ -570,11 +481,9 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
         SkRRect rr;
         rr.setRectXY(r, kXCornerRad, kYCornerRad);
 
-        ninePatchable = SkComputeBlurredRRectParams(rr, rr, SkRect::MakeEmpty(),
-                                                    kBlurRad, kBlurRad,
-                                                    &rrectToDraw, &size,
-                                                    rectXs, rectYs, texXs, texYs,
-                                                    &numX, &numY, &skipMask);
+        ninePatchable = SkGpuBlurUtils::ComputeBlurredRRectParams(rr, rr, kBlurRad, kBlurRad,
+                                                                  &rrectToDraw, &size,
+                                                                  rectXs, rectYs, texXs, texYs);
 
         static const SkScalar kXAns = 12.0f * kBlurRad + 2.0f * kXCornerRad + 1.0f;
         static const SkScalar kYAns = 12.0f * kBlurRad + 2.0f * kYCornerRad + 1.0f;
@@ -582,77 +491,7 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
         REPORTER_ASSERT(reporter, ninePatchable);
         REPORTER_ASSERT(reporter, SkScalarNearlyEqual(SkIntToScalar(size.fWidth), kXAns));
         REPORTER_ASSERT(reporter, SkScalarNearlyEqual(SkIntToScalar(size.fHeight), kYAns));
-        REPORTER_ASSERT(reporter, 4 == numX && 4 == numY);
-        REPORTER_ASSERT(reporter, !skipMask);
     }
-
-    // test-out occlusion
-    {
-        static const SkScalar kCornerRad = 10.0f;
-        SkRRect rr;
-        rr.setRectXY(r, kCornerRad, kCornerRad);
-
-        // The rectXs & rectYs should be { 1, 29, 91, 119 }. Add two more points around each.
-        SkScalar testLocs[] = {
-             -18.0f, -9.0f,
-               1.0f,
-               9.0f, 18.0f,
-              29.0f,
-              39.0f, 49.0f,
-              91.0f,
-             109.0f, 118.0f,
-             119.0f,
-             139.0f, 149.0f
-        };
-
-        for (int minY = 0; minY < (int)SK_ARRAY_COUNT(testLocs); ++minY) {
-            for (int maxY = minY+1; maxY < (int)SK_ARRAY_COUNT(testLocs); ++maxY) {
-                for (int minX = 0; minX < (int)SK_ARRAY_COUNT(testLocs); ++minX) {
-                    for (int maxX = minX+1; maxX < (int)SK_ARRAY_COUNT(testLocs); ++maxX) {
-                        SkRect occluder = SkRect::MakeLTRB(testLocs[minX], testLocs[minY],
-                                                           testLocs[maxX], testLocs[maxY]);
-                        if (occluder.isEmpty()) {
-                            continue;
-                        }
-
-                        ninePatchable = SkComputeBlurredRRectParams(rr, rr, occluder,
-                                                                    kBlurRad, kBlurRad,
-                                                                    &rrectToDraw, &size,
-                                                                    rectXs, rectYs, texXs, texYs,
-                                                                    &numX, &numY, &skipMask);
-
-                        static const SkScalar kAns = 12.0f * kBlurRad + 2.0f * kCornerRad + 1.0f;
-                        REPORTER_ASSERT(reporter, ninePatchable);
-                        REPORTER_ASSERT(reporter,
-                                            SkScalarNearlyEqual(SkIntToScalar(size.fWidth), kAns));
-                        REPORTER_ASSERT(reporter,
-                                            SkScalarNearlyEqual(SkIntToScalar(size.fHeight), kAns));
-
-                        int checkBit = 0x1;
-                        for (int y = 0; y < numY-1; ++y) {
-                            for (int x = 0; x < numX-1; ++x) {
-                                SkRect cell = SkRect::MakeLTRB(rectXs[x], rectYs[y],
-                                                               rectXs[x+1], rectYs[y+1]);
-                                REPORTER_ASSERT(reporter,
-                                                    SkToBool(skipMask & checkBit) ==
-                                                    (cell.isEmpty() || occluder.contains(cell)));
-
-                                REPORTER_ASSERT(reporter, texXs[x] >= 0 &&
-                                                          texXs[x] <= size.fWidth);
-                                REPORTER_ASSERT(reporter, texYs[y] >= 0 &&
-                                                          texXs[y] <= size.fHeight);
-
-                                checkBit <<= 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-
-    }
-
 }
 
 // https://crbugs.com/787712
@@ -704,7 +543,7 @@ DEF_TEST(BlurZeroSigma, reporter) {
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 DEF_GPUTEST_FOR_RENDERING_CONTEXTS(BlurMaskBiggerThanDest, reporter, ctxInfo) {
-    GrContext* context = ctxInfo.grContext();
+    auto context = ctxInfo.directContext();
 
     SkImageInfo ii = SkImageInfo::Make(32, 32, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
 
@@ -741,4 +580,3 @@ DEF_TEST(zero_blur, reporter) {
     SkIPoint offset;
     bitmap.extractAlpha(&alpha, &paint, nullptr, &offset);
 }
-

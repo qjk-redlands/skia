@@ -8,20 +8,20 @@
 #ifndef Request_DEFINED
 #define Request_DEFINED
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
-#include "GrContextFactory.h"
+#include "tools/gpu/GrContextFactory.h"
 
-#include "DebugCanvas.h"
-#include "SkPicture.h"
-#include "SkStream.h"
-#include "SkSurface.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkSurface.h"
+#include "tools/debugger/DebugCanvas.h"
 
-#include "UrlDataManager.h"
+#include "tools/UrlDataManager.h"
 
 namespace sk_gpu_test {
 class GrContextFactory;
-}
+}  // namespace sk_gpu_test
 struct MHD_Connection;
 struct MHD_PostProcessor;
 
@@ -48,12 +48,12 @@ struct Request {
     bool initPictureFromStream(SkStream*);
 
     // Returns the json list of ops as an SkData
-    sk_sp<SkData> getJsonOps(int n);
+    sk_sp<SkData> getJsonOps();
 
     // Returns a json list of ops as an SkData
-    sk_sp<SkData> getJsonOpList(int n);
+    sk_sp<SkData> getJsonOpsTask();
 
-    // Returns json with the viewMatrix and clipRect
+    // Returns json with the viewMatrix and clipRect at the given command
     sk_sp<SkData> getJsonInfo(int n);
 
     // returns the color of the pixel at (x,y) in the canvas
@@ -68,7 +68,7 @@ private:
     SkSurface* createCPUSurface();
     SkSurface* createGPUSurface();
     SkIRect getBounds();
-    GrContext* getContext();
+    GrDirectContext* directContext();
 
     sk_sp<SkPicture> fPicture;
     sk_gpu_test::GrContextFactory* fContextFactory;

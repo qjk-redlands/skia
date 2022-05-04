@@ -10,15 +10,15 @@
 // partial clears on the GPU should follow a fast path that maps to backend-specialized clear
 // operations, whereas the rounded-rect clear cannot be.
 
-#include "Benchmark.h"
+#include "bench/Benchmark.h"
 
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "SkPaint.h"
-#include "SkRect.h"
-#include "SkRRect.h"
-
-#include "GrRenderTargetContext.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRect.h"
+#include "include/effects/SkGradientShader.h"
+#include "src/core/SkCanvasPriv.h"
+#include "src/gpu/v1/SurfaceDrawContext_v1.h"
 
 static sk_sp<SkShader> make_shader() {
     static const SkPoint kPts[] = {{0, 0}, {10, 10}};
@@ -62,13 +62,14 @@ protected:
         SkPaint interruptPaint;
         interruptPaint.setShader(make_shader());
 
-        GrRenderTargetContext* rtc = canvas->internal_private_accessTopLayerRenderTargetContext();
-        if (rtc) {
-            // Tricks the GrRenderTargetOpList into thinking it cannot reset its draw op list on
-            // a fullscreen clear. If we don't do this, fullscreen clear ops would be created and
-            // constantly discard the previous iteration's op so execution would only invoke one
-            // actual clear on the GPU (not what we want to measure).
-            rtc->setNeedsStencil();
+        auto sdc = SkCanvasPriv::TopDeviceSurfaceDrawContext(canvas);
+        if (sdc) {
+            // Tell the skgpu::v1::SurfaceDrawContext to not reset its draw op list on a
+            // fullscreen clear.
+            // If we don't do this, fullscreen clear ops would be created and constantly discard the
+            // previous iteration's op so execution would only invoke one actual clear on the GPU
+            // (not what we want to measure).
+            sdc->testingOnly_SetPreserveOpsOnFullClear();
         }
 
         for (int i = 0; i < loops; i++) {

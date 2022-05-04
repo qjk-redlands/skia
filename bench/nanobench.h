@@ -8,11 +8,11 @@
 #ifndef nanobench_DEFINED
 #define nanobench_DEFINED
 
-#include "Benchmark.h"
-#include "GrContextFactory.h"
-#include "SkImageInfo.h"
-#include "SkSurface.h"
-#include "SkTypes.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "tools/gpu/GrContextFactory.h"
 
 class SkBitmap;
 class SkCanvas;
@@ -27,7 +27,7 @@ struct Config {
     int samples;
     sk_gpu_test::GrContextFactory::ContextType ctxType;
     sk_gpu_test::GrContextFactory::ContextOverrides ctxOverrides;
-    bool useDFText;
+    uint32_t surfaceFlags;
 };
 
 struct Target {
@@ -67,14 +67,11 @@ struct Target {
         Returns false on error. */
     virtual bool capturePixels(SkBitmap* bmp);
 
-    /** Writes any config-specific data to the log. */
-    virtual void fillOptions(NanoJSONResultsWriter& log) { }
-
     /** Writes gathered stats using SkDebugf. */
     virtual void dumpStats() {}
 
     SkCanvas* getCanvas() const {
-        if (!surface.get()) {
+        if (!surface) {
             return nullptr;
         }
         return surface->getCanvas();

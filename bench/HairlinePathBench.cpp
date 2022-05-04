@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkShader.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
 
 enum Flags {
     kBig_Flag = 1 << 0,
@@ -60,7 +60,7 @@ protected:
         SkPath path;
         this->makePath(&path);
         if (fFlags & kBig_Flag) {
-            const SkMatrix m = SkMatrix::MakeScale(SkIntToScalar(3), SkIntToScalar(3));
+            const SkMatrix m = SkMatrix::Scale(3, 3);
             path.transform(m);
         }
 
@@ -75,7 +75,7 @@ private:
     SkPaint     fPaint;
     SkString    fName;
     Flags       fFlags;
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 class LinePathBench : public HairlinePathBench {
@@ -107,7 +107,7 @@ public:
         }
     }
 private:
-    typedef HairlinePathBench INHERITED;
+    using INHERITED = HairlinePathBench;
 };
 
 class QuadPathBench : public HairlinePathBench {
@@ -139,7 +139,7 @@ public:
         }
     }
 private:
-    typedef HairlinePathBench INHERITED;
+    using INHERITED = HairlinePathBench;
 };
 
 class ConicPathBench : public HairlinePathBench {
@@ -175,7 +175,7 @@ public:
     }
 
 private:
-    typedef HairlinePathBench INHERITED;
+    using INHERITED = HairlinePathBench;
 };
 
 class CubicPathBench : public HairlinePathBench {
@@ -210,7 +210,7 @@ public:
         }
     }
 private:
-    typedef HairlinePathBench INHERITED;
+    using INHERITED = HairlinePathBench;
 };
 
 // FLAG00 - no AA, small

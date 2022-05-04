@@ -8,22 +8,23 @@
 #ifndef SkRecords_DEFINED
 #define SkRecords_DEFINED
 
-#include "SkData.h"
-#include "SkCanvas.h"
-#include "SkDrawable.h"
-#include "SkDrawShadowInfo.h"
-#include "SkImage.h"
-#include "SkImageFilter.h"
-#include "SkMatrix.h"
-#include "SkPath.h"
-#include "SkPicture.h"
-#include "SkRect.h"
-#include "SkRegion.h"
-#include "SkRRect.h"
-#include "SkRSXform.h"
-#include "SkString.h"
-#include "SkTextBlob.h"
-#include "SkVertices.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkDrawable.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkM44.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkRSXform.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkVertices.h"
+#include "src/core/SkDrawShadowInfo.h"
 
 namespace SkRecords {
 
@@ -45,20 +46,25 @@ namespace SkRecords {
     M(SaveLayer)                                                    \
     M(SaveBehind)                                                   \
     M(SetMatrix)                                                    \
+    M(SetM44)                                                       \
     M(Translate)                                                    \
+    M(Scale)                                                        \
     M(Concat)                                                       \
+    M(Concat44)                                                     \
     M(ClipPath)                                                     \
     M(ClipRRect)                                                    \
     M(ClipRect)                                                     \
     M(ClipRegion)                                                   \
+    M(ClipShader)                                                   \
+    M(ResetClip)                                                    \
     M(DrawArc)                                                      \
     M(DrawDrawable)                                                 \
     M(DrawImage)                                                    \
     M(DrawImageLattice)                                             \
     M(DrawImageRect)                                                \
-    M(DrawImageNine)                                                \
     M(DrawDRRect)                                                   \
     M(DrawOval)                                                     \
+    M(DrawBehind)                                                   \
     M(DrawPaint)                                                    \
     M(DrawPath)                                                     \
     M(DrawPatch)                                                    \
@@ -87,7 +93,7 @@ enum Type { SK_RECORD_TYPES(ENUM) };
 
 // An Optional doesn't own the pointer's memory, but may need to destroy non-POD data.
 template <typename T>
-class Optional : SkNoncopyable {
+class Optional {
 public:
     Optional() : fPtr(nullptr) {}
     Optional(T* ptr) : fPtr(ptr) {}
@@ -99,23 +105,8 @@ public:
     ACT_AS_PTR(fPtr)
 private:
     T* fPtr;
-};
-
-// Like Optional, but ptr must not be NULL.
-template <typename T>
-class Adopted : SkNoncopyable {
-public:
-    Adopted(T* ptr) : fPtr(ptr) { SkASSERT(fPtr); }
-    Adopted(Adopted* source) {
-        // Transfer ownership from source to this.
-        fPtr = source->fPtr;
-        source->fPtr = NULL;
-    }
-    ~Adopted() { if (fPtr) fPtr->~T(); }
-
-    ACT_AS_PTR(fPtr)
-private:
-    T* fPtr;
+    Optional(const Optional&) = delete;
+    Optional& operator=(const Optional&) = delete;
 };
 
 // PODArray doesn't own the pointer's memory, and we assume the data is POD.
@@ -175,21 +166,28 @@ RECORD(SaveLayer, kHasPaint_Tag,
        Optional<SkRect> bounds;
        Optional<SkPaint> paint;
        sk_sp<const SkImageFilter> backdrop;
-       sk_sp<const SkImage> clipMask;
-       Optional<SkMatrix> clipMatrix;
-       SkCanvas::SaveLayerFlags saveLayerFlags);
+       SkCanvas::SaveLayerFlags saveLayerFlags;
+       SkScalar backdropScale);
 
 RECORD(SaveBehind, 0,
        Optional<SkRect> subset);
 
 RECORD(SetMatrix, 0,
         TypedMatrix matrix);
+RECORD(SetM44, 0,
+        SkM44 matrix);
 RECORD(Concat, 0,
         TypedMatrix matrix);
+RECORD(Concat44, 0,
+       SkM44 matrix);
 
 RECORD(Translate, 0,
         SkScalar dx;
         SkScalar dy);
+
+RECORD(Scale, 0,
+       SkScalar sx;
+       SkScalar sy);
 
 struct ClipOpAndAA {
     ClipOpAndAA() {}
@@ -216,6 +214,10 @@ RECORD(ClipRect, 0,
 RECORD(ClipRegion, 0,
         SkRegion region;
         SkClipOp op);
+RECORD(ClipShader, 0,
+        sk_sp<SkShader> shader;
+        SkClipOp op);
+RECORD(ResetClip, 0);
 
 // While not strictly required, if you have an SkPaint, it's fastest to put it first.
 RECORD(DrawArc, kDraw_Tag|kHasPaint_Tag,
@@ -236,7 +238,8 @@ RECORD(DrawImage, kDraw_Tag|kHasImage_Tag|kHasPaint_Tag,
         Optional<SkPaint> paint;
         sk_sp<const SkImage> image;
         SkScalar left;
-        SkScalar top);
+        SkScalar top;
+        SkSamplingOptions sampling);
 RECORD(DrawImageLattice, kDraw_Tag|kHasImage_Tag|kHasPaint_Tag,
         Optional<SkPaint> paint;
         sk_sp<const SkImage> image;
@@ -248,23 +251,22 @@ RECORD(DrawImageLattice, kDraw_Tag|kHasImage_Tag|kHasPaint_Tag,
         PODArray<SkCanvas::Lattice::RectType> flags;
         PODArray<SkColor> colors;
         SkIRect src;
-        SkRect dst);
+        SkRect dst;
+        SkFilterMode filter);
 RECORD(DrawImageRect, kDraw_Tag|kHasImage_Tag|kHasPaint_Tag,
         Optional<SkPaint> paint;
         sk_sp<const SkImage> image;
-        Optional<SkRect> src;
+        SkRect src;
         SkRect dst;
+        SkSamplingOptions sampling;
         SkCanvas::SrcRectConstraint constraint);
-RECORD(DrawImageNine, kDraw_Tag|kHasImage_Tag|kHasPaint_Tag,
-        Optional<SkPaint> paint;
-        sk_sp<const SkImage> image;
-        SkIRect center;
-        SkRect dst);
 RECORD(DrawOval, kDraw_Tag|kHasPaint_Tag,
         SkPaint paint;
         SkRect oval);
 RECORD(DrawPaint, kDraw_Tag|kHasPaint_Tag,
         SkPaint paint);
+RECORD(DrawBehind, kDraw_Tag|kHasPaint_Tag,
+       SkPaint paint);
 RECORD(DrawPath, kDraw_Tag|kHasPaint_Tag,
         SkPaint paint;
         PreCachedPath path);
@@ -276,7 +278,7 @@ RECORD(DrawPoints, kDraw_Tag|kHasPaint_Tag,
         SkPaint paint;
         SkCanvas::PointMode mode;
         unsigned count;
-        SkPoint* pts);
+        PODArray<SkPoint> pts);
 RECORD(DrawRRect, kDraw_Tag|kHasPaint_Tag,
         SkPaint paint;
         SkRRect rrect);
@@ -305,12 +307,11 @@ RECORD(DrawAtlas, kDraw_Tag|kHasImage_Tag|kHasPaint_Tag,
         PODArray<SkColor> colors;
         int count;
         SkBlendMode mode;
+        SkSamplingOptions sampling;
         Optional<SkRect> cull);
 RECORD(DrawVertices, kDraw_Tag|kHasPaint_Tag,
         SkPaint paint;
         sk_sp<SkVertices> vertices;
-        PODArray<SkVertices::Bone> bones;
-        int boneCount;
         SkBlendMode bmode);
 RECORD(DrawShadowRec, kDraw_Tag,
        PreCachedPath path;
@@ -323,7 +324,7 @@ RECORD(DrawEdgeAAQuad, kDraw_Tag,
        SkRect rect;
        PODArray<SkPoint> clip;
        SkCanvas::QuadAAFlags aa;
-       SkColor color;
+       SkColor4f color;
        SkBlendMode mode);
 RECORD(DrawEdgeAAImageSet, kDraw_Tag|kHasImage_Tag|kHasPaint_Tag,
        Optional<SkPaint> paint;
@@ -331,6 +332,7 @@ RECORD(DrawEdgeAAImageSet, kDraw_Tag|kHasImage_Tag|kHasPaint_Tag,
        int count;
        PODArray<SkPoint> dstClips;
        PODArray<SkMatrix> preViewMatrices;
+       SkSamplingOptions sampling;
        SkCanvas::SrcRectConstraint constraint);
 #undef RECORD
 

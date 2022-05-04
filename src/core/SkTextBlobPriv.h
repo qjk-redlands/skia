@@ -8,17 +8,16 @@
 #ifndef SkTextBlobPriv_DEFINED
 #define SkTextBlobPriv_DEFINED
 
-#include "SkColorFilter.h"
-#include "SkDrawLooper.h"
-#include "SkFont.h"
-#include "SkImageFilter.h"
-#include "SkMaskFilter.h"
-#include "SkPaintPriv.h"
-#include "SkPathEffect.h"
-#include "SkSafeMath.h"
-#include "SkShader.h"
-#include "SkTextBlob.h"
-#include "SkTypeface.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPathEffect.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "src/core/SkPaintPriv.h"
+#include "src/core/SkSafeMath.h"
 
 class SkReadBuffer;
 class SkWriteBuffer;
@@ -38,25 +37,6 @@ public:
      *          invalid.
      */
     static sk_sp<SkTextBlob> MakeFromBuffer(SkReadBuffer&);
-};
-
-class SkTextBlobBuilderPriv {
-public:
-    static const SkTextBlobBuilder::RunBuffer& AllocRunText(SkTextBlobBuilder* builder,
-            const SkFont& font, int count, SkScalar x, SkScalar y, int textByteCount,
-            SkString lang, const SkRect* bounds = nullptr) {
-        return builder->allocRunText(font, count, x, y, textByteCount, lang, bounds);
-    }
-    static const SkTextBlobBuilder::RunBuffer& AllocRunTextPosH(SkTextBlobBuilder* builder,
-            const SkFont& font, int count, SkScalar y, int textByteCount, SkString lang,
-            const SkRect* bounds = nullptr) {
-        return builder->allocRunTextPosH(font, count, y, textByteCount, lang, bounds);
-    }
-    static const SkTextBlobBuilder::RunBuffer& AllocRunTextPos(SkTextBlobBuilder* builder,
-            const SkFont& font, int count, int textByteCount, SkString lang,
-            const SkRect* bounds = nullptr) {
-        return builder->allocRunTextPos(font, count, textByteCount, lang, bounds);
-    }
 };
 
 //
@@ -151,6 +131,8 @@ public:
                : nullptr;
     }
 
+    bool isLastRun() const { return SkToBool(fFlags & kLast_Flag); }
+
     static size_t StorageSize(uint32_t glyphCount, uint32_t textSize,
                               SkTextBlob::GlyphPositioning positioning,
                               SkSafeMath* safe);
@@ -243,6 +225,7 @@ public:
         return fCurrentRun->font();
     }
     GlyphPositioning positioning() const;
+    unsigned scalarsPerGlyph() const;
     uint32_t* clusters() const {
         SkASSERT(!this->done());
         return fCurrentRun->clusterBuffer();

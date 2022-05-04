@@ -5,12 +5,24 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkMaskFilter.h"
-#include "SkPath.h"
-#include "SkShader.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlurTypes.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypeface.h"
+#include "tools/ToolUtils.h"
 
 namespace skiagm {
 
@@ -72,7 +84,8 @@ protected:
 
         createTexture();
 
-        fShader = fTexture.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat);
+        fShader = fTexture.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
+                                      SkSamplingOptions());
     }
 
     void createMaskFilter() {
@@ -99,10 +112,7 @@ protected:
         SkFont font(ToolUtils::create_portable_typeface(), 72);
 
         SkRect temp;
-        temp.set(SkIntToScalar(115),
-                 SkIntToScalar(75),
-                 SkIntToScalar(144),
-                 SkIntToScalar(110));
+        temp.setLTRB(115, 75, 144, 110);
 
         SkPath path;
         path.addRoundRect(temp, SkIntToScalar(5), SkIntToScalar(5));
@@ -133,11 +143,11 @@ private:
     sk_sp<SkShader> fShader;
     sk_sp<SkMaskFilter> fMaskFilter;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new SamplerStressGM; )
 
-}
+}  // namespace skiagm

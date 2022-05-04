@@ -5,12 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkBlurImageFilter.h"
-#include "SkGradientShader.h"
-#include "SkLiteDL.h"
-#include "SkLiteRecorder.h"
-#include "SkPictureRecorder.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkImageFilters.h"
+#include "src/core/SkCanvasPriv.h"
+
+#include <initializer_list>
 
 // Make a noisy (with hard-edges) background, so we can see the effect of the blur
 //
@@ -27,7 +37,7 @@ static sk_sp<SkShader> make_shader(SkScalar cx, SkScalar cy, SkScalar rad) {
     return SkGradientShader::MakeSweep(cx, cy, colors, pos, count);
 }
 
-static void do_draw(SkCanvas* canvas, bool useClip, bool useHintRect) {
+static void do_draw(SkCanvas* canvas, bool useClip, bool useHintRect, SkScalar scaleFactor) {
     SkAutoCanvasRestore acr(canvas, true);
     canvas->clipRect({0, 0, 256, 256});
 
@@ -45,8 +55,10 @@ static void do_draw(SkCanvas* canvas, bool useClip, bool useHintRect) {
     if (useClip) {
         canvas->clipRect(r);
     }
-    auto blur = SkBlurImageFilter::Make(sigma, sigma, nullptr);
-    auto rec = SkCanvas::SaveLayerRec(drawrptr, nullptr, blur.get(), 0);
+    // Using kClamp because kDecal, the default, produces transparency near the edge of the canvas's
+    // device.
+    auto blur = SkImageFilters::Blur(sigma, sigma, SkTileMode::kClamp, nullptr);
+    auto rec = SkCanvasPriv::ScaledBackdropLayer(drawrptr, nullptr, blur.get(), scaleFactor, 0);
     canvas->saveLayer(rec);
         // draw something inside, just to demonstrate that we don't blur the new contents,
         // just the backdrop.
@@ -57,8 +69,8 @@ static void do_draw(SkCanvas* canvas, bool useClip, bool useHintRect) {
 }
 
 /*
- *  Draws a 3x4 grid of sweep circles.
- *  - for a given row, each col should be identical (canvas, picture, litedl)
+ *  Draws a 2x4 grid of sweep circles.
+ *  - for a given row, each col should be identical (canvas, picture)
  *  - row:0     no-hint-rect    no-clip-rect        expect big blur (except inner circle)
  *  - row:1     no-hint-rect    clip-rect           expect small blur (except inner circle)
  *  - row:2     hint-rect       no-clip-rect        expect big blur (except inner circle)
@@ -67,26 +79,42 @@ static void do_draw(SkCanvas* canvas, bool useClip, bool useHintRect) {
  *  The test is that backdrop effects should be independent of the hint-rect, but should
  *  respect the clip-rect.
  */
-DEF_SIMPLE_GM(backdrop_hintrect_clipping, canvas, 768, 1024) {
+DEF_SIMPLE_GM(backdrop_hintrect_clipping, canvas, 512, 1024) {
     for (bool useHintRect : {false, true}) {
         for (bool useClip : {false, true}) {
-            SkAutoCanvasRestore acr(canvas, true);
+            canvas->save();
+                do_draw(canvas, useClip, useHintRect, 1.0f);
 
-            do_draw(canvas, useClip, useHintRect);
+                SkPictureRecorder rec;
+                do_draw(rec.beginRecording(256, 256), useClip, useHintRect, 1.0f);
+                canvas->translate(256, 0);
+                canvas->drawPicture(rec.finishRecordingAsPicture());
+            canvas->restore();
 
-            SkPictureRecorder rec;
-            do_draw(rec.beginRecording(256, 256), useClip, useHintRect);
-            canvas->translate(256, 0);
-            canvas->drawPicture(rec.finishRecordingAsPicture());
+            canvas->translate(0, 256);
+        }
+    }
+}
 
-            SkLiteDL dl;
-            SkLiteRecorder lite;
-            lite.reset(&dl, {0, 0, 256, 256});
-            do_draw(&lite, useClip, useHintRect);
-            canvas->translate(256, 0);
-            dl.draw(canvas);
+/*
+ *  Draws a 3x4 grid of sweep circles.
+ *  - for a given row, each col should be identical except that the intermediate scale factor used
+ *    to evaluate the backdrop follows (1.0, 0.25, 0.1). Rows follow same pattern as above.
+ *
+ *  The test is that backdrop effects should be independent of the hint-rect, should respect the
+ *  clip rect, and be logically consistent with the reduced intermediate scaling.
+ */
+DEF_SIMPLE_GM(backdrop_scalefactor, canvas, 768, 1024) {
+    for (bool useHintRect : {false, true}) {
+        for (bool useClip : {false, true}) {
+            canvas->save();
+                do_draw(canvas, useClip, useHintRect, 1.0f);
+                canvas->translate(256, 0);
+                do_draw(canvas, useClip, useHintRect, 0.25f);
+                canvas->translate(256, 0);
+                do_draw(canvas, useClip, useHintRect, 0.1f);
+            canvas->restore();
 
-            acr.restore();
             canvas->translate(0, 256);
         }
     }

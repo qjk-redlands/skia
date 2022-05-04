@@ -7,21 +7,23 @@
 
 // Despite the name and location, this is portable code.
 
-#include "SkFixed.h"
-#include "SkFontMgr.h"
-#include "SkFontMgr_android_parser.h"
-#include "SkMalloc.h"
-#include "SkOSFile.h"
-#include "SkStream.h"
-#include "SkTDArray.h"
-#include "SkTSearch.h"
-#include "SkTemplates.h"
-#include "SkTLogic.h"
+#include "include/core/SkFontMgr.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkFixed.h"
+#include "include/private/SkMalloc.h"
+#include "include/private/SkTDArray.h"
+#include "include/private/SkTLogic.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkOSFile.h"
+#include "src/core/SkTSearch.h"
+#include "src/ports/SkFontMgr_android_parser.h"
 
 #include <expat.h>
 
 #include <stdlib.h>
 #include <string.h>
+
+#include <memory>
 
 #define LMP_SYSTEM_FONTS_FILE "/system/etc/fonts.xml"
 #define OLD_SYSTEM_FONTS_FILE "/system/etc/system_fonts.xml"
@@ -124,9 +126,11 @@ static bool memeq(const char* s1, const char* s2, size_t n1, size_t n2) {
 
 #define SK_FONTMGR_ANDROID_PARSER_PREFIX "[SkFontMgr Android Parser] "
 
-#define SK_FONTCONFIGPARSER_WARNING(message, ...)                                                  \
-    SkDebugf(SK_FONTMGR_ANDROID_PARSER_PREFIX "%s:%d:%d: warning: " message "\n", self->fFilename, \
-             XML_GetCurrentLineNumber(self->fParser), XML_GetCurrentColumnNumber(self->fParser),   \
+#define SK_FONTCONFIGPARSER_WARNING(message, ...)                                 \
+    SkDebugf(SK_FONTMGR_ANDROID_PARSER_PREFIX "%s:%d:%d: warning: " message "\n", \
+             self->fFilename,                                                     \
+             (int)XML_GetCurrentLineNumber(self->fParser),                        \
+             (int)XML_GetCurrentColumnNumber(self->fParser),                      \
              ##__VA_ARGS__)
 
 static bool is_whitespace(char c) {
@@ -146,6 +150,21 @@ static void trim_string(SkString* s) {
     size_t len = end - start;
     memmove(str, start, len);
     s->resize(len);
+}
+
+static void parse_space_separated_languages(const char* value, size_t valueLen,
+                                            SkTArray<SkLanguage, true>& languages)
+{
+    size_t i = 0;
+    while (true) {
+        for (; i < valueLen && is_whitespace(value[i]); ++i) { }
+        if (i == valueLen) { break; }
+        size_t j;
+        for (j = i + 1; j < valueLen && !is_whitespace(value[j]); ++j) { }
+        languages.emplace_back(value + i, j - i);
+        i = j;
+        if (i == valueLen) { break; }
+    }
 }
 
 namespace lmpParser {
@@ -282,16 +301,7 @@ static const TagHandler familyHandler = {
                 family->fNames.push_back().set(tolc.lc());
                 family->fIsFallbackFont = false;
             } else if (MEMEQ("lang", name, nameLen)) {
-                size_t i = 0;
-                while (true) {
-                    for (; i < valueLen && is_whitespace(value[i]); ++i) { }
-                    if (i == valueLen) { break; }
-                    size_t j;
-                    for (j = i + 1; j < valueLen && !is_whitespace(value[j]); ++j) { }
-                    family->fLanguages.emplace_back(value + i, j - i);
-                    i = j;
-                    if (i == valueLen) { break; }
-                }
+                parse_space_separated_languages(value, valueLen, family->fLanguages);
             } else if (MEMEQ("variant", name, nameLen)) {
                 if (MEMEQ("elegant", value, valueLen)) {
                     family->fVariant = kElegant_FontVariant;
@@ -395,7 +405,7 @@ static const TagHandler familySetHandler = {
     /*chars*/nullptr,
 };
 
-} // lmpParser
+}  // namespace lmpParser
 
 namespace jbParser {
 
@@ -405,7 +415,7 @@ static const TagHandler fileHandler = {
         // 'lang' (string) [default ""]
         // 'index' (non-negative integer) [default 0]
         // The character data should be a filename.
-        FontFamily& currentFamily = *self->fCurrentFamily.get();
+        FontFamily& currentFamily = *self->fCurrentFamily;
         FontFileInfo& newFileInfo = currentFamily.fFonts.push_back();
         if (attributes) {
             for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
@@ -501,7 +511,7 @@ static const TagHandler nameSetHandler = {
 
 static const TagHandler familyHandler = {
     /*start*/[](FamilyData* self, const char* tag, const char** attributes) {
-        self->fCurrentFamily.reset(new FontFamily(self->fBasePath, self->fIsFallback));
+        self->fCurrentFamily = std::make_unique<FontFamily>(self->fBasePath, self->fIsFallback);
         // 'order' (non-negative integer) [default -1]
         for (size_t i = 0; ATTS_NON_NULL(attributes, i); i += 2) {
             const char* value = attributes[i+1];
@@ -644,7 +654,7 @@ static int parse_config_file(const char* filename, SkTDArray<FontFamily*>& famil
         return -1;
     }
 
-    SkAutoTCallVProc<skstd::remove_pointer_t<XML_Parser>, XML_ParserFree> parser(
+    SkAutoTCallVProc<std::remove_pointer_t<XML_Parser>, XML_ParserFree> parser(
         XML_ParserCreate_MM(nullptr, &sk_XML_alloc, nullptr));
     if (!parser) {
         SkDebugf(SK_FONTMGR_ANDROID_PARSER_PREFIX "could not create XML parser\n");

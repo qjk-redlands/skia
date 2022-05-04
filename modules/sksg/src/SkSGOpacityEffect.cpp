@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-#include "SkSGOpacityEffect.h"
+#include "modules/sksg/include/SkSGOpacityEffect.h"
 
 namespace sksg {
 
@@ -17,6 +17,12 @@ void OpacityEffect::onRender(SkCanvas* canvas, const RenderContext* ctx) const {
     // opacity <= 0 disables rendering
     if (fOpacity <= 0)
         return;
+
+    // opacity >= 1 has no effect
+    if (fOpacity >= 1) {
+        this->INHERITED::onRender(canvas, ctx);
+        return;
+    }
 
     const auto local_context = ScopedRenderContext(canvas, ctx).modulateOpacity(fOpacity);
 

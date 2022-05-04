@@ -5,33 +5,38 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkBlendMode.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkFontStyle.h"
-#include "SkGradientShader.h"
-#include "SkImageInfo.h"
-#include "SkMatrix.h"
-#include "SkPaint.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkScalar.h"
-#include "SkShader.h"
-#include "SkSize.h"
-#include "SkString.h"
-#include "SkTextUtils.h"
-#include "SkTypeface.h"
-#include "SkTypes.h"
-#include "SkUTF.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/utils/SkTextUtils.h"
+#include "src/utils/SkUTF.h"
+#include "tools/ToolUtils.h"
 
-namespace skiagm {
+#include <string.h>
+
+namespace {
 
 static uint16_t gData[] = { 0xFFFF, 0xCCCF, 0xCCCF, 0xFFFF };
 
-class ColorEmojiBlendModesGM : public GM {
+class ColorEmojiBlendModesGM : public skiagm::GM {
 public:
     const static int W = 64;
     const static int H = 64;
@@ -60,15 +65,15 @@ protected:
                                             kOpaque_SkAlphaType), gData, 4);
     }
 
-    virtual SkString onShortName() override {
+    SkString onShortName() override {
         return SkString("coloremoji_blendmodes");
     }
 
-    virtual SkISize onISize() override {
-        return SkISize::Make(400, 640);
+    SkISize onISize() override {
+        return {400, 640};
     }
 
-    virtual void onDraw(SkCanvas* canvas) override {
+    void onDraw(SkCanvas* canvas) override {
         canvas->translate(SkIntToScalar(10), SkIntToScalar(20));
 
         const SkBlendMode gModes[] = {
@@ -108,7 +113,7 @@ protected:
         const SkScalar h = SkIntToScalar(H);
         SkMatrix m;
         m.setScale(SkIntToScalar(6), SkIntToScalar(6));
-        auto s = fBG.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &m);
+        auto s = fBG.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions(), m);
 
         SkFont labelFont(ToolUtils::create_portable_typeface());
 
@@ -116,14 +121,14 @@ protected:
         textP.setAntiAlias(true);
         SkFont textFont(fColorType, 70);
 
-        const int W = 5;
+        const int kWrap = 5;
 
         SkScalar x0 = 0;
         SkScalar y0 = 0;
         SkScalar x = x0, y = y0;
         for (size_t i = 0; i < SK_ARRAY_COUNT(gModes); i++) {
             SkRect r;
-            r.set(x, y, x+w, y+h);
+            r.setLTRB(x, y, x+w, y+h);
 
             SkPaint p;
             p.setStyle(SkPaint::kFill_Style);
@@ -142,16 +147,16 @@ protected:
                 const char* text    = ToolUtils::emoji_sample_text();
                 SkUnichar unichar = SkUTF::NextUTF8(&text, text + strlen(text));
                 SkASSERT(unichar >= 0);
-                canvas->drawSimpleText(&unichar, 4, kUTF32_SkTextEncoding, x+ w/10.f, y + 7.f*h/8.f,
-                                       textFont, textP);
+                canvas->drawSimpleText(&unichar, 4, SkTextEncoding::kUTF32,
+                                       x+ w/10.f, y + 7.f*h/8.f, textFont, textP);
             }
 #if 1
             const char* label = SkBlendMode_Name(gModes[i]);
-            SkTextUtils::DrawString(canvas, label, x + w/2, y - labelFont.getSize()/2, labelFont, SkPaint(),
-                                    SkTextUtils::kCenter_Align);
+            SkTextUtils::DrawString(canvas, label, x + w/2, y - labelFont.getSize()/2,
+                                    labelFont, SkPaint(), SkTextUtils::kCenter_Align);
 #endif
             x += w + SkIntToScalar(10);
-            if ((i % W) == W - 1) {
+            if ((i % kWrap) == kWrap - 1) {
                 x = x0;
                 y += h + SkIntToScalar(30);
             }
@@ -162,11 +167,8 @@ private:
     SkBitmap            fBG;
     sk_sp<SkTypeface>   fColorType;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
-
-//////////////////////////////////////////////////////////////////////////////
+}  // namespace
 
 DEF_GM( return new ColorEmojiBlendModesGM; )
-
-}

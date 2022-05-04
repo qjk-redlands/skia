@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkRandom.h"
-#include "SkString.h"
-#include "SkTTopoSort.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
+#include "src/gpu/GrTTopoSort.h"
 
-#include "ToolUtils.h"
+#include "tools/ToolUtils.h"
 
 class TopoSortBench : public Benchmark {
 public:
@@ -51,7 +51,7 @@ protected:
 
             ToolUtils::TopoTestNode::Shuffle(&fGraph, &fRand);
 
-            SkDEBUGCODE(bool actualResult =) SkTTopoSort<ToolUtils::TopoTestNode>(&fGraph);
+            SkDEBUGCODE(bool actualResult =) GrTTopoSort<ToolUtils::TopoTestNode>(&fGraph);
             SkASSERT(actualResult);
 
 #ifdef SK_DEBUG
@@ -69,7 +69,7 @@ private:
     SkTArray<sk_sp<ToolUtils::TopoTestNode>> fGraph;
     SkRandom fRand;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

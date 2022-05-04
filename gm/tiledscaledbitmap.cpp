@@ -5,13 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-
-#include "Resources.h"
-#include "SkBitmap.h"
-#include "SkPaint.h"
-#include "SkShader.h"
-#include "SkStream.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
 
  /***
   *
@@ -56,23 +59,23 @@ protected:
         SkPaint paint;
 
         paint.setAntiAlias(true);
-        paint.setFilterQuality(kHigh_SkFilterQuality);
 
         SkMatrix mat;
         mat.setScale(121.f/360.f, 93.f/288.f);
         mat.postTranslate(-72, -72);
 
-        paint.setShader(fBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &mat));
+        paint.setShader(fBitmap.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
+                                           SkSamplingOptions(SkCubicResampler::Mitchell()), mat));
         canvas->drawRect({ 8, 8, 1008, 608 }, paint);
     }
 
 private:
     SkBitmap fBitmap;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new TiledScaledBitmapGM;)
-}
+}  // namespace skiagm

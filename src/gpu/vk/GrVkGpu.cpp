@@ -5,59 +5,58 @@
  * found in the LICENSE file.
  */
 
-#include "GrVkGpu.h"
+#include "src/gpu/vk/GrVkGpu.h"
 
-#include "GrContextPriv.h"
-#include "GrBackendSemaphore.h"
-#include "GrBackendSurface.h"
-#include "GrContextOptions.h"
-#include "GrGeometryProcessor.h"
-#include "GrGpuResourceCacheAccess.h"
-#include "GrMesh.h"
-#include "GrPipeline.h"
-#include "GrRenderTargetPriv.h"
-#include "GrTexturePriv.h"
-#include "GrVkAMDMemoryAllocator.h"
-#include "GrVkCommandBuffer.h"
-#include "GrVkCommandPool.h"
-#include "GrVkGpuCommandBuffer.h"
-#include "GrVkImage.h"
-#include "GrVkIndexBuffer.h"
-#include "GrVkInterface.h"
-#include "GrVkMemory.h"
-#include "GrVkPipeline.h"
-#include "GrVkPipelineState.h"
-#include "GrVkRenderPass.h"
-#include "GrVkResourceProvider.h"
-#include "GrVkSemaphore.h"
-#include "GrVkTexture.h"
-#include "GrVkTextureRenderTarget.h"
-#include "GrVkTransferBuffer.h"
-#include "GrVkVertexBuffer.h"
-#include "SkConvertPixels.h"
-#include "SkMipMap.h"
-#include "SkSLCompiler.h"
-#include "SkTo.h"
+#include "include/gpu/GrBackendSemaphore.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContextOptions.h"
+#include "include/gpu/GrDirectContext.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkCompressedDataUtils.h"
+#include "src/core/SkConvertPixels.h"
+#include "src/core/SkMipmap.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/gpu/GrBackendUtils.h"
+#include "src/gpu/GrDataUtils.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrGpuResourceCacheAccess.h"
+#include "src/gpu/GrNativeRect.h"
+#include "src/gpu/GrPipeline.h"
+#include "src/gpu/GrRenderTarget.h"
+#include "src/gpu/GrResourceProvider.h"
+#include "src/gpu/GrTexture.h"
+#include "src/gpu/GrThreadSafePipelineBuilder.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/vk/GrVkAMDMemoryAllocator.h"
+#include "src/gpu/vk/GrVkBuffer.h"
+#include "src/gpu/vk/GrVkCommandBuffer.h"
+#include "src/gpu/vk/GrVkCommandPool.h"
+#include "src/gpu/vk/GrVkFramebuffer.h"
+#include "src/gpu/vk/GrVkImage.h"
+#include "src/gpu/vk/GrVkInterface.h"
+#include "src/gpu/vk/GrVkMemory.h"
+#include "src/gpu/vk/GrVkOpsRenderPass.h"
+#include "src/gpu/vk/GrVkPipeline.h"
+#include "src/gpu/vk/GrVkPipelineState.h"
+#include "src/gpu/vk/GrVkRenderPass.h"
+#include "src/gpu/vk/GrVkResourceProvider.h"
+#include "src/gpu/vk/GrVkSemaphore.h"
+#include "src/gpu/vk/GrVkTexture.h"
+#include "src/gpu/vk/GrVkTextureRenderTarget.h"
+#include "src/image/SkImage_Gpu.h"
+#include "src/image/SkSurface_Gpu.h"
 
-#include "vk/GrVkExtensions.h"
-#include "vk/GrVkTypes.h"
+#include "include/gpu/vk/GrVkExtensions.h"
+#include "include/gpu/vk/GrVkTypes.h"
 
 #include <utility>
 
-#if !defined(SK_BUILD_FOR_WIN)
-#include <unistd.h>
-#endif // !defined(SK_BUILD_FOR_WIN)
-
-#if defined(SK_BUILD_FOR_WIN) && defined(SK_DEBUG)
-#include "SkLeanWindows.h"
-#endif
-
 #define VK_CALL(X) GR_VK_CALL(this->vkInterface(), X)
-#define VK_CALL_RET(RET, X) GR_VK_CALL_RET(this->vkInterface(), RET, X)
-#define VK_CALL_ERRCHECK(X) GR_VK_CALL_ERRCHECK(this->vkInterface(), X)
+#define VK_CALL_RET(RET, X) GR_VK_CALL_RESULT(this, RET, X)
 
 sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
-                           const GrContextOptions& options, GrContext* context) {
+                           const GrContextOptions& options, GrDirectContext* direct) {
     if (backendContext.fInstance == VK_NULL_HANDLE ||
         backendContext.fPhysicalDevice == VK_NULL_HANDLE ||
         backendContext.fDevice == VK_NULL_HANDLE ||
@@ -99,8 +98,8 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
     uint32_t apiVersion = backendContext.fMaxAPIVersion ? backendContext.fMaxAPIVersion
                                                         : instanceVersion;
 
-    instanceVersion = SkTMin(instanceVersion, apiVersion);
-    physDevVersion = SkTMin(physDevVersion, apiVersion);
+    instanceVersion = std::min(instanceVersion, apiVersion);
+    physDevVersion = std::min(physDevVersion, apiVersion);
 
     sk_sp<const GrVkInterface> interface;
 
@@ -115,9 +114,15 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
             return nullptr;
         }
     } else {
-        // None of our current GrVkExtension flags actually affect the vulkan backend so we just
-        // make an empty GrVkExtensions and pass that to the GrVkInterface.
         GrVkExtensions extensions;
+        // The only extension flag that may effect the vulkan backend is the swapchain extension. We
+        // need to know if this is enabled to know if we can transition to a present layout when
+        // flushing a surface.
+        if (backendContext.fExtensions & kKHR_swapchain_GrVkExtensionFlag) {
+            const char* swapChainExtName = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+            extensions.init(backendContext.fGetProc, backendContext.fInstance,
+                            backendContext.fPhysicalDevice, 0, nullptr, 1, &swapChainExtName);
+        }
         interface.reset(new GrVkInterface(backendContext.fGetProc,
                                           backendContext.fInstance,
                                           backendContext.fDevice,
@@ -129,47 +134,18 @@ sk_sp<GrGpu> GrVkGpu::Make(const GrVkBackendContext& backendContext,
         }
     }
 
-    return sk_sp<GrGpu>(new GrVkGpu(context, options, backendContext, interface, instanceVersion,
-                                    physDevVersion));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
-                 const GrVkBackendContext& backendContext, sk_sp<const GrVkInterface> interface,
-                 uint32_t instanceVersion, uint32_t physicalDeviceVersion)
-        : INHERITED(context)
-        , fInterface(std::move(interface))
-        , fMemoryAllocator(backendContext.fMemoryAllocator)
-        , fInstance(backendContext.fInstance)
-        , fPhysicalDevice(backendContext.fPhysicalDevice)
-        , fDevice(backendContext.fDevice)
-        , fQueue(backendContext.fQueue)
-        , fQueueIndex(backendContext.fGraphicsQueueIndex)
-        , fResourceProvider(this)
-        , fDisconnected(false) {
-    SkASSERT(!backendContext.fOwnsInstanceAndDevice);
-
-    if (!fMemoryAllocator) {
-        // We were not given a memory allocator at creation
-        fMemoryAllocator.reset(new GrVkAMDMemoryAllocator(backendContext.fPhysicalDevice,
-                                                          fDevice, fInterface));
-    }
-
-    fCompiler = new SkSL::Compiler();
-
+    sk_sp<GrVkCaps> caps;
     if (backendContext.fDeviceFeatures2) {
-        fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), backendContext.fPhysicalDevice,
-                                   *backendContext.fDeviceFeatures2, instanceVersion,
-                                   physicalDeviceVersion,
-                                   *backendContext.fVkExtensions));
+        caps.reset(new GrVkCaps(options, interface.get(), backendContext.fPhysicalDevice,
+                                *backendContext.fDeviceFeatures2, instanceVersion, physDevVersion,
+                                *backendContext.fVkExtensions, backendContext.fProtectedContext));
     } else if (backendContext.fDeviceFeatures) {
         VkPhysicalDeviceFeatures2 features2;
         features2.pNext = nullptr;
         features2.features = *backendContext.fDeviceFeatures;
-        fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), backendContext.fPhysicalDevice,
-                                   features2, instanceVersion, physicalDeviceVersion,
-                                   *backendContext.fVkExtensions));
+        caps.reset(new GrVkCaps(options, interface.get(), backendContext.fPhysicalDevice,
+                                features2, instanceVersion, physDevVersion,
+                                *backendContext.fVkExtensions, backendContext.fProtectedContext));
     } else {
         VkPhysicalDeviceFeatures2 features;
         memset(&features, 0, sizeof(VkPhysicalDeviceFeatures2));
@@ -183,286 +159,427 @@ GrVkGpu::GrVkGpu(GrContext* context, const GrContextOptions& options,
         if (backendContext.fFeatures & kSampleRateShading_GrVkFeatureFlag) {
             features.features.sampleRateShading = true;
         }
-        fVkCaps.reset(new GrVkCaps(options, this->vkInterface(), backendContext.fPhysicalDevice,
-                                   features, instanceVersion, physicalDeviceVersion,
-                                   GrVkExtensions()));
+        GrVkExtensions extensions;
+        // The only extension flag that may effect the vulkan backend is the swapchain extension. We
+        // need to know if this is enabled to know if we can transition to a present layout when
+        // flushing a surface.
+        if (backendContext.fExtensions & kKHR_swapchain_GrVkExtensionFlag) {
+            const char* swapChainExtName = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+            extensions.init(backendContext.fGetProc, backendContext.fInstance,
+                            backendContext.fPhysicalDevice, 0, nullptr, 1, &swapChainExtName);
+        }
+        caps.reset(new GrVkCaps(options, interface.get(), backendContext.fPhysicalDevice,
+                                features, instanceVersion, physDevVersion, extensions,
+                                backendContext.fProtectedContext));
     }
-    fCaps.reset(SkRef(fVkCaps.get()));
+
+    if (!caps) {
+        return nullptr;
+    }
+
+    sk_sp<GrVkMemoryAllocator> memoryAllocator = backendContext.fMemoryAllocator;
+    if (!memoryAllocator) {
+        // We were not given a memory allocator at creation
+        memoryAllocator = GrVkAMDMemoryAllocator::Make(backendContext.fInstance,
+                                                       backendContext.fPhysicalDevice,
+                                                       backendContext.fDevice, physDevVersion,
+                                                       backendContext.fVkExtensions, interface,
+                                                       caps.get());
+    }
+    if (!memoryAllocator) {
+        SkDEBUGFAIL("No supplied vulkan memory allocator and unable to create one internally.");
+        return nullptr;
+    }
+
+     sk_sp<GrVkGpu> vkGpu(new GrVkGpu(direct, backendContext, std::move(caps), interface,
+                                      instanceVersion, physDevVersion,
+                                      std::move(memoryAllocator)));
+     if (backendContext.fProtectedContext == GrProtected::kYes &&
+         !vkGpu->vkCaps().supportsProtectedMemory()) {
+         return nullptr;
+     }
+     return std::move(vkGpu);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+GrVkGpu::GrVkGpu(GrDirectContext* direct, const GrVkBackendContext& backendContext,
+                 sk_sp<GrVkCaps> caps, sk_sp<const GrVkInterface> interface,
+                 uint32_t instanceVersion, uint32_t physicalDeviceVersion,
+                 sk_sp<GrVkMemoryAllocator> memoryAllocator)
+        : INHERITED(direct)
+        , fInterface(std::move(interface))
+        , fMemoryAllocator(std::move(memoryAllocator))
+        , fVkCaps(std::move(caps))
+        , fPhysicalDevice(backendContext.fPhysicalDevice)
+        , fDevice(backendContext.fDevice)
+        , fQueue(backendContext.fQueue)
+        , fQueueIndex(backendContext.fGraphicsQueueIndex)
+        , fResourceProvider(this)
+        , fStagingBufferManager(this)
+        , fDisconnected(false)
+        , fProtectedContext(backendContext.fProtectedContext) {
+    SkASSERT(!backendContext.fOwnsInstanceAndDevice);
+    SkASSERT(fMemoryAllocator);
+
+    this->initCapsAndCompiler(fVkCaps);
 
     VK_CALL(GetPhysicalDeviceProperties(backendContext.fPhysicalDevice, &fPhysDevProps));
     VK_CALL(GetPhysicalDeviceMemoryProperties(backendContext.fPhysicalDevice, &fPhysDevMemProps));
 
     fResourceProvider.init();
 
-    fCmdPool = fResourceProvider.findOrCreateCommandPool();
-    fCurrentCmdBuffer = fCmdPool->getPrimaryCommandBuffer();
-    SkASSERT(fCurrentCmdBuffer);
-    fCurrentCmdBuffer->begin(this);
+    fMainCmdPool = fResourceProvider.findOrCreateCommandPool();
+    if (fMainCmdPool) {
+        fMainCmdBuffer = fMainCmdPool->getPrimaryCommandBuffer();
+        SkASSERT(this->currentCommandBuffer());
+        this->currentCommandBuffer()->begin(this);
+    }
 }
 
 void GrVkGpu::destroyResources() {
-    if (fCmdPool) {
-        fCmdPool->getPrimaryCommandBuffer()->end(this);
-        fCmdPool->close();
+    if (fMainCmdPool) {
+        fMainCmdPool->getPrimaryCommandBuffer()->end(this, /*abandoningBuffer=*/true);
+        fMainCmdPool->close();
     }
 
     // wait for all commands to finish
-    VkResult res = VK_CALL(QueueWaitIdle(fQueue));
+    this->finishOutstandingGpuWork();
 
-    // On windows, sometimes calls to QueueWaitIdle return before actually signalling the fences
-    // on the command buffers even though they have completed. This causes an assert to fire when
-    // destroying the command buffers. Currently this ony seems to happen on windows, so we add a
-    // sleep to make sure the fence signals.
-#ifdef SK_DEBUG
-    if (this->vkCaps().mustSleepOnTearDown()) {
-#if defined(SK_BUILD_FOR_WIN)
-        Sleep(10); // In milliseconds
-#else
-        sleep(1);  // In seconds
-#endif
-    }
-#endif
-
-#ifdef SK_DEBUG
-    SkASSERT(VK_SUCCESS == res || VK_ERROR_DEVICE_LOST == res);
-#endif
-
-    if (fCmdPool) {
-        fCmdPool->unref(this);
-        fCmdPool = nullptr;
+    if (fMainCmdPool) {
+        fMainCmdPool->unref();
+        fMainCmdPool = nullptr;
     }
 
     for (int i = 0; i < fSemaphoresToWaitOn.count(); ++i) {
-        fSemaphoresToWaitOn[i]->unref(this);
+        fSemaphoresToWaitOn[i]->unref();
     }
     fSemaphoresToWaitOn.reset();
 
     for (int i = 0; i < fSemaphoresToSignal.count(); ++i) {
-        fSemaphoresToSignal[i]->unref(this);
+        fSemaphoresToSignal[i]->unref();
     }
     fSemaphoresToSignal.reset();
 
+    fStagingBufferManager.reset();
 
-    fCopyManager.destroyResources(this);
+    fMSAALoadManager.destroyResources(this);
 
     // must call this just before we destroy the command pool and VkDevice
-    fResourceProvider.destroyResources(VK_ERROR_DEVICE_LOST == res);
-
-    fMemoryAllocator.reset();
-
-    fQueue = VK_NULL_HANDLE;
-    fDevice = VK_NULL_HANDLE;
-    fInstance = VK_NULL_HANDLE;
+    fResourceProvider.destroyResources();
 }
 
 GrVkGpu::~GrVkGpu() {
     if (!fDisconnected) {
         this->destroyResources();
     }
-    delete fCompiler;
+    // We don't delete the memory allocator until the very end of the GrVkGpu lifetime so that
+    // clients can continue to delete backend textures even after a context has been abandoned.
+    fMemoryAllocator.reset();
 }
 
 
 void GrVkGpu::disconnect(DisconnectType type) {
     INHERITED::disconnect(type);
     if (!fDisconnected) {
-        if (DisconnectType::kCleanup == type) {
-            this->destroyResources();
-        } else {
-            if (fCmdPool) {
-                fCmdPool->unrefAndAbandon();
-                fCmdPool = nullptr;
-            }
-            for (int i = 0; i < fSemaphoresToWaitOn.count(); ++i) {
-                fSemaphoresToWaitOn[i]->unrefAndAbandon();
-            }
-            for (int i = 0; i < fSemaphoresToSignal.count(); ++i) {
-                fSemaphoresToSignal[i]->unrefAndAbandon();
-            }
-            fCopyManager.abandonResources();
+        this->destroyResources();
 
-            // must call this just before we destroy the command pool and VkDevice
-            fResourceProvider.abandonResources();
-
-            fMemoryAllocator.reset();
-        }
         fSemaphoresToWaitOn.reset();
         fSemaphoresToSignal.reset();
-        fCurrentCmdBuffer = nullptr;
+        fMainCmdBuffer = nullptr;
         fDisconnected = true;
     }
 }
 
+GrThreadSafePipelineBuilder* GrVkGpu::pipelineBuilder() {
+    return fResourceProvider.pipelineStateCache();
+}
+
+sk_sp<GrThreadSafePipelineBuilder> GrVkGpu::refPipelineBuilder() {
+    return fResourceProvider.refPipelineStateCache();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
-GrGpuRTCommandBuffer* GrVkGpu::getCommandBuffer(
-            GrRenderTarget* rt, GrSurfaceOrigin origin, const SkRect& bounds,
-            const GrGpuRTCommandBuffer::LoadAndStoreInfo& colorInfo,
-            const GrGpuRTCommandBuffer::StencilLoadAndStoreInfo& stencilInfo) {
-    if (!fCachedRTCommandBuffer) {
-        fCachedRTCommandBuffer.reset(new GrVkGpuRTCommandBuffer(this));
+GrOpsRenderPass* GrVkGpu::onGetOpsRenderPass(
+        GrRenderTarget* rt,
+        bool useMSAASurface,
+        GrAttachment* stencil,
+        GrSurfaceOrigin origin,
+        const SkIRect& bounds,
+        const GrOpsRenderPass::LoadAndStoreInfo& colorInfo,
+        const GrOpsRenderPass::StencilLoadAndStoreInfo& stencilInfo,
+        const SkTArray<GrSurfaceProxy*, true>& sampledProxies,
+        GrXferBarrierFlags renderPassXferBarriers) {
+    if (!fCachedOpsRenderPass) {
+        fCachedOpsRenderPass = std::make_unique<GrVkOpsRenderPass>(this);
     }
 
-    fCachedRTCommandBuffer->set(rt, origin, colorInfo, stencilInfo);
-    return fCachedRTCommandBuffer.get();
-}
+    // For the given render target and requested render pass features we need to find a compatible
+    // framebuffer to use for the render pass. Technically it is the underlying VkRenderPass that
+    // is compatible, but that is part of the framebuffer that we get here.
+    GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(rt);
 
-GrGpuTextureCommandBuffer* GrVkGpu::getCommandBuffer(GrTexture* texture, GrSurfaceOrigin origin) {
-    if (!fCachedTexCommandBuffer) {
-        fCachedTexCommandBuffer.reset(new GrVkGpuTextureCommandBuffer(this));
+    SkASSERT(!useMSAASurface ||
+             rt->numSamples() > 1 ||
+             (this->vkCaps().supportsDiscardableMSAAForDMSAA() &&
+              vkRT->resolveAttachment() &&
+              vkRT->resolveAttachment()->supportsInputAttachmentUsage()));
+
+    // Covert the GrXferBarrierFlags into render pass self dependency flags
+    GrVkRenderPass::SelfDependencyFlags selfDepFlags = GrVkRenderPass::SelfDependencyFlags::kNone;
+    if (renderPassXferBarriers & GrXferBarrierFlags::kBlend) {
+        selfDepFlags |= GrVkRenderPass::SelfDependencyFlags::kForNonCoherentAdvBlend;
+    }
+    if (renderPassXferBarriers & GrXferBarrierFlags::kTexture) {
+        selfDepFlags |= GrVkRenderPass::SelfDependencyFlags::kForInputAttachment;
     }
 
-    fCachedTexCommandBuffer->set(texture, origin);
-    return fCachedTexCommandBuffer.get();
+    // Figure out if we need a resolve attachment for this render pass. A resolve attachment is
+    // needed if we are using msaa to draw with a discardable msaa attachment. If we are in this
+    // case we also need to update the color load/store ops since we don't want to ever load or
+    // store the msaa color attachment, but may need to for the resolve attachment.
+    GrOpsRenderPass::LoadAndStoreInfo localColorInfo = colorInfo;
+    bool withResolve = false;
+    GrVkRenderPass::LoadFromResolve loadFromResolve = GrVkRenderPass::LoadFromResolve::kNo;
+    GrOpsRenderPass::LoadAndStoreInfo resolveInfo{GrLoadOp::kLoad, GrStoreOp::kStore, {}};
+    if (useMSAASurface && this->vkCaps().renderTargetSupportsDiscardableMSAA(vkRT)) {
+        withResolve = true;
+        localColorInfo.fStoreOp = GrStoreOp::kDiscard;
+        if (colorInfo.fLoadOp == GrLoadOp::kLoad) {
+            loadFromResolve = GrVkRenderPass::LoadFromResolve::kLoad;
+            localColorInfo.fLoadOp = GrLoadOp::kDiscard;
+        } else {
+            resolveInfo.fLoadOp = GrLoadOp::kDiscard;
+        }
+    }
+
+    // Get the framebuffer to use for the render pass
+   sk_sp<GrVkFramebuffer> framebuffer;
+    if (vkRT->wrapsSecondaryCommandBuffer()) {
+        framebuffer = vkRT->externalFramebuffer();
+    } else {
+        auto fb = vkRT->getFramebuffer(withResolve, SkToBool(stencil), selfDepFlags,
+                                       loadFromResolve);
+        framebuffer = sk_ref_sp(fb);
+    }
+    if (!framebuffer) {
+        return nullptr;
+    }
+
+    if (!fCachedOpsRenderPass->set(rt, std::move(framebuffer), origin, bounds, localColorInfo,
+                                   stencilInfo, resolveInfo, selfDepFlags, loadFromResolve,
+                                   sampledProxies)) {
+        return nullptr;
+    }
+    return fCachedOpsRenderPass.get();
 }
 
-void GrVkGpu::submitCommandBuffer(SyncQueue sync, GrGpuFinishedProc finishedProc,
-                                  GrGpuFinishedContext finishedContext) {
-    SkASSERT(fCurrentCmdBuffer);
+bool GrVkGpu::submitCommandBuffer(SyncQueue sync) {
+    TRACE_EVENT0("skia.gpu", TRACE_FUNC);
+    if (!this->currentCommandBuffer()) {
+        return false;
+    }
+    SkASSERT(!fCachedOpsRenderPass || !fCachedOpsRenderPass->isActive());
 
-    if (!fCurrentCmdBuffer->hasWork() && kForce_SyncQueue != sync &&
+    if (!this->currentCommandBuffer()->hasWork() && kForce_SyncQueue != sync &&
         !fSemaphoresToSignal.count() && !fSemaphoresToWaitOn.count()) {
+        // We may have added finished procs during the flush call. Since there is no actual work
+        // we are not submitting the command buffer and may never come back around to submit it.
+        // Thus we call all current finished procs manually, since the work has technically
+        // finished.
+        this->currentCommandBuffer()->callFinishedProcs();
         SkASSERT(fDrawables.empty());
         fResourceProvider.checkCommandBuffers();
-        if (finishedProc) {
-            fResourceProvider.addFinishedProcToActiveCommandBuffers(finishedProc, finishedContext);
-        }
-        return;
+        return true;
     }
 
-    fCurrentCmdBuffer->end(this);
-    fCmdPool->close();
-    fCurrentCmdBuffer->submitToQueue(this, fQueue, sync, fSemaphoresToSignal, fSemaphoresToWaitOn);
+    fMainCmdBuffer->end(this);
+    SkASSERT(fMainCmdPool);
+    fMainCmdPool->close();
+    bool didSubmit = fMainCmdBuffer->submitToQueue(this, fQueue, fSemaphoresToSignal,
+                                                   fSemaphoresToWaitOn);
 
-    if (finishedProc) {
-        // Make sure this is called after closing the current command pool
-        fResourceProvider.addFinishedProcToActiveCommandBuffers(finishedProc, finishedContext);
+    if (didSubmit && sync == kForce_SyncQueue) {
+        fMainCmdBuffer->forceSync(this);
     }
 
-    // We must delete and drawables that have been waitint till submit for us to destroy.
+    // We must delete any drawables that had to wait until submit to destroy.
     fDrawables.reset();
 
-    for (int i = 0; i < fSemaphoresToWaitOn.count(); ++i) {
-        fSemaphoresToWaitOn[i]->unref(this);
+    // If we didn't submit the command buffer then we did not wait on any semaphores. We will
+    // continue to hold onto these semaphores and wait on them during the next command buffer
+    // submission.
+    if (didSubmit) {
+        for (int i = 0; i < fSemaphoresToWaitOn.count(); ++i) {
+            fSemaphoresToWaitOn[i]->unref();
+        }
+        fSemaphoresToWaitOn.reset();
     }
-    fSemaphoresToWaitOn.reset();
+
+    // Even if we did not submit the command buffer, we drop all the signal semaphores since we will
+    // not try to recover the work that wasn't submitted and instead just drop it all. The client
+    // will be notified that the semaphores were not submit so that they will not try to wait on
+    // them.
     for (int i = 0; i < fSemaphoresToSignal.count(); ++i) {
-        fSemaphoresToSignal[i]->unref(this);
+        fSemaphoresToSignal[i]->unref();
     }
     fSemaphoresToSignal.reset();
 
     // Release old command pool and create a new one
-    fCmdPool->unref(this);
+    fMainCmdPool->unref();
+    fMainCmdPool = fResourceProvider.findOrCreateCommandPool();
+    if (fMainCmdPool) {
+        fMainCmdBuffer = fMainCmdPool->getPrimaryCommandBuffer();
+        SkASSERT(fMainCmdBuffer);
+        fMainCmdBuffer->begin(this);
+    } else {
+        fMainCmdBuffer = nullptr;
+    }
+    // We must wait to call checkCommandBuffers until after we get a new command buffer. The
+    // checkCommandBuffers may trigger a releaseProc which may cause us to insert a barrier for a
+    // released GrVkImage. That barrier needs to be put into a new command buffer and not the old
+    // one that was just submitted.
     fResourceProvider.checkCommandBuffers();
-    fCmdPool = fResourceProvider.findOrCreateCommandPool();
-    fCurrentCmdBuffer = fCmdPool->getPrimaryCommandBuffer();
-    fCurrentCmdBuffer->begin(this);
+    return didSubmit;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 sk_sp<GrGpuBuffer> GrVkGpu::onCreateBuffer(size_t size, GrGpuBufferType type,
                                            GrAccessPattern accessPattern, const void* data) {
-    sk_sp<GrGpuBuffer> buff;
+#ifdef SK_DEBUG
     switch (type) {
         case GrGpuBufferType::kVertex:
-            SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
-                     kStatic_GrAccessPattern == accessPattern);
-            buff = GrVkVertexBuffer::Make(this, size, kDynamic_GrAccessPattern == accessPattern);
-            break;
         case GrGpuBufferType::kIndex:
-            SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
-                     kStatic_GrAccessPattern == accessPattern);
-            buff = GrVkIndexBuffer::Make(this, size, kDynamic_GrAccessPattern == accessPattern);
+        case GrGpuBufferType::kDrawIndirect:
+            SkASSERT(accessPattern == kDynamic_GrAccessPattern ||
+                     accessPattern == kStatic_GrAccessPattern);
             break;
         case GrGpuBufferType::kXferCpuToGpu:
-            SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
-                     kStream_GrAccessPattern == accessPattern);
-            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyRead_Type);
+            SkASSERT(accessPattern == kDynamic_GrAccessPattern);
             break;
         case GrGpuBufferType::kXferGpuToCpu:
-            SkASSERT(kDynamic_GrAccessPattern == accessPattern ||
-                     kStream_GrAccessPattern == accessPattern);
-            buff = GrVkTransferBuffer::Make(this, size, GrVkBuffer::kCopyWrite_Type);
+            SkASSERT(accessPattern == kDynamic_GrAccessPattern ||
+                     accessPattern == kStream_GrAccessPattern);
             break;
-        default:
-            SK_ABORT("Unknown buffer type.");
-            return nullptr;
+        case GrGpuBufferType::kUniform:
+            SkASSERT(accessPattern == kDynamic_GrAccessPattern);
+            break;
     }
+#endif
+    sk_sp<GrGpuBuffer> buff = GrVkBuffer::Make(this, size, type, accessPattern);
+
     if (data && buff) {
         buff->updateData(data, size);
     }
     return buff;
 }
 
-bool GrVkGpu::onWritePixels(GrSurface* surface, int left, int top, int width, int height,
-                            GrColorType srcColorType, const GrMipLevel texels[],
-                            int mipLevelCount) {
-    GrVkTexture* vkTex = static_cast<GrVkTexture*>(surface->asTexture());
-    if (!vkTex) {
+bool GrVkGpu::onWritePixels(GrSurface* surface,
+                            SkIRect rect,
+                            GrColorType surfaceColorType,
+                            GrColorType srcColorType,
+                            const GrMipLevel texels[],
+                            int mipLevelCount,
+                            bool prepForTexSampling) {
+    GrVkTexture* texture = static_cast<GrVkTexture*>(surface->asTexture());
+    if (!texture) {
         return false;
     }
+    GrVkImage* texImage = texture->textureImage();
 
     // Make sure we have at least the base level
     if (!mipLevelCount || !texels[0].fPixels) {
         return false;
     }
 
-    SkASSERT(!GrPixelConfigIsCompressed(vkTex->config()));
+    SkASSERT(!GrVkFormatIsCompressed(texImage->imageFormat()));
     bool success = false;
-    bool linearTiling = vkTex->isLinearTiled();
+    bool linearTiling = texImage->isLinearTiled();
     if (linearTiling) {
         if (mipLevelCount > 1) {
             SkDebugf("Can't upload mipmap data to linear tiled texture");
             return false;
         }
-        if (VK_IMAGE_LAYOUT_PREINITIALIZED != vkTex->currentLayout()) {
+        if (VK_IMAGE_LAYOUT_PREINITIALIZED != texImage->currentLayout()) {
             // Need to change the layout to general in order to perform a host write
-            vkTex->setImageLayout(this,
-                                  VK_IMAGE_LAYOUT_GENERAL,
-                                  VK_ACCESS_HOST_WRITE_BIT,
-                                  VK_PIPELINE_STAGE_HOST_BIT,
-                                  false);
-            this->submitCommandBuffer(kForce_SyncQueue);
+            texImage->setImageLayout(this,
+                                     VK_IMAGE_LAYOUT_GENERAL,
+                                     VK_ACCESS_HOST_WRITE_BIT,
+                                     VK_PIPELINE_STAGE_HOST_BIT,
+                                     false);
+            if (!this->submitCommandBuffer(kForce_SyncQueue)) {
+                return false;
+            }
         }
-        success = this->uploadTexDataLinear(vkTex, left, top, width, height, srcColorType,
-                                            texels[0].fPixels, texels[0].fRowBytes);
+        success = this->uploadTexDataLinear(texImage,
+                                            rect,
+                                            srcColorType,
+                                            texels[0].fPixels,
+                                            texels[0].fRowBytes);
     } else {
-        SkASSERT(mipLevelCount <= vkTex->texturePriv().maxMipMapLevel() + 1);
-        success = this->uploadTexDataOptimal(vkTex, left, top, width, height, srcColorType, texels,
+        SkASSERT(mipLevelCount <= (int)texImage->mipLevels());
+        success = this->uploadTexDataOptimal(texImage,
+                                             rect,
+                                             srcColorType,
+                                             texels,
                                              mipLevelCount);
+        if (1 == mipLevelCount) {
+            texture->markMipmapsDirty();
+        }
+    }
+
+    if (prepForTexSampling) {
+        texImage->setImageLayout(this,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                      VK_ACCESS_SHADER_READ_BIT,
+                                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                      false);
     }
 
     return success;
 }
 
-bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int width, int height,
-                                 GrColorType bufferColorType, GrGpuBuffer* transferBuffer,
-                                 size_t bufferOffset, size_t rowBytes) {
+bool GrVkGpu::onTransferPixelsTo(GrTexture* texture,
+                                 SkIRect rect,
+                                 GrColorType surfaceColorType,
+                                 GrColorType bufferColorType,
+                                 sk_sp<GrGpuBuffer> transferBuffer,
+                                 size_t bufferOffset,
+                                 size_t rowBytes) {
+    if (!this->currentCommandBuffer()) {
+        return false;
+    }
+
+    size_t bpp = GrColorTypeBytesPerPixel(bufferColorType);
+    if (GrBackendFormatBytesPerPixel(texture->backendFormat()) != bpp) {
+        return false;
+    }
+
+    // Vulkan only supports offsets that are both 4-byte aligned and aligned to a pixel.
+    if ((bufferOffset & 0x3) || (bufferOffset % bpp)) {
+        return false;
+    }
+    GrVkTexture* tex = static_cast<GrVkTexture*>(texture);
+    if (!tex) {
+        return false;
+    }
+    GrVkImage* vkImage = tex->textureImage();
+    VkFormat format = vkImage->imageFormat();
+
     // Can't transfer compressed data
-    SkASSERT(!GrPixelConfigIsCompressed(texture->config()));
+    SkASSERT(!GrVkFormatIsCompressed(format));
 
-    // Vulkan only supports 4-byte aligned offsets
-    if (SkToBool(bufferOffset & 0x2)) {
-        return false;
-    }
-    GrVkTexture* vkTex = static_cast<GrVkTexture*>(texture);
-    if (!vkTex) {
-        return false;
-    }
-    GrVkTransferBuffer* vkBuffer = static_cast<GrVkTransferBuffer*>(transferBuffer);
-    if (!vkBuffer) {
+    if (!transferBuffer) {
         return false;
     }
 
-    SkDEBUGCODE(
-        SkIRect subRect = SkIRect::MakeXYWH(left, top, width, height);
-        SkIRect bounds = SkIRect::MakeWH(texture->width(), texture->height());
-        SkASSERT(bounds.contains(subRect));
-    )
-    int bpp = GrColorTypeBytesPerPixel(bufferColorType);
-    if (rowBytes == 0) {
-        rowBytes = bpp * width;
+    if (bufferColorType != this->vkCaps().transferColorType(format, surfaceColorType)) {
+        return false;
     }
+    SkASSERT(GrVkFormatBytesPerBlock(format) == GrColorTypeBytesPerPixel(bufferColorType));
+
+    SkASSERT(SkIRect::MakeSize(texture->dimensions()).contains(rect));
 
     // Set up copy region
     VkBufferImageCopy region;
@@ -471,35 +588,45 @@ bool GrVkGpu::onTransferPixelsTo(GrTexture* texture, int left, int top, int widt
     region.bufferRowLength = (uint32_t)(rowBytes/bpp);
     region.bufferImageHeight = 0;
     region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-    region.imageOffset = { left, top, 0 };
-    region.imageExtent = { (uint32_t)width, (uint32_t)height, 1 };
+    region.imageOffset = { rect.left(), rect.top(), 0 };
+    region.imageExtent = { (uint32_t)rect.width(), (uint32_t)rect.height(), 1 };
 
     // Change layout of our target so it can be copied to
-    vkTex->setImageLayout(this,
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                          VK_ACCESS_TRANSFER_WRITE_BIT,
-                          VK_PIPELINE_STAGE_TRANSFER_BIT,
-                          false);
+    vkImage->setImageLayout(this,
+                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                            VK_ACCESS_TRANSFER_WRITE_BIT,
+                            VK_PIPELINE_STAGE_TRANSFER_BIT,
+                            false);
 
-    // Copy the buffer to the image
-    fCurrentCmdBuffer->copyBufferToImage(this,
-                                         vkBuffer,
-                                         vkTex,
-                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                         1,
-                                         &region);
+    const GrVkBuffer* vkBuffer = static_cast<GrVkBuffer*>(transferBuffer.get());
 
-    vkTex->texturePriv().markMipMapsDirty();
+    // Copy the buffer to the image.
+    this->currentCommandBuffer()->copyBufferToImage(this,
+                                                    vkBuffer->vkBuffer(),
+                                                    vkImage,
+                                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                    1,
+                                                    &region);
+    this->currentCommandBuffer()->addGrBuffer(std::move(transferBuffer));
+
+    tex->markMipmapsDirty();
     return true;
 }
 
-bool GrVkGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int width, int height,
-                                   GrColorType bufferColorType, GrGpuBuffer* transferBuffer,
+bool GrVkGpu::onTransferPixelsFrom(GrSurface* surface,
+                                   SkIRect rect,
+                                   GrColorType surfaceColorType,
+                                   GrColorType bufferColorType,
+                                   sk_sp<GrGpuBuffer> transferBuffer,
                                    size_t offset) {
+    if (!this->currentCommandBuffer()) {
+        return false;
+    }
     SkASSERT(surface);
     SkASSERT(transferBuffer);
-
-    GrVkTransferBuffer* vkBuffer = static_cast<GrVkTransferBuffer*>(transferBuffer);
+    if (fProtectedContext == GrProtected::kYes) {
+        return false;
+    }
 
     GrVkImage* srcImage;
     if (GrVkRenderTarget* rt = static_cast<GrVkRenderTarget*>(surface->asRenderTarget())) {
@@ -509,32 +636,30 @@ bool GrVkGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int wi
         if (rt->wrapsSecondaryCommandBuffer()) {
             return false;
         }
-        // resolve the render target if necessary
-        switch (rt->getResolveType()) {
-            case GrVkRenderTarget::kCantResolve_ResolveType:
-                return false;
-            case GrVkRenderTarget::kAutoResolves_ResolveType:
-                break;
-            case GrVkRenderTarget::kCanResolve_ResolveType:
-                this->resolveRenderTargetNoFlush(rt);
-                break;
-            default:
-                SK_ABORT("Unknown resolve type");
+        if (!rt->nonMSAAAttachment()) {
+            return false;
         }
-        srcImage = rt;
+        srcImage = rt->nonMSAAAttachment();
     } else {
-        srcImage = static_cast<GrVkTexture*>(surface->asTexture());
+        SkASSERT(surface->asTexture());
+        srcImage = static_cast<GrVkTexture*>(surface->asTexture())->textureImage();
     }
+
+    VkFormat format = srcImage->imageFormat();
+    if (bufferColorType != this->vkCaps().transferColorType(format, surfaceColorType)) {
+        return false;
+    }
+    SkASSERT(GrVkFormatBytesPerBlock(format) == GrColorTypeBytesPerPixel(bufferColorType));
 
     // Set up copy region
     VkBufferImageCopy region;
     memset(&region, 0, sizeof(VkBufferImageCopy));
     region.bufferOffset = offset;
-    region.bufferRowLength = width;
+    region.bufferRowLength = rect.width();
     region.bufferImageHeight = 0;
     region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-    region.imageOffset = { left, top, 0 };
-    region.imageExtent = { (uint32_t)width, (uint32_t)height, 1 };
+    region.imageOffset = {rect.left(), rect.top(), 0};
+    region.imageExtent = {(uint32_t)rect.width(), (uint32_t)rect.height(), 1};
 
     srcImage->setImageLayout(this,
                              VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -542,27 +667,28 @@ bool GrVkGpu::onTransferPixelsFrom(GrSurface* surface, int left, int top, int wi
                              VK_PIPELINE_STAGE_TRANSFER_BIT,
                              false);
 
-    fCurrentCmdBuffer->copyImageToBuffer(this, srcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                         vkBuffer, 1, &region);
+    this->currentCommandBuffer()->copyImageToBuffer(this, srcImage,
+                                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                                    transferBuffer, 1, &region);
 
+    GrVkBuffer* vkBuffer = static_cast<GrVkBuffer*>(transferBuffer.get());
     // Make sure the copy to buffer has finished.
-    vkBuffer->addMemoryBarrier(this,
-                               VK_ACCESS_TRANSFER_WRITE_BIT,
+    vkBuffer->addMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT,
                                VK_ACCESS_HOST_READ_BIT,
                                VK_PIPELINE_STAGE_TRANSFER_BIT,
                                VK_PIPELINE_STAGE_HOST_BIT,
                                false);
-
-    // The caller is responsible for syncing.
-    this->submitCommandBuffer(kSkip_SyncQueue);
-
     return true;
 }
 
 void GrVkGpu::resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect& srcRect,
                            const SkIPoint& dstPoint) {
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
+
     SkASSERT(dst);
-    SkASSERT(src && src->numColorSamples() > 1 && src->msaaImage());
+    SkASSERT(src && src->colorAttachment() && src->colorAttachment()->numSamples() > 1);
 
     VkImageResolve resolveInfo;
     resolveInfo.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -573,68 +699,61 @@ void GrVkGpu::resolveImage(GrSurface* dst, GrVkRenderTarget* src, const SkIRect&
 
     GrVkImage* dstImage;
     GrRenderTarget* dstRT = dst->asRenderTarget();
-    if (dstRT) {
-        GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(dstRT);
-        dstImage = vkRT;
+    GrTexture* dstTex = dst->asTexture();
+    if (dstTex) {
+        dstImage = static_cast<GrVkTexture*>(dstTex)->textureImage();
     } else {
-        SkASSERT(dst->asTexture());
-        dstImage = static_cast<GrVkTexture*>(dst->asTexture());
+        SkASSERT(dst->asRenderTarget());
+        dstImage = static_cast<GrVkRenderTarget*>(dstRT)->nonMSAAAttachment();
     }
+    SkASSERT(dstImage);
+
     dstImage->setImageLayout(this,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                              VK_ACCESS_TRANSFER_WRITE_BIT,
                              VK_PIPELINE_STAGE_TRANSFER_BIT,
                              false);
 
-    src->msaaImage()->setImageLayout(this,
-                                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                     VK_ACCESS_TRANSFER_READ_BIT,
-                                     VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                     false);
-
-    fCurrentCmdBuffer->resolveImage(this, *src->msaaImage(), *dstImage, 1, &resolveInfo);
+    src->colorAttachment()->setImageLayout(this,
+                                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                           VK_ACCESS_TRANSFER_READ_BIT,
+                                           VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                           false);
+    this->currentCommandBuffer()->addGrSurface(sk_ref_sp<const GrSurface>(src->colorAttachment()));
+    this->currentCommandBuffer()->addGrSurface(sk_ref_sp<const GrSurface>(dst));
+    this->currentCommandBuffer()->resolveImage(this, *src->colorAttachment(), *dstImage, 1,
+                                               &resolveInfo);
 }
 
-void GrVkGpu::internalResolveRenderTarget(GrRenderTarget* target, bool requiresSubmit) {
-    if (target->needsResolve()) {
-        SkASSERT(target->numColorSamples() > 1);
-        GrVkRenderTarget* rt = static_cast<GrVkRenderTarget*>(target);
-        SkASSERT(rt->msaaImage());
+void GrVkGpu::onResolveRenderTarget(GrRenderTarget* target, const SkIRect& resolveRect) {
+    SkASSERT(target->numSamples() > 1);
+    GrVkRenderTarget* rt = static_cast<GrVkRenderTarget*>(target);
+    SkASSERT(rt->colorAttachmentView() && rt->resolveAttachmentView());
 
-        const SkIRect& srcRect = rt->getResolveRect();
-
-        this->resolveImage(target, rt, srcRect, SkIPoint::Make(srcRect.fLeft, srcRect.fTop));
-
-        rt->flagAsResolved();
-
-        if (requiresSubmit) {
-            this->submitCommandBuffer(kSkip_SyncQueue);
-        }
+    if (this->vkCaps().renderTargetSupportsDiscardableMSAA(rt)) {
+        // We would have resolved the RT during the render pass;
+        return;
     }
+
+    this->resolveImage(target, rt, resolveRect,
+                       SkIPoint::Make(resolveRect.x(), resolveRect.y()));
 }
 
-bool GrVkGpu::uploadTexDataLinear(GrVkTexture* tex, int left, int top, int width, int height,
-                                  GrColorType dataColorType, const void* data, size_t rowBytes) {
+bool GrVkGpu::uploadTexDataLinear(GrVkImage* texImage,
+                                  SkIRect rect,
+                                  GrColorType dataColorType,
+                                  const void* data,
+                                  size_t rowBytes) {
     SkASSERT(data);
-    SkASSERT(tex->isLinearTiled());
+    SkASSERT(texImage->isLinearTiled());
 
-    // If we're uploading compressed data then we should be using uploadCompressedTexData
-    SkASSERT(!GrPixelConfigIsCompressed(GrColorTypeToPixelConfig(dataColorType,
-                                                                 GrSRGBEncoded::kNo)));
+    SkASSERT(SkIRect::MakeSize(texImage->dimensions()).contains(rect));
 
-    SkDEBUGCODE(
-        SkIRect subRect = SkIRect::MakeXYWH(left, top, width, height);
-        SkIRect bounds = SkIRect::MakeWH(tex->width(), tex->height());
-        SkASSERT(bounds.contains(subRect));
-    )
-    int bpp = GrColorTypeBytesPerPixel(dataColorType);
-    size_t trimRowBytes = width * bpp;
-    if (!rowBytes) {
-        rowBytes = trimRowBytes;
-    }
+    size_t bpp = GrColorTypeBytesPerPixel(dataColorType);
+    size_t trimRowBytes = rect.width() * bpp;
 
-    SkASSERT(VK_IMAGE_LAYOUT_PREINITIALIZED == tex->currentLayout() ||
-             VK_IMAGE_LAYOUT_GENERAL == tex->currentLayout());
+    SkASSERT(VK_IMAGE_LAYOUT_PREINITIALIZED == texImage->currentLayout() ||
+             VK_IMAGE_LAYOUT_GENERAL == texImage->currentLayout());
     const VkImageSubresource subres = {
         VK_IMAGE_ASPECT_COLOR_BIT,
         0,  // mipLevel
@@ -645,13 +764,16 @@ bool GrVkGpu::uploadTexDataLinear(GrVkTexture* tex, int left, int top, int width
     const GrVkInterface* interface = this->vkInterface();
 
     GR_VK_CALL(interface, GetImageSubresourceLayout(fDevice,
-                                                    tex->image(),
+                                                    texImage->image(),
                                                     &subres,
                                                     &layout));
 
-    const GrVkAlloc& alloc = tex->alloc();
-    VkDeviceSize offset = top * layout.rowPitch + left * bpp;
-    VkDeviceSize size = height*layout.rowPitch;
+    const GrVkAlloc& alloc = texImage->alloc();
+    if (VK_NULL_HANDLE == alloc.fMemory) {
+        return false;
+    }
+    VkDeviceSize offset = rect.top()*layout.rowPitch + rect.left()*bpp;
+    VkDeviceSize size = rect.height()*layout.rowPitch;
     SkASSERT(size + offset <= alloc.fSize);
     void* mapPtr = GrVkMemory::MapAlloc(this, alloc);
     if (!mapPtr) {
@@ -659,8 +781,12 @@ bool GrVkGpu::uploadTexDataLinear(GrVkTexture* tex, int left, int top, int width
     }
     mapPtr = reinterpret_cast<char*>(mapPtr) + offset;
 
-    SkRectMemcpy(mapPtr, static_cast<size_t>(layout.rowPitch), data, rowBytes, trimRowBytes,
-                 height);
+    SkRectMemcpy(mapPtr,
+                 static_cast<size_t>(layout.rowPitch),
+                 data,
+                 rowBytes,
+                 trimRowBytes,
+                 rect.height());
 
     GrVkMemory::FlushMappedAlloc(this, alloc, offset, size);
     GrVkMemory::UnmapAlloc(this, alloc);
@@ -668,147 +794,135 @@ bool GrVkGpu::uploadTexDataLinear(GrVkTexture* tex, int left, int top, int width
     return true;
 }
 
-bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int width, int height,
-                                   GrColorType dataColorType, const GrMipLevel texels[],
+// This fills in the 'regions' vector in preparation for copying a buffer to an image.
+// 'individualMipOffsets' is filled in as a side-effect.
+static size_t fill_in_compressed_regions(GrStagingBufferManager* stagingBufferManager,
+                                         SkTArray<VkBufferImageCopy>* regions,
+                                         SkTArray<size_t>* individualMipOffsets,
+                                         GrStagingBufferManager::Slice* slice,
+                                         SkImage::CompressionType compression,
+                                         VkFormat vkFormat,
+                                         SkISize dimensions,
+                                         GrMipmapped mipmapped) {
+    SkASSERT(compression != SkImage::CompressionType::kNone);
+    int numMipLevels = 1;
+    if (mipmapped == GrMipmapped::kYes) {
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+    }
+
+    regions->reserve_back(numMipLevels);
+    individualMipOffsets->reserve_back(numMipLevels);
+
+    size_t bytesPerBlock = GrVkFormatBytesPerBlock(vkFormat);
+
+    size_t bufferSize = SkCompressedDataSize(compression,
+                                             dimensions,
+                                             individualMipOffsets,
+                                             mipmapped == GrMipmapped::kYes);
+    SkASSERT(individualMipOffsets->count() == numMipLevels);
+
+    // Get a staging buffer slice to hold our mip data.
+    // Vulkan requires offsets in the buffer to be aligned to multiple of the texel size and 4
+    size_t alignment = bytesPerBlock;
+    switch (alignment & 0b11) {
+        case 0:                     break;   // alignment is already a multiple of 4.
+        case 2:     alignment *= 2; break;   // alignment is a multiple of 2 but not 4.
+        default:    alignment *= 4; break;   // alignment is not a multiple of 2.
+    }
+    *slice = stagingBufferManager->allocateStagingBufferSlice(bufferSize, alignment);
+    if (!slice->fBuffer) {
+        return 0;
+    }
+
+    for (int i = 0; i < numMipLevels; ++i) {
+        VkBufferImageCopy& region = regions->push_back();
+        memset(&region, 0, sizeof(VkBufferImageCopy));
+        region.bufferOffset = slice->fOffset + (*individualMipOffsets)[i];
+        SkISize revisedDimensions = GrCompressedDimensions(compression, dimensions);
+        region.bufferRowLength = revisedDimensions.width();
+        region.bufferImageHeight = revisedDimensions.height();
+        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, SkToU32(i), 0, 1};
+        region.imageOffset = {0, 0, 0};
+        region.imageExtent = {SkToU32(dimensions.width()),
+                              SkToU32(dimensions.height()), 1};
+
+        dimensions = {std::max(1, dimensions.width() /2),
+                      std::max(1, dimensions.height()/2)};
+    }
+
+    return bufferSize;
+}
+
+bool GrVkGpu::uploadTexDataOptimal(GrVkImage* texImage,
+                                   SkIRect rect,
+                                   GrColorType dataColorType,
+                                   const GrMipLevel texels[],
                                    int mipLevelCount) {
-    SkASSERT(!tex->isLinearTiled());
+    if (!this->currentCommandBuffer()) {
+        return false;
+    }
+
+    SkASSERT(!texImage->isLinearTiled());
     // The assumption is either that we have no mipmaps, or that our rect is the entire texture
-    SkASSERT(1 == mipLevelCount ||
-             (0 == left && 0 == top && width == tex->width() && height == tex->height()));
+    SkASSERT(mipLevelCount == 1 || rect == SkIRect::MakeSize(texImage->dimensions()));
 
     // We assume that if the texture has mip levels, we either upload to all the levels or just the
     // first.
-    SkASSERT(1 == mipLevelCount || mipLevelCount == (tex->texturePriv().maxMipMapLevel() + 1));
+    SkASSERT(mipLevelCount == 1 || mipLevelCount == (int)texImage->mipLevels());
 
-    // If we're uploading compressed data then we should be using uploadCompressedTexData
-    SkASSERT(!GrPixelConfigIsCompressed(GrColorTypeToPixelConfig(dataColorType,
-                                                                 GrSRGBEncoded::kNo)));
+    SkASSERT(!rect.isEmpty());
 
-    if (width == 0 || height == 0) {
-        return false;
-    }
+    SkASSERT(this->vkCaps().surfaceSupportsWritePixels(texImage));
 
-    if (GrPixelConfigToColorType(tex->config()) != dataColorType) {
-        return false;
-    }
-
-    // For RGB_888x src data we are uploading it first to an RGBA texture and then copying it to the
-    // dst RGB texture. Thus we do not upload mip levels for that.
-    if (dataColorType == GrColorType::kRGB_888x && tex->imageFormat() == VK_FORMAT_R8G8B8_UNORM) {
-        SkASSERT(tex->config() == kRGB_888_GrPixelConfig);
-        // First check that we'll be able to do the copy to the to the R8G8B8 image in the end via a
-        // blit or draw.
-        if (!this->vkCaps().configCanBeDstofBlit(kRGB_888_GrPixelConfig, tex->isLinearTiled()) &&
-            !this->vkCaps().maxRenderTargetSampleCount(kRGB_888_GrPixelConfig)) {
-            return false;
-        }
-        mipLevelCount = 1;
-    }
-
-    SkASSERT(this->caps()->isConfigTexturable(tex->config()));
-    int bpp = GrColorTypeBytesPerPixel(dataColorType);
+    SkASSERT(this->vkCaps().isVkFormatTexturable(texImage->imageFormat()));
+    size_t bpp = GrColorTypeBytesPerPixel(dataColorType);
 
     // texels is const.
     // But we may need to adjust the fPixels ptr based on the copyRect, or fRowBytes.
     // Because of this we need to make a non-const shallow copy of texels.
-    SkAutoTMalloc<GrMipLevel> texelsShallowCopy;
+    SkAutoTArray<GrMipLevel> texelsShallowCopy(mipLevelCount);
+    std::copy_n(texels, mipLevelCount, texelsShallowCopy.get());
 
-    texelsShallowCopy.reset(mipLevelCount);
-    memcpy(texelsShallowCopy.get(), texels, mipLevelCount*sizeof(GrMipLevel));
-
-    SkTArray<size_t> individualMipOffsets(mipLevelCount);
-    individualMipOffsets.push_back(0);
-    size_t combinedBufferSize = width * bpp * height;
-    int currentWidth = width;
-    int currentHeight = height;
-    if (!texelsShallowCopy[0].fPixels) {
-        combinedBufferSize = 0;
+    SkTArray<size_t> individualMipOffsets;
+    size_t combinedBufferSize;
+    if (mipLevelCount > 1) {
+        combinedBufferSize = GrComputeTightCombinedBufferSize(bpp,
+                                                              rect.size(),
+                                                              &individualMipOffsets,
+                                                              mipLevelCount);
+    } else {
+        SkASSERT(texelsShallowCopy[0].fPixels && texelsShallowCopy[0].fRowBytes);
+        combinedBufferSize = rect.width()*rect.height()*bpp;
+        individualMipOffsets.push_back(0);
     }
+    SkASSERT(combinedBufferSize);
 
-    // The alignment must be at least 4 bytes and a multiple of the bytes per pixel of the image
-    // config. This works with the assumption that the bytes in pixel config is always a power of 2.
-    SkASSERT((bpp & (bpp - 1)) == 0);
-    const size_t alignmentMask = 0x3 | (bpp - 1);
-    for (int currentMipLevel = 1; currentMipLevel < mipLevelCount; currentMipLevel++) {
-        currentWidth = SkTMax(1, currentWidth/2);
-        currentHeight = SkTMax(1, currentHeight/2);
-
-        if (texelsShallowCopy[currentMipLevel].fPixels) {
-            const size_t trimmedSize = currentWidth * bpp * currentHeight;
-            const size_t alignmentDiff = combinedBufferSize & alignmentMask;
-            if (alignmentDiff != 0) {
-                combinedBufferSize += alignmentMask - alignmentDiff + 1;
-            }
-            individualMipOffsets.push_back(combinedBufferSize);
-            combinedBufferSize += trimmedSize;
-        } else {
-            individualMipOffsets.push_back(0);
-        }
+    // Get a staging buffer slice to hold our mip data.
+    // Vulkan requires offsets in the buffer to be aligned to multiple of the texel size and 4
+    size_t alignment = bpp;
+    switch (alignment & 0b11) {
+        case 0:                     break;   // alignment is already a multiple of 4.
+        case 2:     alignment *= 2; break;   // alignment is a multiple of 2 but not 4.
+        default:    alignment *= 4; break;   // alignment is not a multiple of 2.
     }
-    if (0 == combinedBufferSize) {
-        // We don't actually have any data to upload so just return success
-        return true;
-    }
-
-    // allocate buffer to hold our mip data
-    sk_sp<GrVkTransferBuffer> transferBuffer =
-            GrVkTransferBuffer::Make(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
-    if (!transferBuffer) {
+    GrStagingBufferManager::Slice slice =
+            fStagingBufferManager.allocateStagingBufferSlice(combinedBufferSize, alignment);
+    if (!slice.fBuffer) {
         return false;
     }
 
-    int uploadLeft = left;
-    int uploadTop = top;
-    GrVkTexture* uploadTexture = tex;
-    // For uploading RGB_888x data to an R8G8B8_UNORM texture we must first upload the data to an
-    // R8G8B8A8_UNORM image and then copy it.
-    sk_sp<GrVkTexture> copyTexture;
-    if (dataColorType == GrColorType::kRGB_888x && tex->imageFormat() == VK_FORMAT_R8G8B8_UNORM) {
-        GrSurfaceDesc surfDesc;
-        surfDesc.fFlags = kRenderTarget_GrSurfaceFlag;
-        surfDesc.fWidth = width;
-        surfDesc.fHeight = height;
-        surfDesc.fConfig = kRGBA_8888_GrPixelConfig;
-        surfDesc.fSampleCnt = 1;
+    int uploadLeft = rect.left();
+    int uploadTop = rect.top();
 
-        VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT |
-                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                       VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-        GrVkImage::ImageDesc imageDesc;
-        imageDesc.fImageType = VK_IMAGE_TYPE_2D;
-        imageDesc.fFormat = VK_FORMAT_R8G8B8A8_UNORM;
-        imageDesc.fWidth = width;
-        imageDesc.fHeight = height;
-        imageDesc.fLevels = 1;
-        imageDesc.fSamples = 1;
-        imageDesc.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
-        imageDesc.fUsageFlags = usageFlags;
-        imageDesc.fMemProps = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-        copyTexture = GrVkTexture::MakeNewTexture(this, SkBudgeted::kYes, surfDesc, imageDesc,
-                                                  GrMipMapsStatus::kNotAllocated);
-        if (!copyTexture) {
-            return false;
-        }
-        uploadTexture = copyTexture.get();
-        uploadLeft = 0;
-        uploadTop = 0;
-    }
-
-    char* buffer = (char*) transferBuffer->map();
+    char* buffer = (char*) slice.fOffsetMapPtr;
     SkTArray<VkBufferImageCopy> regions(mipLevelCount);
 
-    currentWidth = width;
-    currentHeight = height;
-    int layerHeight = uploadTexture->height();
+    int currentWidth = rect.width();
+    int currentHeight = rect.height();
     for (int currentMipLevel = 0; currentMipLevel < mipLevelCount; currentMipLevel++) {
         if (texelsShallowCopy[currentMipLevel].fPixels) {
-            SkASSERT(1 == mipLevelCount || currentHeight == layerHeight);
             const size_t trimRowBytes = currentWidth * bpp;
-            const size_t rowBytes = texelsShallowCopy[currentMipLevel].fRowBytes
-                                    ? texelsShallowCopy[currentMipLevel].fRowBytes
-                                    : trimRowBytes;
+            const size_t rowBytes = texelsShallowCopy[currentMipLevel].fRowBytes;
 
             // copy data into the buffer, skipping the trailing bytes
             char* dst = buffer + individualMipOffsets[currentMipLevel];
@@ -817,155 +931,84 @@ bool GrVkGpu::uploadTexDataOptimal(GrVkTexture* tex, int left, int top, int widt
 
             VkBufferImageCopy& region = regions.push_back();
             memset(&region, 0, sizeof(VkBufferImageCopy));
-            region.bufferOffset = transferBuffer->offset() + individualMipOffsets[currentMipLevel];
+            region.bufferOffset = slice.fOffset + individualMipOffsets[currentMipLevel];
             region.bufferRowLength = currentWidth;
             region.bufferImageHeight = currentHeight;
-            region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, SkToU32(currentMipLevel), 0, 1 };
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, SkToU32(currentMipLevel), 0, 1};
             region.imageOffset = {uploadLeft, uploadTop, 0};
-            region.imageExtent = { (uint32_t)currentWidth, (uint32_t)currentHeight, 1 };
+            region.imageExtent = {(uint32_t)currentWidth, (uint32_t)currentHeight, 1};
         }
-        currentWidth = SkTMax(1, currentWidth/2);
-        currentHeight = SkTMax(1, currentHeight/2);
-        layerHeight = currentHeight;
-    }
 
-    // no need to flush non-coherent memory, unmap will do that for us
-    transferBuffer->unmap();
+        currentWidth  = std::max(1,  currentWidth/2);
+        currentHeight = std::max(1, currentHeight/2);
+    }
 
     // Change layout of our target so it can be copied to
-    uploadTexture->setImageLayout(this,
-                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                  VK_ACCESS_TRANSFER_WRITE_BIT,
-                                  VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                  false);
+    texImage->setImageLayout(this,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_ACCESS_TRANSFER_WRITE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             false);
 
-    // Copy the buffer to the image
-    fCurrentCmdBuffer->copyBufferToImage(this,
-                                         transferBuffer.get(),
-                                         uploadTexture,
-                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                         regions.count(),
-                                         regions.begin());
-
-    // If we copied the data into a temporary image first, copy that image into our main texture
-    // now.
-    if (copyTexture.get()) {
-        SkASSERT(dataColorType == GrColorType::kRGB_888x);
-        static const GrSurfaceOrigin kOrigin = kTopLeft_GrSurfaceOrigin;
-        SkAssertResult(this->copySurface(tex, kOrigin, copyTexture.get(), kOrigin,
-                                         SkIRect::MakeWH(width, height), SkIPoint::Make(left, top),
-                                         false));
-    }
-    if (1 == mipLevelCount) {
-        tex->texturePriv().markMipMapsDirty();
-    }
-
+    // Copy the buffer to the image. This call takes the raw VkBuffer instead of a GrGpuBuffer
+    // because we don't need the command buffer to ref the buffer here. The reason being is that
+    // the buffer is coming from the staging manager and the staging manager will make sure the
+    // command buffer has a ref on the buffer. This avoids having to add and remove a ref for ever
+    // upload in the frame.
+    GrVkBuffer* vkBuffer = static_cast<GrVkBuffer*>(slice.fBuffer);
+    this->currentCommandBuffer()->copyBufferToImage(this,
+                                                    vkBuffer->vkBuffer(),
+                                                    texImage,
+                                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                    regions.count(),
+                                                    regions.begin());
     return true;
 }
 
 // It's probably possible to roll this into uploadTexDataOptimal,
 // but for now it's easier to maintain as a separate entity.
-bool GrVkGpu::uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int width, int height,
-                                      GrColorType dataColorType, const GrMipLevel texels[],
-                                      int mipLevelCount) {
-    SkASSERT(!tex->isLinearTiled());
+bool GrVkGpu::uploadTexDataCompressed(GrVkImage* uploadTexture,
+                                      SkImage::CompressionType compression, VkFormat vkFormat,
+                                      SkISize dimensions, GrMipmapped mipMapped,
+                                      const void* data, size_t dataSize) {
+    if (!this->currentCommandBuffer()) {
+        return false;
+    }
+    SkASSERT(data);
+    SkASSERT(!uploadTexture->isLinearTiled());
     // For now the assumption is that our rect is the entire texture.
     // Compressed textures are read-only so this should be a reasonable assumption.
-    SkASSERT(0 == left && 0 == top && width == tex->width() && height == tex->height());
+    SkASSERT(dimensions.fWidth == uploadTexture->width() &&
+             dimensions.fHeight == uploadTexture->height());
 
-    // We assume that if the texture has mip levels, we either upload to all the levels or just the
-    // first.
-    SkASSERT(1 == mipLevelCount || mipLevelCount == (tex->texturePriv().maxMipMapLevel() + 1));
-
-    SkASSERT(GrPixelConfigIsCompressed(GrColorTypeToPixelConfig(dataColorType,
-                                                                GrSRGBEncoded::kNo)));
-
-    if (width == 0 || height == 0) {
+    if (dimensions.fWidth == 0 || dimensions.fHeight  == 0) {
         return false;
     }
 
-    if (GrPixelConfigToColorType(tex->config()) != dataColorType) {
+    SkASSERT(uploadTexture->imageFormat() == vkFormat);
+    SkASSERT(this->vkCaps().isVkFormatTexturable(vkFormat));
+
+
+    GrStagingBufferManager::Slice slice;
+    SkTArray<VkBufferImageCopy> regions;
+    SkTArray<size_t> individualMipOffsets;
+    SkDEBUGCODE(size_t combinedBufferSize =) fill_in_compressed_regions(&fStagingBufferManager,
+                                                                        &regions,
+                                                                        &individualMipOffsets,
+                                                                        &slice,
+                                                                        compression,
+                                                                        vkFormat,
+                                                                        dimensions,
+                                                                        mipMapped);
+    if (!slice.fBuffer) {
         return false;
     }
+    SkASSERT(dataSize == combinedBufferSize);
 
-    SkASSERT(this->caps()->isConfigTexturable(tex->config()));
-
-    SkTArray<size_t> individualMipOffsets(mipLevelCount);
-    individualMipOffsets.push_back(0);
-    size_t combinedBufferSize = GrCompressedFormatDataSize(tex->config(), width, height);
-    int currentWidth = width;
-    int currentHeight = height;
-    if (!texels[0].fPixels) {
-        return false;
+    {
+        char* buffer = (char*)slice.fOffsetMapPtr;
+        memcpy(buffer, data, dataSize);
     }
-
-    // We assume that the alignment for any compressed format is at least 4 bytes and so we don't
-    // need to worry about alignment issues. For example, each block in ETC1 is 8 bytes.
-    for (int currentMipLevel = 1; currentMipLevel < mipLevelCount; currentMipLevel++) {
-        currentWidth = SkTMax(1, currentWidth / 2);
-        currentHeight = SkTMax(1, currentHeight / 2);
-
-        if (texels[currentMipLevel].fPixels) {
-            const size_t dataSize = GrCompressedFormatDataSize(tex->config(), currentWidth,
-                                                               currentHeight);
-            individualMipOffsets.push_back(combinedBufferSize);
-            combinedBufferSize += dataSize;
-        } else {
-            return false;
-        }
-    }
-    if (0 == combinedBufferSize) {
-        // We don't have any data to upload so fail (compressed textures are read-only).
-        return false;
-    }
-
-    // allocate buffer to hold our mip data
-    sk_sp<GrVkTransferBuffer> transferBuffer =
-            GrVkTransferBuffer::Make(this, combinedBufferSize, GrVkBuffer::kCopyRead_Type);
-    if (!transferBuffer) {
-        return false;
-    }
-
-    int uploadLeft = left;
-    int uploadTop = top;
-    GrVkTexture* uploadTexture = tex;
-
-    char* buffer = (char*)transferBuffer->map();
-    SkTArray<VkBufferImageCopy> regions(mipLevelCount);
-
-    currentWidth = width;
-    currentHeight = height;
-    int layerHeight = uploadTexture->height();
-    for (int currentMipLevel = 0; currentMipLevel < mipLevelCount; currentMipLevel++) {
-        if (texels[currentMipLevel].fPixels) {
-            // Again, we're assuming that our rect is the entire texture
-            SkASSERT(currentHeight == layerHeight);
-            SkASSERT(0 == uploadLeft && 0 == uploadTop);
-
-            const size_t dataSize = GrCompressedFormatDataSize(tex->config(), currentWidth,
-                                                               currentHeight);
-
-            // copy data into the buffer, skipping the trailing bytes
-            char* dst = buffer + individualMipOffsets[currentMipLevel];
-            const char* src = (const char*)texels[currentMipLevel].fPixels;
-            memcpy(dst, src, dataSize);
-
-            VkBufferImageCopy& region = regions.push_back();
-            memset(&region, 0, sizeof(VkBufferImageCopy));
-            region.bufferOffset = transferBuffer->offset() + individualMipOffsets[currentMipLevel];
-            region.bufferRowLength = currentWidth;
-            region.bufferImageHeight = currentHeight;
-            region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, SkToU32(currentMipLevel), 0, 1 };
-            region.imageOffset = { uploadLeft, uploadTop, 0 };
-            region.imageExtent = { (uint32_t)currentWidth, (uint32_t)currentHeight, 1 };
-        }
-        currentWidth = SkTMax(1, currentWidth / 2);
-        currentHeight = SkTMax(1, currentHeight / 2);
-        layerHeight = currentHeight;
-    }
-
-    // no need to flush non-coherent memory, unmap will do that for us
-    transferBuffer->unmap();
 
     // Change layout of our target so it can be copied to
     uploadTexture->setImageLayout(this,
@@ -974,129 +1017,146 @@ bool GrVkGpu::uploadTexDataCompressed(GrVkTexture* tex, int left, int top, int w
                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
                                   false);
 
-    // Copy the buffer to the image
-    fCurrentCmdBuffer->copyBufferToImage(this,
-                                         transferBuffer.get(),
-                                         uploadTexture,
-                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                         regions.count(),
-                                         regions.begin());
-
-    if (1 == mipLevelCount) {
-        tex->texturePriv().markMipMapsDirty();
-    }
+    // Copy the buffer to the image. This call takes the raw VkBuffer instead of a GrGpuBuffer
+    // because we don't need the command buffer to ref the buffer here. The reason being is that
+    // the buffer is coming from the staging manager and the staging manager will make sure the
+    // command buffer has a ref on the buffer. This avoids having to add and remove a ref for ever
+    // upload in the frame.
+    GrVkBuffer* vkBuffer = static_cast<GrVkBuffer*>(slice.fBuffer);
+    this->currentCommandBuffer()->copyBufferToImage(this,
+                                                    vkBuffer->vkBuffer(),
+                                                    uploadTexture,
+                                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                    regions.count(),
+                                                    regions.begin());
 
     return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-sk_sp<GrTexture> GrVkGpu::onCreateTexture(const GrSurfaceDesc& desc, SkBudgeted budgeted,
-                                          const GrMipLevel texels[], int mipLevelCount) {
-    bool renderTarget = SkToBool(desc.fFlags & kRenderTarget_GrSurfaceFlag);
-
+// TODO: make this take a GrMipmapped
+sk_sp<GrTexture> GrVkGpu::onCreateTexture(SkISize dimensions,
+                                          const GrBackendFormat& format,
+                                          GrRenderable renderable,
+                                          int renderTargetSampleCnt,
+                                          SkBudgeted budgeted,
+                                          GrProtected isProtected,
+                                          int mipLevelCount,
+                                          uint32_t levelClearMask) {
     VkFormat pixelFormat;
-    SkAssertResult(GrPixelConfigToVkFormat(desc.fConfig, &pixelFormat));
+    SkAssertResult(format.asVkFormat(&pixelFormat));
+    SkASSERT(!GrVkFormatIsCompressed(pixelFormat));
+    SkASSERT(mipLevelCount > 0);
 
-    VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_SAMPLED_BIT;
-    if (renderTarget) {
-        usageFlags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    }
-
-    // For now we will set the VK_IMAGE_USAGE_TRANSFER_DESTINATION_BIT and
-    // VK_IMAGE_USAGE_TRANSFER_SOURCE_BIT on every texture since we do not know whether or not we
-    // will be using this texture in some copy or not. Also this assumes, as is the current case,
-    // that all render targets in vulkan are also textures. If we change this practice of setting
-    // both bits, we must make sure to set the destination bit if we are uploading srcData to the
-    // texture.
-    usageFlags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-    // This ImageDesc refers to the texture that will be read by the client. Thus even if msaa is
-    // requested, this ImageDesc describes the resolved texture. Therefore we always have samples set
-    // to 1.
-    int mipLevels = !mipLevelCount ? 1 : mipLevelCount;
-    GrVkImage::ImageDesc imageDesc;
-    imageDesc.fImageType = VK_IMAGE_TYPE_2D;
-    imageDesc.fFormat = pixelFormat;
-    imageDesc.fWidth = desc.fWidth;
-    imageDesc.fHeight = desc.fHeight;
-    imageDesc.fLevels = mipLevels;
-    imageDesc.fSamples = 1;
-    imageDesc.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
-    imageDesc.fUsageFlags = usageFlags;
-    imageDesc.fMemProps = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-    GrMipMapsStatus mipMapsStatus = GrMipMapsStatus::kNotAllocated;
-    if (mipLevels > 1) {
-        mipMapsStatus = GrMipMapsStatus::kValid;
-        for (int i = 0; i < mipLevels; ++i) {
-            if (!texels[i].fPixels) {
-                mipMapsStatus = GrMipMapsStatus::kDirty;
-                break;
-            }
-        }
-    }
+    GrMipmapStatus mipmapStatus =
+            mipLevelCount > 1 ? GrMipmapStatus::kDirty : GrMipmapStatus::kNotAllocated;
 
     sk_sp<GrVkTexture> tex;
-    if (renderTarget) {
-        tex = GrVkTextureRenderTarget::MakeNewTextureRenderTarget(this, budgeted, desc,
-                                                                  imageDesc,
-                                                                  mipMapsStatus);
+    if (renderable == GrRenderable::kYes) {
+        tex = GrVkTextureRenderTarget::MakeNewTextureRenderTarget(
+                this, budgeted, dimensions, pixelFormat, mipLevelCount, renderTargetSampleCnt,
+                mipmapStatus, isProtected);
     } else {
-        tex = GrVkTexture::MakeNewTexture(this, budgeted, desc, imageDesc, mipMapsStatus);
+        tex = GrVkTexture::MakeNewTexture(this, budgeted, dimensions, pixelFormat,
+                                          mipLevelCount, isProtected, mipmapStatus);
     }
 
     if (!tex) {
         return nullptr;
     }
 
-    bool isCompressed = GrPixelConfigIsCompressed(desc.fConfig);
-    auto colorType = GrPixelConfigToColorType(desc.fConfig);
-    if (mipLevelCount) {
-        bool success;
-        if (isCompressed) {
-            success = this->uploadTexDataCompressed(tex.get(), 0, 0, desc.fWidth, desc.fHeight,
-                                                    colorType, texels, mipLevelCount);
-        } else {
-            success = this->uploadTexDataOptimal(tex.get(), 0, 0, desc.fWidth, desc.fHeight,
-                                                 colorType, texels, mipLevelCount);
-        }
-        if (!success) {
-            tex->unref();
+    if (levelClearMask) {
+        if (!this->currentCommandBuffer()) {
             return nullptr;
         }
+        SkSTArray<1, VkImageSubresourceRange> ranges;
+        bool inRange = false;
+        GrVkImage* texImage = tex->textureImage();
+        for (uint32_t i = 0; i < texImage->mipLevels(); ++i) {
+            if (levelClearMask & (1U << i)) {
+                if (inRange) {
+                    ranges.back().levelCount++;
+                } else {
+                    auto& range = ranges.push_back();
+                    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    range.baseArrayLayer = 0;
+                    range.baseMipLevel = i;
+                    range.layerCount = 1;
+                    range.levelCount = 1;
+                    inRange = true;
+                }
+            } else if (inRange) {
+                inRange = false;
+            }
+        }
+        SkASSERT(!ranges.empty());
+        static constexpr VkClearColorValue kZeroClearColor = {};
+        texImage->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                            VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
+        this->currentCommandBuffer()->clearColorImage(this, texImage, &kZeroClearColor,
+                                                      ranges.count(), ranges.begin());
+    }
+    return std::move(tex);
+}
+
+sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(SkISize dimensions,
+                                                    const GrBackendFormat& format,
+                                                    SkBudgeted budgeted,
+                                                    GrMipmapped mipMapped,
+                                                    GrProtected isProtected,
+                                                    const void* data, size_t dataSize) {
+    VkFormat pixelFormat;
+    SkAssertResult(format.asVkFormat(&pixelFormat));
+    SkASSERT(GrVkFormatIsCompressed(pixelFormat));
+
+    int numMipLevels = 1;
+    if (mipMapped == GrMipmapped::kYes) {
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height())+1;
     }
 
-    if (SkToBool(desc.fFlags & kPerformInitialClear_GrSurfaceFlag) && !isCompressed) {
-        VkClearColorValue zeroClearColor;
-        memset(&zeroClearColor, 0, sizeof(zeroClearColor));
-        VkImageSubresourceRange range;
-        range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        range.baseArrayLayer = 0;
-        range.baseMipLevel = 0;
-        range.layerCount = 1;
-        range.levelCount = 1;
-        tex->setImageLayout(this, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                            VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, false);
-        this->currentCommandBuffer()->clearColorImage(this, tex.get(), &zeroClearColor, 1, &range);
+    GrMipmapStatus mipmapStatus = (mipMapped == GrMipmapped::kYes) ? GrMipmapStatus::kValid
+                                                                   : GrMipmapStatus::kNotAllocated;
+
+    auto tex = GrVkTexture::MakeNewTexture(this, budgeted, dimensions, pixelFormat,
+                                           numMipLevels, isProtected, mipmapStatus);
+    if (!tex) {
+        return nullptr;
     }
+
+    SkImage::CompressionType compression = GrBackendFormatToCompressionType(format);
+    if (!this->uploadTexDataCompressed(tex->textureImage(), compression, pixelFormat,
+                                       dimensions, mipMapped, data, dataSize)) {
+        return nullptr;
+    }
+
     return std::move(tex);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void GrVkGpu::copyBuffer(GrVkBuffer* srcBuffer, GrVkBuffer* dstBuffer, VkDeviceSize srcOffset,
-                         VkDeviceSize dstOffset, VkDeviceSize size) {
+void GrVkGpu::copyBuffer(sk_sp<GrGpuBuffer> srcBuffer,
+                         sk_sp<GrGpuBuffer> dstBuffer,
+                         VkDeviceSize srcOffset,
+                         VkDeviceSize dstOffset,
+                         VkDeviceSize size) {
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
     VkBufferCopy copyRegion;
     copyRegion.srcOffset = srcOffset;
     copyRegion.dstOffset = dstOffset;
     copyRegion.size = size;
-    fCurrentCmdBuffer->copyBuffer(this, srcBuffer, dstBuffer, 1, &copyRegion);
+    this->currentCommandBuffer()->copyBuffer(this, std::move(srcBuffer), std::move(dstBuffer), 1,
+                                             &copyRegion);
 }
 
-bool GrVkGpu::updateBuffer(GrVkBuffer* buffer, const void* src,
+bool GrVkGpu::updateBuffer(sk_sp<GrVkBuffer> buffer, const void* src,
                            VkDeviceSize offset, VkDeviceSize size) {
+    if (!this->currentCommandBuffer()) {
+        return false;
+    }
     // Update the buffer
-    fCurrentCmdBuffer->updateBuffer(this, buffer, offset, size, src);
+    this->currentCommandBuffer()->updateBuffer(this, std::move(buffer), offset, size, src);
 
     return true;
 }
@@ -1105,53 +1165,134 @@ bool GrVkGpu::updateBuffer(GrVkBuffer* buffer, const void* src,
 
 static bool check_image_info(const GrVkCaps& caps,
                              const GrVkImageInfo& info,
-                             GrPixelConfig config,
-                             bool isWrappedRT) {
+                             bool needsAllocation,
+                             uint32_t graphicsQueueIndex) {
     if (VK_NULL_HANDLE == info.fImage) {
         return false;
     }
 
-    if (VK_NULL_HANDLE == info.fAlloc.fMemory && !isWrappedRT) {
+    if (VK_NULL_HANDLE == info.fAlloc.fMemory && needsAllocation) {
         return false;
-    }
-
-    if (info.fYcbcrConversionInfo.isValid()) {
-        if (!caps.supportsYcbcrConversion() || info.fFormat != VK_NULL_HANDLE) {
-            return false;
-        }
     }
 
     if (info.fImageLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && !caps.supportsSwapchain()) {
         return false;
     }
 
-    SkASSERT(GrVkFormatPixelConfigPairIsValid(info.fFormat, config));
+    if (info.fCurrentQueueFamily != VK_QUEUE_FAMILY_IGNORED &&
+        info.fCurrentQueueFamily != VK_QUEUE_FAMILY_EXTERNAL &&
+        info.fCurrentQueueFamily != VK_QUEUE_FAMILY_FOREIGN_EXT) {
+        if (info.fSharingMode == VK_SHARING_MODE_EXCLUSIVE) {
+            if (info.fCurrentQueueFamily != graphicsQueueIndex) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+
+    if (info.fYcbcrConversionInfo.isValid()) {
+        if (!caps.supportsYcbcrConversion()) {
+            return false;
+        }
+        if (info.fYcbcrConversionInfo.fExternalFormat != 0) {
+            return true;
+        }
+    }
+
+    // We currently require everything to be made with transfer bits set
+    if (!SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) ||
+        !SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT)) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool check_tex_image_info(const GrVkCaps& caps, const GrVkImageInfo& info) {
+    // We don't support directly importing multisampled textures for sampling from shaders.
+    if (info.fSampleCount != 1) {
+        return false;
+    }
+
+    if (info.fYcbcrConversionInfo.isValid() && info.fYcbcrConversionInfo.fExternalFormat != 0) {
+        return true;
+    }
+    if (info.fImageTiling == VK_IMAGE_TILING_OPTIMAL) {
+        if (!caps.isVkFormatTexturable(info.fFormat)) {
+            return false;
+        }
+    } else if (info.fImageTiling == VK_IMAGE_TILING_LINEAR) {
+        if (!caps.isVkFormatTexturableLinearly(info.fFormat)) {
+            return false;
+        }
+    } else if (info.fImageTiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+        if (!caps.supportsDRMFormatModifiers()) {
+            return false;
+        }
+        // To be technically correct we should query the vulkan support for VkFormat and
+        // drmFormatModifier pairs to confirm the required feature support is there. However, we
+        // currently don't have our caps and format tables set up to do this effeciently. So
+        // instead we just rely on the client's passed in VkImageUsageFlags and assume they we set
+        // up using valid features (checked below). In practice this should all be safe because
+        // currently we are setting all drm format modifier textures to have a
+        // GrTextureType::kExternal so we just really need to be able to read these video VkImage in
+        // a shader. The video decoder isn't going to give us VkImages that don't support being
+        // sampled.
+    } else {
+        SkUNREACHABLE;
+    }
+
+    // We currently require all textures to be made with sample support
+    if (!SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT)) {
+        return false;
+    }
+
+    return true;
+}
+
+static bool check_rt_image_info(const GrVkCaps& caps, const GrVkImageInfo& info, bool resolveOnly) {
+    if (!caps.isFormatRenderable(info.fFormat, info.fSampleCount)) {
+        return false;
+    }
+    if (!resolveOnly && !SkToBool(info.fImageUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)) {
+        return false;
+    }
     return true;
 }
 
 sk_sp<GrTexture> GrVkGpu::onWrapBackendTexture(const GrBackendTexture& backendTex,
-                                               GrWrapOwnership ownership, GrWrapCacheable cacheable,
+                                               GrWrapOwnership ownership,
+                                               GrWrapCacheable cacheable,
                                                GrIOType ioType) {
     GrVkImageInfo imageInfo;
     if (!backendTex.getVkImageInfo(&imageInfo)) {
         return nullptr;
     }
 
-    if (!check_image_info(this->vkCaps(), imageInfo, backendTex.config(), false)) {
+    if (!check_image_info(this->vkCaps(), imageInfo, kAdopt_GrWrapOwnership == ownership,
+                          this->queueIndex())) {
         return nullptr;
     }
 
-    GrSurfaceDesc surfDesc;
-    surfDesc.fFlags = kNone_GrSurfaceFlags;
-    surfDesc.fWidth = backendTex.width();
-    surfDesc.fHeight = backendTex.height();
-    surfDesc.fConfig = backendTex.config();
-    surfDesc.fSampleCnt = 1;
+    if (!check_tex_image_info(this->vkCaps(), imageInfo)) {
+        return nullptr;
+    }
 
-    sk_sp<GrVkImageLayout> layout = backendTex.getGrVkImageLayout();
-    SkASSERT(layout);
-    return GrVkTexture::MakeWrappedTexture(this, surfDesc, ownership, cacheable, ioType, imageInfo,
-                                           std::move(layout));
+    if (backendTex.isProtected() && (fProtectedContext == GrProtected::kNo)) {
+        return nullptr;
+    }
+
+    sk_sp<GrBackendSurfaceMutableStateImpl> mutableState = backendTex.getMutableState();
+    SkASSERT(mutableState);
+    return GrVkTexture::MakeWrappedTexture(this, backendTex.dimensions(), ownership, cacheable,
+                                           ioType, imageInfo, std::move(mutableState));
+}
+
+sk_sp<GrTexture> GrVkGpu::onWrapCompressedBackendTexture(const GrBackendTexture& beTex,
+                                                         GrWrapOwnership ownership,
+                                                         GrWrapCacheable cacheable) {
+    return this->onWrapBackendTexture(beTex, ownership, cacheable, kRead_GrIOType);
 }
 
 sk_sp<GrTexture> GrVkGpu::onWrapRenderableBackendTexture(const GrBackendTexture& backendTex,
@@ -1163,89 +1304,69 @@ sk_sp<GrTexture> GrVkGpu::onWrapRenderableBackendTexture(const GrBackendTexture&
         return nullptr;
     }
 
-    if (!check_image_info(this->vkCaps(), imageInfo, backendTex.config(), false)) {
+    if (!check_image_info(this->vkCaps(), imageInfo, kAdopt_GrWrapOwnership == ownership,
+                          this->queueIndex())) {
         return nullptr;
     }
 
-    GrSurfaceDesc surfDesc;
-    surfDesc.fFlags = kRenderTarget_GrSurfaceFlag;
-    surfDesc.fWidth = backendTex.width();
-    surfDesc.fHeight = backendTex.height();
-    surfDesc.fConfig = backendTex.config();
-    surfDesc.fSampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, backendTex.config());
+    if (!check_tex_image_info(this->vkCaps(), imageInfo)) {
+        return nullptr;
+    }
+    // If sampleCnt is > 1 we will create an intermediate MSAA VkImage and then resolve into
+    // the wrapped VkImage.
+    bool resolveOnly = sampleCnt > 1;
+    if (!check_rt_image_info(this->vkCaps(), imageInfo, resolveOnly)) {
+        return nullptr;
+    }
 
-    sk_sp<GrVkImageLayout> layout = backendTex.getGrVkImageLayout();
-    SkASSERT(layout);
+    if (backendTex.isProtected() && (fProtectedContext == GrProtected::kNo)) {
+        return nullptr;
+    }
 
-    return GrVkTextureRenderTarget::MakeWrappedTextureRenderTarget(
-            this, surfDesc, ownership, cacheable, imageInfo, std::move(layout));
+    sampleCnt = this->vkCaps().getRenderTargetSampleCount(sampleCnt, imageInfo.fFormat);
+
+    sk_sp<GrBackendSurfaceMutableStateImpl> mutableState = backendTex.getMutableState();
+    SkASSERT(mutableState);
+
+    return GrVkTextureRenderTarget::MakeWrappedTextureRenderTarget(this, backendTex.dimensions(),
+                                                                   sampleCnt, ownership, cacheable,
+                                                                   imageInfo,
+                                                                   std::move(mutableState));
 }
 
-sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTarget& backendRT){
-    // Currently the Vulkan backend does not support wrapping of msaa render targets directly. In
-    // general this is not an issue since swapchain images in vulkan are never multisampled. Thus if
-    // you want a multisampled RT it is best to wrap the swapchain images and then let Skia handle
-    // creating and owning the MSAA images.
-    if (backendRT.sampleCnt() > 1) {
-        return nullptr;
-    }
-
+sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendRenderTarget(const GrBackendRenderTarget& backendRT) {
     GrVkImageInfo info;
     if (!backendRT.getVkImageInfo(&info)) {
         return nullptr;
     }
 
-    if (!check_image_info(this->vkCaps(), info, backendRT.config(), true)) {
+    if (!check_image_info(this->vkCaps(), info, false, this->queueIndex())) {
         return nullptr;
     }
 
-    GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = backendRT.width();
-    desc.fHeight = backendRT.height();
-    desc.fConfig = backendRT.config();
-    desc.fSampleCnt = 1;
+    // We will always render directly to this VkImage.
+    static bool kResolveOnly = false;
+    if (!check_rt_image_info(this->vkCaps(), info, kResolveOnly)) {
+        return nullptr;
+    }
 
-    sk_sp<GrVkImageLayout> layout = backendRT.getGrVkImageLayout();
+    if (backendRT.isProtected() && (fProtectedContext == GrProtected::kNo)) {
+        return nullptr;
+    }
 
-    sk_sp<GrVkRenderTarget> tgt = GrVkRenderTarget::MakeWrappedRenderTarget(this, desc, info,
-                                                                            std::move(layout));
+    sk_sp<GrBackendSurfaceMutableStateImpl> mutableState = backendRT.getMutableState();
+    SkASSERT(mutableState);
+
+    sk_sp<GrVkRenderTarget> tgt = GrVkRenderTarget::MakeWrappedRenderTarget(
+            this, backendRT.dimensions(), backendRT.sampleCnt(), info, std::move(mutableState));
 
     // We don't allow the client to supply a premade stencil buffer. We always create one if needed.
     SkASSERT(!backendRT.stencilBits());
     if (tgt) {
-        SkASSERT(tgt->canAttemptStencilAttachment());
+        SkASSERT(tgt->canAttemptStencilAttachment(tgt->numSamples() > 1));
     }
 
     return std::move(tgt);
-}
-
-sk_sp<GrRenderTarget> GrVkGpu::onWrapBackendTextureAsRenderTarget(const GrBackendTexture& tex,
-                                                                  int sampleCnt) {
-
-    GrVkImageInfo imageInfo;
-    if (!tex.getVkImageInfo(&imageInfo)) {
-        return nullptr;
-    }
-    if (!check_image_info(this->vkCaps(), imageInfo, tex.config(), false)) {
-        return nullptr;
-    }
-
-
-    GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = tex.width();
-    desc.fHeight = tex.height();
-    desc.fConfig = tex.config();
-    desc.fSampleCnt = this->caps()->getRenderTargetSampleCount(sampleCnt, tex.config());
-    if (!desc.fSampleCnt) {
-        return nullptr;
-    }
-
-    sk_sp<GrVkImageLayout> layout = tex.getGrVkImageLayout();
-    SkASSERT(layout);
-
-    return GrVkRenderTarget::MakeWrappedRenderTarget(this, desc, imageInfo, std::move(layout));
 }
 
 sk_sp<GrRenderTarget> GrVkGpu::onWrapVulkanSecondaryCBAsRenderTarget(
@@ -1259,38 +1380,39 @@ sk_sp<GrRenderTarget> GrVkGpu::onWrapVulkanSecondaryCBAsRenderTarget(
     if (!backendFormat.isValid()) {
         return nullptr;
     }
-    GrPixelConfig config = this->caps()->getConfigFromBackendFormat(backendFormat,
-                                                                    imageInfo.colorType());
-    if (config == kUnknown_GrPixelConfig) {
+    int sampleCnt = this->vkCaps().getRenderTargetSampleCount(1, vkInfo.fFormat);
+    if (!sampleCnt) {
         return nullptr;
     }
 
-    GrSurfaceDesc desc;
-    desc.fFlags = kRenderTarget_GrSurfaceFlag;
-    desc.fWidth = imageInfo.width();
-    desc.fHeight = imageInfo.height();
-    desc.fConfig = config;
-    desc.fSampleCnt = this->caps()->getRenderTargetSampleCount(1, config);
-    if (!desc.fSampleCnt) {
-        return nullptr;
-    }
+    return GrVkRenderTarget::MakeSecondaryCBRenderTarget(this, imageInfo.dimensions(), vkInfo);
+}
 
-    return GrVkRenderTarget::MakeSecondaryCBRenderTarget(this, desc, vkInfo);
+bool GrVkGpu::loadMSAAFromResolve(GrVkCommandBuffer* commandBuffer,
+                                  const GrVkRenderPass& renderPass,
+                                  GrAttachment* dst,
+                                  GrVkImage* src,
+                                  const SkIRect& srcRect) {
+    return fMSAALoadManager.loadMSAAFromResolve(this, commandBuffer, renderPass, dst, src, srcRect);
 }
 
 bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
-    auto* vkTex = static_cast<GrVkTexture*>(tex);
+    if (!this->currentCommandBuffer()) {
+        return false;
+    }
+    auto* vkTex = static_cast<GrVkTexture*>(tex)->textureImage();
     // don't do anything for linearly tiled textures (can't have mipmaps)
     if (vkTex->isLinearTiled()) {
         SkDebugf("Trying to create mipmap for linear tiled texture");
         return false;
     }
+    SkASSERT(tex->textureType() == GrTextureType::k2D);
 
     // determine if we can blit to and from this format
     const GrVkCaps& caps = this->vkCaps();
-    if (!caps.configCanBeDstofBlit(tex->config(), false) ||
-        !caps.configCanBeSrcofBlit(tex->config(), false) ||
-        !caps.mipMapSupport()) {
+    if (!caps.formatCanBeDstofBlit(vkTex->imageFormat(), false) ||
+        !caps.formatCanBeSrcofBlit(vkTex->imageFormat(), false) ||
+        !caps.mipmapSupport()) {
         return false;
     }
 
@@ -1299,8 +1421,8 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
     VkImageBlit blitRegion;
     memset(&blitRegion, 0, sizeof(VkImageBlit));
 
-    // SkMipMap doesn't include the base level in the level count so we have to add 1
-    uint32_t levelCount = SkMipMap::ComputeLevelCount(tex->width(), tex->height()) + 1;
+    // SkMipmap doesn't include the base level in the level count so we have to add 1
+    uint32_t levelCount = SkMipmap::ComputeLevelCount(tex->width(), tex->height()) + 1;
     SkASSERT(levelCount == vkTex->mipLevels());
 
     // change layout of the layers so we can write to them.
@@ -1309,7 +1431,6 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
 
     // setup memory barrier
     SkASSERT(GrVkFormatIsSupported(vkTex->imageFormat()));
-    VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT;
     VkImageMemoryBarrier imageMemoryBarrier = {
             VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,  // sType
             nullptr,                                 // pNext
@@ -1320,7 +1441,7 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
             VK_QUEUE_FAMILY_IGNORED,                 // srcQueueFamilyIndex
             VK_QUEUE_FAMILY_IGNORED,                 // dstQueueFamilyIndex
             vkTex->image(),                          // image
-            {aspectFlags, 0, 1, 0, 1}                // subresourceRange
+            {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}  // subresourceRange
     };
 
     // Blit the miplevels
@@ -1328,8 +1449,8 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
     while (mipLevel < levelCount) {
         int prevWidth = width;
         int prevHeight = height;
-        width = SkTMax(1, width / 2);
-        height = SkTMax(1, height / 2);
+        width = std::max(1, width / 2);
+        height = std::max(1, height / 2);
 
         imageMemoryBarrier.subresourceRange.baseMipLevel = mipLevel - 1;
         this->addImageMemoryBarrier(vkTex->resource(), VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -1341,16 +1462,16 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
         blitRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, mipLevel, 0, 1 };
         blitRegion.dstOffsets[0] = { 0, 0, 0 };
         blitRegion.dstOffsets[1] = { width, height, 1 };
-        fCurrentCmdBuffer->blitImage(this,
-                                     vkTex->resource(),
-                                     vkTex->image(),
-                                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                     vkTex->resource(),
-                                     vkTex->image(),
-                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                     1,
-                                     &blitRegion,
-                                     VK_FILTER_LINEAR);
+        this->currentCommandBuffer()->blitImage(this,
+                                                vkTex->resource(),
+                                                vkTex->image(),
+                                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                                vkTex->resource(),
+                                                vkTex->image(),
+                                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                1,
+                                                &blitRegion,
+                                                VK_FILTER_LINEAR);
         ++mipLevel;
     }
     if (levelCount > 1) {
@@ -1368,410 +1489,461 @@ bool GrVkGpu::onRegenerateMipMapLevels(GrTexture* tex) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-GrStencilAttachment* GrVkGpu::createStencilAttachmentForRenderTarget(const GrRenderTarget* rt,
-                                                                     int width,
-                                                                     int height) {
-    SkASSERT(width >= rt->width());
-    SkASSERT(height >= rt->height());
+sk_sp<GrAttachment> GrVkGpu::makeStencilAttachment(const GrBackendFormat& /*colorFormat*/,
+                                                   SkISize dimensions, int numStencilSamples) {
+    VkFormat sFmt = this->vkCaps().preferredStencilFormat();
 
-    int samples = rt->numStencilSamples();
-
-    const GrVkCaps::StencilFormat& sFmt = this->vkCaps().preferredStencilFormat();
-
-    GrVkStencilAttachment* stencil(GrVkStencilAttachment::Create(this,
-                                                                 width,
-                                                                 height,
-                                                                 samples,
-                                                                 sFmt));
     fStats.incStencilAttachmentCreates();
-    return stencil;
+    return GrVkImage::MakeStencil(this, dimensions, numStencilSamples, sFmt);
+}
+
+sk_sp<GrAttachment> GrVkGpu::makeMSAAAttachment(SkISize dimensions,
+                                                const GrBackendFormat& format,
+                                                int numSamples,
+                                                GrProtected isProtected,
+                                                GrMemoryless memoryless) {
+    VkFormat pixelFormat;
+    SkAssertResult(format.asVkFormat(&pixelFormat));
+    SkASSERT(!GrVkFormatIsCompressed(pixelFormat));
+    SkASSERT(this->vkCaps().isFormatRenderable(pixelFormat, numSamples));
+
+    fStats.incMSAAAttachmentCreates();
+    return GrVkImage::MakeMSAA(this, dimensions, numSamples, pixelFormat, isProtected, memoryless);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool copy_testing_data(GrVkGpu* gpu, const void* srcData, const GrVkAlloc& alloc,
-                       size_t bufferOffset, size_t srcRowBytes, size_t dstRowBytes,
-                       size_t trimRowBytes, int h) {
-    VkDeviceSize size = dstRowBytes * h;
-    VkDeviceSize offset = bufferOffset;
-    SkASSERT(size + offset <= alloc.fSize);
-    void* mapPtr = GrVkMemory::MapAlloc(gpu, alloc);
-    if (!mapPtr) {
-        return false;
-    }
-    mapPtr = reinterpret_cast<char*>(mapPtr) + offset;
+bool copy_src_data(char* mapPtr,
+                   VkFormat vkFormat,
+                   const SkTArray<size_t>& individualMipOffsets,
+                   const GrPixmap srcData[],
+                   int numMipLevels) {
+    SkASSERT(srcData && numMipLevels);
+    SkASSERT(!GrVkFormatIsCompressed(vkFormat));
+    SkASSERT(individualMipOffsets.count() == numMipLevels);
+    SkASSERT(mapPtr);
 
-    if (srcData) {
-        // If there is no padding on dst we can do a single memcopy.
-        // This assumes the srcData comes in with no padding.
-        SkRectMemcpy(mapPtr, dstRowBytes, srcData, srcRowBytes, trimRowBytes, h);
-    } else {
-        // If there is no srcdata we always copy 0's into the textures so that it is initialized
-        // with some data.
-        memset(mapPtr, 0, dstRowBytes * h);
+    size_t bytesPerPixel = GrVkFormatBytesPerBlock(vkFormat);
+
+    for (int level = 0; level < numMipLevels; ++level) {
+        const size_t trimRB = srcData[level].info().width() * bytesPerPixel;
+
+        SkRectMemcpy(mapPtr + individualMipOffsets[level], trimRB,
+                     srcData[level].addr(), srcData[level].rowBytes(),
+                     trimRB, srcData[level].height());
     }
-    GrVkMemory::FlushMappedAlloc(gpu, alloc, offset, size);
-    GrVkMemory::UnmapAlloc(gpu, alloc);
     return true;
 }
 
-#if GR_TEST_UTILS
-bool GrVkGpu::createTestingOnlyVkImage(GrPixelConfig config, int w, int h, bool texturable,
-                                       bool renderable, GrMipMapped mipMapped, const void* srcData,
-                                       size_t srcRowBytes, GrVkImageInfo* info) {
-    SkASSERT(texturable || renderable);
-    if (!texturable) {
-        SkASSERT(GrMipMapped::kNo == mipMapped);
-        SkASSERT(!srcData);
-    }
-    VkFormat pixelFormat;
-    if (!GrPixelConfigToVkFormat(config, &pixelFormat)) {
+bool GrVkGpu::createVkImageForBackendSurface(VkFormat vkFormat,
+                                             SkISize dimensions,
+                                             int sampleCnt,
+                                             GrTexturable texturable,
+                                             GrRenderable renderable,
+                                             GrMipmapped mipMapped,
+                                             GrVkImageInfo* info,
+                                             GrProtected isProtected) {
+    SkASSERT(texturable == GrTexturable::kYes || renderable == GrRenderable::kYes);
+
+    if (fProtectedContext != isProtected) {
         return false;
     }
 
-    if (texturable && !fVkCaps->isConfigTexturable(config)) {
+    if (texturable == GrTexturable::kYes && !fVkCaps->isVkFormatTexturable(vkFormat)) {
         return false;
     }
 
-    if (renderable && !fVkCaps->isConfigRenderable(config)) {
+    // MSAA images are only currently used by createTestingOnlyBackendRenderTarget.
+    if (sampleCnt > 1 && (texturable == GrTexturable::kYes || renderable == GrRenderable::kNo)) {
         return false;
     }
 
-    // Currently we don't support uploading pixel data when mipped.
-    if (srcData && GrMipMapped::kYes == mipMapped) {
-        return false;
-    }
-
-    VkImageUsageFlags usageFlags = 0;
-    usageFlags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    usageFlags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    if (texturable) {
-        usageFlags |= VK_IMAGE_USAGE_SAMPLED_BIT;
-    }
-    if (renderable) {
-        usageFlags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    }
-
-    VkImage image = VK_NULL_HANDLE;
-    GrVkAlloc alloc;
-    VkImageLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-    // Create Image
-    VkSampleCountFlagBits vkSamples;
-    if (!GrSampleCountToVkSampleCount(1, &vkSamples)) {
-        return false;
-    }
-
-    // Figure out the number of mip levels.
-    uint32_t mipLevels = 1;
-    if (GrMipMapped::kYes == mipMapped) {
-        mipLevels = SkMipMap::ComputeLevelCount(w, h) + 1;
-    }
-
-    const VkImageCreateInfo imageCreateInfo = {
-            VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,  // sType
-            nullptr,                              // pNext
-            0,                                    // VkImageCreateFlags
-            VK_IMAGE_TYPE_2D,                     // VkImageType
-            pixelFormat,                          // VkFormat
-            {(uint32_t)w, (uint32_t)h, 1},        // VkExtent3D
-            mipLevels,                            // mipLevels
-            1,                                    // arrayLayers
-            vkSamples,                            // samples
-            VK_IMAGE_TILING_OPTIMAL,              // VkImageTiling
-            usageFlags,                           // VkImageUsageFlags
-            VK_SHARING_MODE_EXCLUSIVE,            // VkSharingMode
-            0,                                    // queueFamilyCount
-            0,                                    // pQueueFamilyIndices
-            initialLayout                         // initialLayout
-    };
-
-    GR_VK_CALL_ERRCHECK(this->vkInterface(),
-                        CreateImage(this->device(), &imageCreateInfo, nullptr, &image));
-
-    if (!GrVkMemory::AllocAndBindImageMemory(this, image, false, &alloc)) {
-        VK_CALL(DestroyImage(this->device(), image, nullptr));
-        return false;
-    }
-
-    // We need to declare these early so that we can delete them at the end outside of the if block.
-    GrVkAlloc bufferAlloc;
-    VkBuffer buffer = VK_NULL_HANDLE;
-
-    VkResult err;
-    const VkCommandBufferAllocateInfo cmdInfo = {
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,   // sType
-        nullptr,                                          // pNext
-        fCmdPool->vkCommandPool(),                        // commandPool
-        VK_COMMAND_BUFFER_LEVEL_PRIMARY,                  // level
-        1                                                 // bufferCount
-    };
-
-    VkCommandBuffer cmdBuffer;
-    err = VK_CALL(AllocateCommandBuffers(fDevice, &cmdInfo, &cmdBuffer));
-    if (err) {
-        GrVkMemory::FreeImageMemory(this, false, alloc);
-        VK_CALL(DestroyImage(fDevice, image, nullptr));
-        return false;
-    }
-
-    VkCommandBufferBeginInfo cmdBufferBeginInfo;
-    memset(&cmdBufferBeginInfo, 0, sizeof(VkCommandBufferBeginInfo));
-    cmdBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    cmdBufferBeginInfo.pNext = nullptr;
-    cmdBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    cmdBufferBeginInfo.pInheritanceInfo = nullptr;
-
-    err = VK_CALL(BeginCommandBuffer(cmdBuffer, &cmdBufferBeginInfo));
-    SkASSERT(!err);
-
-    size_t bpp = GrBytesPerPixel(config);
-    SkASSERT(w && h);
-
-    const size_t trimRowBytes = w * bpp;
-    if (!srcRowBytes) {
-        srcRowBytes = trimRowBytes;
-    }
-
-    SkTArray<size_t> individualMipOffsets(mipLevels);
-    individualMipOffsets.push_back(0);
-    size_t combinedBufferSize = w * bpp * h;
-    if (GrPixelConfigIsCompressed(config)) {
-        combinedBufferSize = GrCompressedFormatDataSize(config, w, h);
-        bpp = 4; // we have at least this alignment, which will pass the code below
-    }
-    int currentWidth = w;
-    int currentHeight = h;
-    // The alignment must be at least 4 bytes and a multiple of the bytes per pixel of the image
-    // config. This works with the assumption that the bytes in pixel config is always a power
-    // of 2.
-    SkASSERT((bpp & (bpp - 1)) == 0);
-    const size_t alignmentMask = 0x3 | (bpp - 1);
-    for (uint32_t currentMipLevel = 1; currentMipLevel < mipLevels; currentMipLevel++) {
-        currentWidth = SkTMax(1, currentWidth / 2);
-        currentHeight = SkTMax(1, currentHeight / 2);
-
-        size_t trimmedSize;
-        if (GrPixelConfigIsCompressed(config)) {
-            trimmedSize = GrCompressedFormatDataSize(config, currentWidth, currentHeight);
-        } else {
-            trimmedSize = currentWidth * bpp * currentHeight;
-        }
-        const size_t alignmentDiff = combinedBufferSize & alignmentMask;
-        if (alignmentDiff != 0) {
-            combinedBufferSize += alignmentMask - alignmentDiff + 1;
-        }
-        individualMipOffsets.push_back(combinedBufferSize);
-        combinedBufferSize += trimmedSize;
-    }
-
-    VkBufferCreateInfo bufInfo;
-    memset(&bufInfo, 0, sizeof(VkBufferCreateInfo));
-    bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufInfo.flags = 0;
-    bufInfo.size = combinedBufferSize;
-    bufInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-    bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    bufInfo.queueFamilyIndexCount = 0;
-    bufInfo.pQueueFamilyIndices = nullptr;
-    err = VK_CALL(CreateBuffer(fDevice, &bufInfo, nullptr, &buffer));
-
-    if (err) {
-        GrVkMemory::FreeImageMemory(this, false, alloc);
-        VK_CALL(DestroyImage(fDevice, image, nullptr));
-        VK_CALL(EndCommandBuffer(cmdBuffer));
-        VK_CALL(FreeCommandBuffers(fDevice, fCmdPool->vkCommandPool(), 1, &cmdBuffer));
-        return false;
-    }
-
-    if (!GrVkMemory::AllocAndBindBufferMemory(this, buffer, GrVkBuffer::kCopyRead_Type, true,
-                                              &bufferAlloc)) {
-        GrVkMemory::FreeImageMemory(this, false, alloc);
-        VK_CALL(DestroyImage(fDevice, image, nullptr));
-        VK_CALL(DestroyBuffer(fDevice, buffer, nullptr));
-        VK_CALL(EndCommandBuffer(cmdBuffer));
-        VK_CALL(FreeCommandBuffers(fDevice, fCmdPool->vkCommandPool(), 1, &cmdBuffer));
-        return false;
-    }
-
-    currentWidth = w;
-    currentHeight = h;
-    for (uint32_t currentMipLevel = 0; currentMipLevel < mipLevels; currentMipLevel++) {
-        SkASSERT(0 == currentMipLevel || !srcData);
-        size_t bufferOffset = individualMipOffsets[currentMipLevel];
-        bool result;
-        if (GrPixelConfigIsCompressed(config)) {
-            size_t levelSize = GrCompressedFormatDataSize(config, currentWidth, currentHeight);
-            size_t currentRowBytes = levelSize / currentHeight;
-            result = copy_testing_data(this, srcData, bufferAlloc, bufferOffset, currentRowBytes,
-                                       currentRowBytes, currentRowBytes, currentHeight);
-        } else {
-            size_t currentRowBytes = bpp * currentWidth;
-            result = copy_testing_data(this, srcData, bufferAlloc, bufferOffset, srcRowBytes,
-                                       currentRowBytes, trimRowBytes, currentHeight);
-        }
-        if (!result) {
-            GrVkMemory::FreeImageMemory(this, false, alloc);
-            VK_CALL(DestroyImage(fDevice, image, nullptr));
-            GrVkMemory::FreeBufferMemory(this, GrVkBuffer::kCopyRead_Type, bufferAlloc);
-            VK_CALL(DestroyBuffer(fDevice, buffer, nullptr));
-            VK_CALL(EndCommandBuffer(cmdBuffer));
-            VK_CALL(FreeCommandBuffers(fDevice, fCmdPool->vkCommandPool(), 1, &cmdBuffer));
+    if (renderable == GrRenderable::kYes) {
+        sampleCnt = fVkCaps->getRenderTargetSampleCount(sampleCnt, vkFormat);
+        if (!sampleCnt) {
             return false;
         }
-        currentWidth = SkTMax(1, currentWidth / 2);
-        currentHeight = SkTMax(1, currentHeight / 2);
     }
 
-    // Set image layout and add barrier
-    VkImageMemoryBarrier barrier;
-    memset(&barrier, 0, sizeof(VkImageMemoryBarrier));
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.pNext = nullptr;
-    barrier.srcAccessMask = GrVkImage::LayoutToSrcAccessMask(initialLayout);
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.oldLayout = initialLayout;
-    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1};
 
-    VK_CALL(CmdPipelineBarrier(cmdBuffer, GrVkImage::LayoutToPipelineSrcStageFlags(initialLayout),
-                               VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1,
-                               &barrier));
-    initialLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-    SkTArray<VkBufferImageCopy> regions(mipLevels);
-
-    currentWidth = w;
-    currentHeight = h;
-    for (uint32_t currentMipLevel = 0; currentMipLevel < mipLevels; currentMipLevel++) {
-        // Submit copy command
-        VkBufferImageCopy& region = regions.push_back();
-        memset(&region, 0, sizeof(VkBufferImageCopy));
-        region.bufferOffset = individualMipOffsets[currentMipLevel];
-        region.bufferRowLength = currentWidth;
-        region.bufferImageHeight = currentHeight;
-        region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-        region.imageOffset = {0, 0, 0};
-        region.imageExtent = {(uint32_t)currentWidth, (uint32_t)currentHeight, 1};
-        currentWidth = SkTMax(1, currentWidth / 2);
-        currentHeight = SkTMax(1, currentHeight / 2);
+    int numMipLevels = 1;
+    if (mipMapped == GrMipmapped::kYes) {
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
     }
 
-    VK_CALL(CmdCopyBufferToImage(cmdBuffer, buffer, image, initialLayout, regions.count(),
-                                 regions.begin()));
-
-    if (texturable) {
-        // Change Image layout to shader read since if we use this texture as a borrowed textures
-        // within Ganesh we require that its layout be set to that
-        memset(&barrier, 0, sizeof(VkImageMemoryBarrier));
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.pNext = nullptr;
-        barrier.srcAccessMask = GrVkImage::LayoutToSrcAccessMask(initialLayout);
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.oldLayout = initialLayout;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = image;
-        barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 1};
-        VK_CALL(CmdPipelineBarrier(cmdBuffer,
-                                   GrVkImage::LayoutToPipelineSrcStageFlags(initialLayout),
-                                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                   0,
-                                   0, nullptr,
-                                   0, nullptr,
-                                   1, &barrier));
-        initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                                   VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (texturable == GrTexturable::kYes) {
+        usageFlags |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    }
+    if (renderable == GrRenderable::kYes) {
+        usageFlags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        // We always make our render targets support being used as input attachments
+        usageFlags |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     }
 
-    // End CommandBuffer
-    err = VK_CALL(EndCommandBuffer(cmdBuffer));
-    SkASSERT(!err);
+    GrVkImage::ImageDesc imageDesc;
+    imageDesc.fImageType = VK_IMAGE_TYPE_2D;
+    imageDesc.fFormat = vkFormat;
+    imageDesc.fWidth = dimensions.width();
+    imageDesc.fHeight = dimensions.height();
+    imageDesc.fLevels = numMipLevels;
+    imageDesc.fSamples = sampleCnt;
+    imageDesc.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
+    imageDesc.fUsageFlags = usageFlags;
+    imageDesc.fMemProps = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    imageDesc.fIsProtected = fProtectedContext;
 
-    // Create Fence for queue
-    VkFence fence;
-    VkFenceCreateInfo fenceInfo;
-    memset(&fenceInfo, 0, sizeof(VkFenceCreateInfo));
-    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-
-    err = VK_CALL(CreateFence(fDevice, &fenceInfo, nullptr, &fence));
-    SkASSERT(!err);
-
-    VkSubmitInfo submitInfo;
-    memset(&submitInfo, 0, sizeof(VkSubmitInfo));
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.pNext = nullptr;
-    submitInfo.waitSemaphoreCount = 0;
-    submitInfo.pWaitSemaphores = nullptr;
-    submitInfo.pWaitDstStageMask = 0;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &cmdBuffer;
-    submitInfo.signalSemaphoreCount = 0;
-    submitInfo.pSignalSemaphores = nullptr;
-    err = VK_CALL(QueueSubmit(this->queue(), 1, &submitInfo, fence));
-    SkASSERT(!err);
-
-    err = VK_CALL(WaitForFences(fDevice, 1, &fence, true, UINT64_MAX));
-    if (VK_TIMEOUT == err) {
-        GrVkMemory::FreeImageMemory(this, false, alloc);
-        VK_CALL(DestroyImage(fDevice, image, nullptr));
-        GrVkMemory::FreeBufferMemory(this, GrVkBuffer::kCopyRead_Type, bufferAlloc);
-        VK_CALL(DestroyBuffer(fDevice, buffer, nullptr));
-        VK_CALL(FreeCommandBuffers(fDevice, fCmdPool->vkCommandPool(), 1, &cmdBuffer));
-        VK_CALL(DestroyFence(fDevice, fence, nullptr));
-        SkDebugf("Fence failed to signal: %d\n", err);
-        SK_ABORT("failing");
+    if (!GrVkImage::InitImageInfo(this, imageDesc, info)) {
+        SkDebugf("Failed to init image info\n");
+        return false;
     }
-    SkASSERT(!err);
-
-    // Clean up transfer resources
-    if (buffer != VK_NULL_HANDLE) { // workaround for an older NVidia driver crash
-        GrVkMemory::FreeBufferMemory(this, GrVkBuffer::kCopyRead_Type, bufferAlloc);
-        VK_CALL(DestroyBuffer(fDevice, buffer, nullptr));
-    }
-    VK_CALL(FreeCommandBuffers(fDevice, fCmdPool->vkCommandPool(), 1, &cmdBuffer));
-    VK_CALL(DestroyFence(fDevice, fence, nullptr));
-
-    info->fImage = image;
-    info->fAlloc = alloc;
-    info->fImageTiling = VK_IMAGE_TILING_OPTIMAL;
-    info->fImageLayout = initialLayout;
-    info->fFormat = pixelFormat;
-    info->fLevelCount = mipLevels;
 
     return true;
 }
 
-GrBackendTexture GrVkGpu::createTestingOnlyBackendTexture(const void* srcData, int w, int h,
-                                                          GrColorType colorType,
-                                                          bool isRenderTarget,
-                                                          GrMipMapped mipMapped, size_t rowBytes) {
-    this->handleDirtyContext();
+bool GrVkGpu::onClearBackendTexture(const GrBackendTexture& backendTexture,
+                                    sk_sp<GrRefCntedCallback> finishedCallback,
+                                    std::array<float, 4> color) {
+    GrVkImageInfo info;
+    SkAssertResult(backendTexture.getVkImageInfo(&info));
 
-    if (w > this->caps()->maxTextureSize() || h > this->caps()->maxTextureSize()) {
-        return GrBackendTexture();
+    sk_sp<GrBackendSurfaceMutableStateImpl> mutableState = backendTexture.getMutableState();
+    SkASSERT(mutableState);
+    sk_sp<GrVkTexture> texture =
+                GrVkTexture::MakeWrappedTexture(this, backendTexture.dimensions(),
+                                                kBorrow_GrWrapOwnership, GrWrapCacheable::kNo,
+                                                kRW_GrIOType, info, std::move(mutableState));
+    if (!texture) {
+        return false;
+    }
+    GrVkImage* texImage = texture->textureImage();
+
+    GrVkPrimaryCommandBuffer* cmdBuffer = this->currentCommandBuffer();
+    if (!cmdBuffer) {
+        return false;
     }
 
-    GrPixelConfig config = GrColorTypeToPixelConfig(colorType, GrSRGBEncoded::kNo);
-    if (!this->caps()->isConfigTexturable(config)) {
-        return GrBackendTexture();
+    texImage->setImageLayout(this,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_ACCESS_TRANSFER_WRITE_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             false);
+
+    // CmdClearColorImage doesn't work for compressed formats
+    SkASSERT(!GrVkFormatIsCompressed(info.fFormat));
+
+    VkClearColorValue vkColor;
+    // If we ever support SINT or UINT formats this needs to be updated to use the int32 and
+    // uint32 union members in those cases.
+    vkColor.float32[0] = color[0];
+    vkColor.float32[1] = color[1];
+    vkColor.float32[2] = color[2];
+    vkColor.float32[3] = color[3];
+    VkImageSubresourceRange range;
+    range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    range.baseArrayLayer = 0;
+    range.baseMipLevel = 0;
+    range.layerCount = 1;
+    range.levelCount = info.fLevelCount;
+    cmdBuffer->clearColorImage(this, texImage, &vkColor, 1, &range);
+
+    // Change image layout to shader read since if we use this texture as a borrowed
+    // texture within Ganesh we require that its layout be set to that
+    texImage->setImageLayout(this, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                  VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                  false);
+
+    if (finishedCallback) {
+        this->addFinishedCallback(std::move(finishedCallback));
+    }
+    return true;
+}
+
+GrBackendTexture GrVkGpu::onCreateBackendTexture(SkISize dimensions,
+                                                 const GrBackendFormat& format,
+                                                 GrRenderable renderable,
+                                                 GrMipmapped mipMapped,
+                                                 GrProtected isProtected) {
+    const GrVkCaps& caps = this->vkCaps();
+
+    if (fProtectedContext != isProtected) {
+        return {};
+    }
+
+    VkFormat vkFormat;
+    if (!format.asVkFormat(&vkFormat)) {
+        return {};
+    }
+
+    // TODO: move the texturability check up to GrGpu::createBackendTexture and just assert here
+    if (!caps.isVkFormatTexturable(vkFormat)) {
+        return {};
+    }
+
+    if (GrVkFormatNeedsYcbcrSampler(vkFormat)) {
+        return {};
     }
 
     GrVkImageInfo info;
-    if (!this->createTestingOnlyVkImage(config, w, h, true, isRenderTarget, mipMapped, srcData,
-                                        rowBytes, &info)) {
+    if (!this->createVkImageForBackendSurface(vkFormat, dimensions, 1, GrTexturable::kYes,
+                                              renderable, mipMapped, &info, isProtected)) {
         return {};
     }
-    GrBackendTexture beTex = GrBackendTexture(w, h, info);
-    // Lots of tests don't go through Skia's public interface which will set the config so for
-    // testing we make sure we set a config here.
-    beTex.setPixelConfig(config);
-    return beTex;
+
+    return GrBackendTexture(dimensions.width(), dimensions.height(), info);
 }
 
+GrBackendTexture GrVkGpu::onCreateCompressedBackendTexture(
+        SkISize dimensions, const GrBackendFormat& format, GrMipmapped mipMapped,
+        GrProtected isProtected) {
+    return this->onCreateBackendTexture(dimensions, format, GrRenderable::kNo, mipMapped,
+                                        isProtected);
+}
+
+bool GrVkGpu::onUpdateCompressedBackendTexture(const GrBackendTexture& backendTexture,
+                                               sk_sp<GrRefCntedCallback> finishedCallback,
+                                               const void* data,
+                                               size_t size) {
+    GrVkImageInfo info;
+    SkAssertResult(backendTexture.getVkImageInfo(&info));
+
+    sk_sp<GrBackendSurfaceMutableStateImpl> mutableState = backendTexture.getMutableState();
+    SkASSERT(mutableState);
+    sk_sp<GrVkTexture> texture = GrVkTexture::MakeWrappedTexture(this,
+                                                                 backendTexture.dimensions(),
+                                                                 kBorrow_GrWrapOwnership,
+                                                                 GrWrapCacheable::kNo,
+                                                                 kRW_GrIOType,
+                                                                 info,
+                                                                 std::move(mutableState));
+    if (!texture) {
+        return false;
+    }
+
+    GrVkPrimaryCommandBuffer* cmdBuffer = this->currentCommandBuffer();
+    if (!cmdBuffer) {
+        return false;
+    }
+    GrVkImage* image = texture->textureImage();
+    image->setImageLayout(this,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_ACCESS_TRANSFER_WRITE_BIT,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                          false);
+
+    SkImage::CompressionType compression =
+            GrBackendFormatToCompressionType(backendTexture.getBackendFormat());
+
+    SkTArray<VkBufferImageCopy> regions;
+    SkTArray<size_t> individualMipOffsets;
+    GrStagingBufferManager::Slice slice;
+
+    fill_in_compressed_regions(&fStagingBufferManager,
+                               &regions,
+                               &individualMipOffsets,
+                               &slice,
+                               compression,
+                               info.fFormat,
+                               backendTexture.dimensions(),
+                               backendTexture.fMipmapped);
+
+    if (!slice.fBuffer) {
+        return false;
+    }
+
+    memcpy(slice.fOffsetMapPtr, data, size);
+
+    cmdBuffer->addGrSurface(texture);
+    // Copy the buffer to the image. This call takes the raw VkBuffer instead of a GrGpuBuffer
+    // because we don't need the command buffer to ref the buffer here. The reason being is that
+    // the buffer is coming from the staging manager and the staging manager will make sure the
+    // command buffer has a ref on the buffer. This avoids having to add and remove a ref for
+    // every upload in the frame.
+    cmdBuffer->copyBufferToImage(this,
+                                 static_cast<GrVkBuffer*>(slice.fBuffer)->vkBuffer(),
+                                 image,
+                                 image->currentLayout(),
+                                 regions.count(),
+                                 regions.begin());
+
+    // Change image layout to shader read since if we use this texture as a borrowed
+    // texture within Ganesh we require that its layout be set to that
+    image->setImageLayout(this,
+                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                          VK_ACCESS_SHADER_READ_BIT,
+                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                          false);
+
+    if (finishedCallback) {
+        this->addFinishedCallback(std::move(finishedCallback));
+    }
+    return true;
+}
+
+void set_layout_and_queue_from_mutable_state(GrVkGpu* gpu, GrVkImage* image,
+                                             const GrVkSharedImageInfo& newInfo) {
+    // Even though internally we use this helper for getting src access flags and stages they
+    // can also be used for general dst flags since we don't know exactly what the client
+    // plans on using the image for.
+    VkImageLayout newLayout = newInfo.getImageLayout();
+    if (newLayout == VK_IMAGE_LAYOUT_UNDEFINED) {
+        newLayout = image->currentLayout();
+    }
+    VkPipelineStageFlags dstStage = GrVkImage::LayoutToPipelineSrcStageFlags(newLayout);
+    VkAccessFlags dstAccess = GrVkImage::LayoutToSrcAccessMask(newLayout);
+
+    uint32_t currentQueueFamilyIndex = image->currentQueueFamilyIndex();
+    uint32_t newQueueFamilyIndex = newInfo.getQueueFamilyIndex();
+    auto isSpecialQueue = [](uint32_t queueFamilyIndex) {
+        return queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL ||
+               queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT;
+    };
+    if (isSpecialQueue(currentQueueFamilyIndex) && isSpecialQueue(newQueueFamilyIndex)) {
+        // It is illegal to have both the new and old queue be special queue families (i.e. external
+        // or foreign).
+        return;
+    }
+
+    image->setImageLayoutAndQueueIndex(gpu, newLayout, dstAccess, dstStage, false,
+                                       newQueueFamilyIndex);
+}
+
+bool GrVkGpu::setBackendSurfaceState(GrVkImageInfo info,
+                                     sk_sp<GrBackendSurfaceMutableStateImpl> currentState,
+                                     SkISize dimensions,
+                                     const GrVkSharedImageInfo& newInfo,
+                                     GrBackendSurfaceMutableState* previousState,
+                                     sk_sp<GrRefCntedCallback> finishedCallback) {
+    sk_sp<GrVkImage> texture = GrVkImage::MakeWrapped(this,
+                                                      dimensions,
+                                                      info,
+                                                      std::move(currentState),
+                                                      GrVkImage::UsageFlags::kColorAttachment,
+                                                      kBorrow_GrWrapOwnership,
+                                                      GrWrapCacheable::kNo,
+                                                      /*forSecondaryCB=*/false);
+    SkASSERT(texture);
+    if (!texture) {
+        return false;
+    }
+    if (previousState) {
+        previousState->setVulkanState(texture->currentLayout(),
+                                      texture->currentQueueFamilyIndex());
+    }
+    set_layout_and_queue_from_mutable_state(this, texture.get(), newInfo);
+    if (finishedCallback) {
+        this->addFinishedCallback(std::move(finishedCallback));
+    }
+    return true;
+}
+
+bool GrVkGpu::setBackendTextureState(const GrBackendTexture& backendTeture,
+                                     const GrBackendSurfaceMutableState& newState,
+                                     GrBackendSurfaceMutableState* previousState,
+                                     sk_sp<GrRefCntedCallback> finishedCallback) {
+    GrVkImageInfo info;
+    SkAssertResult(backendTeture.getVkImageInfo(&info));
+    sk_sp<GrBackendSurfaceMutableStateImpl> currentState = backendTeture.getMutableState();
+    SkASSERT(currentState);
+    SkASSERT(newState.isValid() && newState.fBackend == GrBackend::kVulkan);
+    return this->setBackendSurfaceState(info, std::move(currentState), backendTeture.dimensions(),
+                                        newState.fVkState, previousState,
+                                        std::move(finishedCallback));
+}
+
+bool GrVkGpu::setBackendRenderTargetState(const GrBackendRenderTarget& backendRenderTarget,
+                                          const GrBackendSurfaceMutableState& newState,
+                                          GrBackendSurfaceMutableState* previousState,
+                                          sk_sp<GrRefCntedCallback> finishedCallback) {
+    GrVkImageInfo info;
+    SkAssertResult(backendRenderTarget.getVkImageInfo(&info));
+    sk_sp<GrBackendSurfaceMutableStateImpl> currentState = backendRenderTarget.getMutableState();
+    SkASSERT(currentState);
+    SkASSERT(newState.fBackend == GrBackend::kVulkan);
+    return this->setBackendSurfaceState(info, std::move(currentState),
+                                        backendRenderTarget.dimensions(), newState.fVkState,
+                                        previousState, std::move(finishedCallback));
+}
+
+void GrVkGpu::xferBarrier(GrRenderTarget* rt, GrXferBarrierType barrierType) {
+    GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(rt);
+    VkPipelineStageFlags dstStage;
+    VkAccessFlags dstAccess;
+    if (barrierType == kBlend_GrXferBarrierType) {
+        dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dstAccess = VK_ACCESS_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT;
+    } else {
+        SkASSERT(barrierType == kTexture_GrXferBarrierType);
+        dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        dstAccess = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    }
+    GrVkImage* image = vkRT->colorAttachment();
+    VkImageMemoryBarrier barrier;
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.pNext = nullptr;
+    barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.dstAccessMask = dstAccess;
+    barrier.oldLayout = image->currentLayout();
+    barrier.newLayout = barrier.oldLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image->image();
+    barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, image->mipLevels(), 0, 1};
+    this->addImageMemoryBarrier(image->resource(),
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                dstStage, true, &barrier);
+}
+
+void GrVkGpu::deleteBackendTexture(const GrBackendTexture& tex) {
+    SkASSERT(GrBackendApi::kVulkan == tex.fBackend);
+
+    GrVkImageInfo info;
+    if (tex.getVkImageInfo(&info)) {
+        GrVkImage::DestroyImageInfo(this, const_cast<GrVkImageInfo*>(&info));
+    }
+}
+
+bool GrVkGpu::compile(const GrProgramDesc& desc, const GrProgramInfo& programInfo) {
+    GrVkRenderPass::AttachmentsDescriptor attachmentsDescriptor;
+    GrVkRenderPass::AttachmentFlags attachmentFlags;
+    GrVkRenderTarget::ReconstructAttachmentsDescriptor(this->vkCaps(), programInfo,
+                                                       &attachmentsDescriptor, &attachmentFlags);
+
+    GrVkRenderPass::SelfDependencyFlags selfDepFlags = GrVkRenderPass::SelfDependencyFlags::kNone;
+    if (programInfo.renderPassBarriers() & GrXferBarrierFlags::kBlend) {
+        selfDepFlags |= GrVkRenderPass::SelfDependencyFlags::kForNonCoherentAdvBlend;
+    }
+    if (programInfo.renderPassBarriers() & GrXferBarrierFlags::kTexture) {
+        selfDepFlags |= GrVkRenderPass::SelfDependencyFlags::kForInputAttachment;
+    }
+
+    GrVkRenderPass::LoadFromResolve loadFromResolve = GrVkRenderPass::LoadFromResolve::kNo;
+    if (this->vkCaps().programInfoWillUseDiscardableMSAA(programInfo) &&
+        programInfo.colorLoadOp() == GrLoadOp::kLoad) {
+        loadFromResolve = GrVkRenderPass::LoadFromResolve::kLoad;
+    }
+    sk_sp<const GrVkRenderPass> renderPass(this->resourceProvider().findCompatibleRenderPass(
+            &attachmentsDescriptor, attachmentFlags, selfDepFlags, loadFromResolve));
+    if (!renderPass) {
+        return false;
+    }
+
+    GrThreadSafePipelineBuilder::Stats::ProgramCacheResult stat;
+
+    auto pipelineState = this->resourceProvider().findOrCreateCompatiblePipelineState(
+                                    desc,
+                                    programInfo,
+                                    renderPass->vkRenderPass(),
+                                    &stat);
+    if (!pipelineState) {
+        return false;
+    }
+
+    return stat != GrThreadSafePipelineBuilder::Stats::ProgramCacheResult::kHit;
+}
+
+#if GR_TEST_UTILS
 bool GrVkGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     SkASSERT(GrBackendApi::kVulkan == tex.fBackend);
 
@@ -1794,35 +1966,24 @@ bool GrVkGpu::isTestingOnlyBackendTexture(const GrBackendTexture& tex) const {
     return false;
 }
 
-void GrVkGpu::deleteTestingOnlyBackendTexture(const GrBackendTexture& tex) {
-    SkASSERT(GrBackendApi::kVulkan == tex.fBackend);
-
-    GrVkImageInfo info;
-    if (tex.getVkImageInfo(&info)) {
-        GrVkImage::DestroyImageInfo(this, const_cast<GrVkImageInfo*>(&info));
-    }
-}
-
-GrBackendRenderTarget GrVkGpu::createTestingOnlyBackendRenderTarget(int w, int h, GrColorType ct) {
-    if (w > this->caps()->maxRenderTargetSize() || h > this->caps()->maxRenderTargetSize()) {
-        return GrBackendRenderTarget();
-    }
-
-    this->handleDirtyContext();
-    GrVkImageInfo info;
-    auto config = GrColorTypeToPixelConfig(ct, GrSRGBEncoded::kNo);
-    if (kUnknown_GrPixelConfig == config) {
+GrBackendRenderTarget GrVkGpu::createTestingOnlyBackendRenderTarget(SkISize dimensions,
+                                                                    GrColorType ct,
+                                                                    int sampleCnt,
+                                                                    GrProtected isProtected) {
+    if (dimensions.width()  > this->caps()->maxRenderTargetSize() ||
+        dimensions.height() > this->caps()->maxRenderTargetSize()) {
         return {};
     }
-    if (!this->createTestingOnlyVkImage(config, w, h, false, true, GrMipMapped::kNo, nullptr, 0,
-                                        &info)) {
+
+    VkFormat vkFormat = this->vkCaps().getFormatFromColorType(ct);
+
+    GrVkImageInfo info;
+    if (!this->createVkImageForBackendSurface(vkFormat, dimensions, sampleCnt, GrTexturable::kNo,
+                                              GrRenderable::kYes, GrMipmapped::kNo, &info,
+                                              isProtected)) {
         return {};
     }
-    GrBackendRenderTarget beRT = GrBackendRenderTarget(w, h, 1, 0, info);
-    // Lots of tests don't go through Skia's public interface which will set the config so for
-    // testing we make sure we set a config here.
-    beRT.setPixelConfig(config);
-    return beRT;
+    return GrBackendRenderTarget(dimensions.width(), dimensions.height(), 0, info);
 }
 
 void GrVkGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget& rt) {
@@ -1831,95 +1992,179 @@ void GrVkGpu::deleteTestingOnlyBackendRenderTarget(const GrBackendRenderTarget& 
     GrVkImageInfo info;
     if (rt.getVkImageInfo(&info)) {
         // something in the command buffer may still be using this, so force submit
-        this->submitCommandBuffer(kForce_SyncQueue);
+        SkAssertResult(this->submitCommandBuffer(kForce_SyncQueue));
         GrVkImage::DestroyImageInfo(this, const_cast<GrVkImageInfo*>(&info));
     }
-}
-
-void GrVkGpu::testingOnly_flushGpuAndSync() {
-    this->submitCommandBuffer(kForce_SyncQueue);
 }
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void GrVkGpu::addBufferMemoryBarrier(const GrVkResource* resource,
+void GrVkGpu::addBufferMemoryBarrier(const GrManagedResource* resource,
                                      VkPipelineStageFlags srcStageMask,
                                      VkPipelineStageFlags dstStageMask,
                                      bool byRegion,
                                      VkBufferMemoryBarrier* barrier) const {
-    SkASSERT(fCurrentCmdBuffer);
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
     SkASSERT(resource);
-    fCurrentCmdBuffer->pipelineBarrier(this,
-                                       resource,
-                                       srcStageMask,
-                                       dstStageMask,
-                                       byRegion,
-                                       GrVkCommandBuffer::kBufferMemory_BarrierType,
-                                       barrier);
+    this->currentCommandBuffer()->pipelineBarrier(this,
+                                                  resource,
+                                                  srcStageMask,
+                                                  dstStageMask,
+                                                  byRegion,
+                                                  GrVkCommandBuffer::kBufferMemory_BarrierType,
+                                                  barrier);
+}
+void GrVkGpu::addBufferMemoryBarrier(VkPipelineStageFlags srcStageMask,
+                                     VkPipelineStageFlags dstStageMask,
+                                     bool byRegion,
+                                     VkBufferMemoryBarrier* barrier) const {
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
+    // We don't pass in a resource here to the command buffer. The command buffer only is using it
+    // to hold a ref, but every place where we add a buffer memory barrier we are doing some other
+    // command with the buffer on the command buffer. Thus those other commands will already cause
+    // the command buffer to be holding a ref to the buffer.
+    this->currentCommandBuffer()->pipelineBarrier(this,
+                                                  /*resource=*/nullptr,
+                                                  srcStageMask,
+                                                  dstStageMask,
+                                                  byRegion,
+                                                  GrVkCommandBuffer::kBufferMemory_BarrierType,
+                                                  barrier);
 }
 
-void GrVkGpu::addImageMemoryBarrier(const GrVkResource* resource,
+void GrVkGpu::addImageMemoryBarrier(const GrManagedResource* resource,
                                     VkPipelineStageFlags srcStageMask,
                                     VkPipelineStageFlags dstStageMask,
                                     bool byRegion,
                                     VkImageMemoryBarrier* barrier) const {
-    SkASSERT(fCurrentCmdBuffer);
+    // If we are in the middle of destroying or abandoning the context we may hit a release proc
+    // that triggers the destruction of a GrVkImage. This could cause us to try and transfer the
+    // VkImage back to the original queue. In this state we don't submit anymore work and we may not
+    // have a current command buffer. Thus we won't do the queue transfer.
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
     SkASSERT(resource);
-    fCurrentCmdBuffer->pipelineBarrier(this,
-                                       resource,
-                                       srcStageMask,
-                                       dstStageMask,
-                                       byRegion,
-                                       GrVkCommandBuffer::kImageMemory_BarrierType,
-                                       barrier);
+    this->currentCommandBuffer()->pipelineBarrier(this,
+                                                  resource,
+                                                  srcStageMask,
+                                                  dstStageMask,
+                                                  byRegion,
+                                                  GrVkCommandBuffer::kImageMemory_BarrierType,
+                                                  barrier);
 }
 
-void GrVkGpu::onFinishFlush(GrSurfaceProxy* proxy, SkSurface::BackendSurfaceAccess access,
-                            const GrFlushInfo& info) {
+void GrVkGpu::prepareSurfacesForBackendAccessAndStateUpdates(
+        SkSpan<GrSurfaceProxy*> proxies,
+        SkSurface::BackendSurfaceAccess access,
+        const GrBackendSurfaceMutableState* newState) {
     // Submit the current command buffer to the Queue. Whether we inserted semaphores or not does
     // not effect what we do here.
-    if (proxy && access == SkSurface::BackendSurfaceAccess::kPresent) {
+    if (!proxies.empty() && (access == SkSurface::BackendSurfaceAccess::kPresent || newState)) {
+        // We currently don't support passing in new surface state for multiple proxies here. The
+        // only time we have multiple proxies is if we are flushing a yuv SkImage which won't have
+        // state updates anyways. Additionally if we have a newState than we must not have any
+        // BackendSurfaceAccess.
+        SkASSERT(!newState || proxies.size() == 1);
+        SkASSERT(!newState || access == SkSurface::BackendSurfaceAccess::kNoAccess);
         GrVkImage* image;
-        SkASSERT(proxy->isInstantiated());
-        if (GrTexture* tex = proxy->peekTexture()) {
-            image = static_cast<GrVkTexture*>(tex);
-        } else {
-            GrRenderTarget* rt = proxy->peekRenderTarget();
-            SkASSERT(rt);
-            image = static_cast<GrVkRenderTarget*>(rt);
+        for (GrSurfaceProxy* proxy : proxies) {
+            SkASSERT(proxy->isInstantiated());
+            if (GrTexture* tex = proxy->peekTexture()) {
+                image = static_cast<GrVkTexture*>(tex)->textureImage();
+            } else {
+                GrRenderTarget* rt = proxy->peekRenderTarget();
+                SkASSERT(rt);
+                GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(rt);
+                image = vkRT->externalAttachment();
+            }
+            if (newState) {
+                const GrVkSharedImageInfo& newInfo = newState->fVkState;
+                set_layout_and_queue_from_mutable_state(this, image, newInfo);
+            } else {
+                SkASSERT(access == SkSurface::BackendSurfaceAccess::kPresent);
+                image->prepareForPresent(this);
+            }
         }
-        image->prepareForPresent(this);
     }
-    if (info.fFlags & kSyncCpu_GrFlushFlag) {
-        this->submitCommandBuffer(kForce_SyncQueue, info.fFinishedProc, info.fFinishedContext);
+}
+
+void GrVkGpu::addFinishedProc(GrGpuFinishedProc finishedProc,
+                              GrGpuFinishedContext finishedContext) {
+    SkASSERT(finishedProc);
+    this->addFinishedCallback(GrRefCntedCallback::Make(finishedProc, finishedContext));
+}
+
+void GrVkGpu::addFinishedCallback(sk_sp<GrRefCntedCallback> finishedCallback) {
+    SkASSERT(finishedCallback);
+    fResourceProvider.addFinishedProcToActiveCommandBuffers(std::move(finishedCallback));
+}
+
+void GrVkGpu::takeOwnershipOfBuffer(sk_sp<GrGpuBuffer> buffer) {
+    this->currentCommandBuffer()->addGrBuffer(std::move(buffer));
+}
+
+bool GrVkGpu::onSubmitToGpu(bool syncCpu) {
+    if (syncCpu) {
+        return this->submitCommandBuffer(kForce_SyncQueue);
     } else {
-        this->submitCommandBuffer(kSkip_SyncQueue, info.fFinishedProc, info.fFinishedContext);
+        return this->submitCommandBuffer(kSkip_SyncQueue);
     }
 }
 
-static int get_surface_sample_cnt(GrSurface* surf) {
-    if (const GrRenderTarget* rt = surf->asRenderTarget()) {
-        return rt->numColorSamples();
+void GrVkGpu::finishOutstandingGpuWork() {
+    VK_CALL(QueueWaitIdle(fQueue));
+
+    if (this->vkCaps().mustSyncCommandBuffersWithQueue()) {
+        fResourceProvider.forceSyncAllCommandBuffers();
     }
-    return 0;
 }
 
-void GrVkGpu::copySurfaceAsCopyImage(GrSurface* dst, GrSurfaceOrigin dstOrigin,
-                                     GrSurface* src, GrSurfaceOrigin srcOrigin,
+void GrVkGpu::onReportSubmitHistograms() {
+#if SK_HISTOGRAMS_ENABLED
+    uint64_t allocatedMemory = fMemoryAllocator->totalAllocatedMemory();
+    uint64_t usedMemory = fMemoryAllocator->totalUsedMemory();
+    SkASSERT(usedMemory <= allocatedMemory);
+    if (allocatedMemory > 0) {
+        SK_HISTOGRAM_PERCENTAGE("VulkanMemoryAllocator.PercentUsed",
+                                (usedMemory * 100) / allocatedMemory);
+    }
+    // allocatedMemory is in bytes and need to be reported it in kilobytes. SK_HISTOGRAM_MEMORY_KB
+    // supports samples up to around 500MB which should support the amounts of memory we allocate.
+    SK_HISTOGRAM_MEMORY_KB("VulkanMemoryAllocator.AmountAllocated", allocatedMemory >> 10);
+#endif
+}
+
+void GrVkGpu::copySurfaceAsCopyImage(GrSurface* dst,
+                                     GrSurface* src,
                                      GrVkImage* dstImage,
                                      GrVkImage* srcImage,
                                      const SkIRect& srcRect,
                                      const SkIPoint& dstPoint) {
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
+
 #ifdef SK_DEBUG
-    int dstSampleCnt = get_surface_sample_cnt(dst);
-    int srcSampleCnt = get_surface_sample_cnt(src);
+    int dstSampleCnt = dstImage->numSamples();
+    int srcSampleCnt = srcImage->numSamples();
     bool dstHasYcbcr = dstImage->ycbcrConversionInfo().isValid();
     bool srcHasYcbcr = srcImage->ycbcrConversionInfo().isValid();
-    SkASSERT(this->vkCaps().canCopyImage(dst->config(), dstSampleCnt, dstOrigin, dstHasYcbcr,
-                                         src->config(), srcSampleCnt, srcOrigin, srcHasYcbcr));
-
+    VkFormat dstFormat = dstImage->imageFormat();
+    VkFormat srcFormat;
+    SkAssertResult(dst->backendFormat().asVkFormat(&srcFormat));
+    SkASSERT(this->vkCaps().canCopyImage(dstFormat, dstSampleCnt, dstHasYcbcr,
+                                         srcFormat, srcSampleCnt, srcHasYcbcr));
 #endif
+    if (src->isProtected() && !dst->isProtected()) {
+        SkDebugf("Can't copy from protected memory to non-protected");
+        return;
+    }
 
     // These flags are for flushing/invalidating caches and for the dst image it doesn't matter if
     // the cache is flushed since it is only being written to.
@@ -1935,54 +2180,63 @@ void GrVkGpu::copySurfaceAsCopyImage(GrSurface* dst, GrSurfaceOrigin dstOrigin,
                              VK_PIPELINE_STAGE_TRANSFER_BIT,
                              false);
 
-    // Flip rect if necessary
-    SkIRect srcVkRect = srcRect;
-    int32_t dstY = dstPoint.fY;
-
-    if (kBottomLeft_GrSurfaceOrigin == srcOrigin) {
-        SkASSERT(kBottomLeft_GrSurfaceOrigin == dstOrigin);
-        srcVkRect.fTop = src->height() - srcRect.fBottom;
-        srcVkRect.fBottom =  src->height() - srcRect.fTop;
-        dstY = dst->height() - dstPoint.fY - srcVkRect.height();
-    }
-
     VkImageCopy copyRegion;
     memset(&copyRegion, 0, sizeof(VkImageCopy));
     copyRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-    copyRegion.srcOffset = { srcVkRect.fLeft, srcVkRect.fTop, 0 };
+    copyRegion.srcOffset = { srcRect.fLeft, srcRect.fTop, 0 };
     copyRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-    copyRegion.dstOffset = { dstPoint.fX, dstY, 0 };
-    copyRegion.extent = { (uint32_t)srcVkRect.width(), (uint32_t)srcVkRect.height(), 1 };
+    copyRegion.dstOffset = { dstPoint.fX, dstPoint.fY, 0 };
+    copyRegion.extent = { (uint32_t)srcRect.width(), (uint32_t)srcRect.height(), 1 };
 
-    fCurrentCmdBuffer->copyImage(this,
-                                 srcImage,
-                                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                 dstImage,
-                                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                 1,
-                                 &copyRegion);
+    this->currentCommandBuffer()->addGrSurface(sk_ref_sp<const GrSurface>(src));
+    this->currentCommandBuffer()->addGrSurface(sk_ref_sp<const GrSurface>(dst));
+    this->currentCommandBuffer()->copyImage(this,
+                                            srcImage,
+                                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                            dstImage,
+                                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                            1,
+                                            &copyRegion);
 
     SkIRect dstRect = SkIRect::MakeXYWH(dstPoint.fX, dstPoint.fY,
                                         srcRect.width(), srcRect.height());
-    this->didWriteToSurface(dst, dstOrigin, &dstRect);
+    // The rect is already in device space so we pass in kTopLeft so no flip is done.
+    this->didWriteToSurface(dst, kTopLeft_GrSurfaceOrigin, &dstRect);
 }
 
-void GrVkGpu::copySurfaceAsBlit(GrSurface* dst, GrSurfaceOrigin dstOrigin,
-                                GrSurface* src, GrSurfaceOrigin srcOrigin,
+void GrVkGpu::copySurfaceAsBlit(GrSurface* dst,
+                                GrSurface* src,
                                 GrVkImage* dstImage,
                                 GrVkImage* srcImage,
                                 const SkIRect& srcRect,
                                 const SkIPoint& dstPoint) {
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
+
 #ifdef SK_DEBUG
-    int dstSampleCnt = get_surface_sample_cnt(dst);
-    int srcSampleCnt = get_surface_sample_cnt(src);
+    int dstSampleCnt = dstImage->numSamples();
+    int srcSampleCnt = srcImage->numSamples();
     bool dstHasYcbcr = dstImage->ycbcrConversionInfo().isValid();
     bool srcHasYcbcr = srcImage->ycbcrConversionInfo().isValid();
-    SkASSERT(this->vkCaps().canCopyAsBlit(dst->config(), dstSampleCnt, dstImage->isLinearTiled(),
-                                          dstHasYcbcr, src->config(), srcSampleCnt,
-                                          srcImage->isLinearTiled(), srcHasYcbcr));
+    VkFormat dstFormat = dstImage->imageFormat();
+    VkFormat srcFormat;
+    SkAssertResult(dst->backendFormat().asVkFormat(&srcFormat));
+    SkASSERT(this->vkCaps().canCopyAsBlit(dstFormat,
+                                          dstSampleCnt,
+                                          dstImage->isLinearTiled(),
+                                          dstHasYcbcr,
+                                          srcFormat,
+                                          srcSampleCnt,
+                                          srcImage->isLinearTiled(),
+                                          srcHasYcbcr));
 
 #endif
+    if (src->isProtected() && !dst->isProtected()) {
+        SkDebugf("Can't copy from protected memory to non-protected");
+        return;
+    }
+
     dstImage->setImageLayout(this,
                              VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                              VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1996,77 +2250,47 @@ void GrVkGpu::copySurfaceAsBlit(GrSurface* dst, GrSurfaceOrigin dstOrigin,
                              false);
 
     // Flip rect if necessary
-    SkIRect srcVkRect;
-    srcVkRect.fLeft = srcRect.fLeft;
-    srcVkRect.fRight = srcRect.fRight;
-    SkIRect dstRect;
-    dstRect.fLeft = dstPoint.fX;
-    dstRect.fRight = dstPoint.fX + srcRect.width();
-
-    if (kBottomLeft_GrSurfaceOrigin == srcOrigin) {
-        srcVkRect.fTop = src->height() - srcRect.fBottom;
-        srcVkRect.fBottom = src->height() - srcRect.fTop;
-    } else {
-        srcVkRect.fTop = srcRect.fTop;
-        srcVkRect.fBottom = srcRect.fBottom;
-    }
-
-    if (kBottomLeft_GrSurfaceOrigin == dstOrigin) {
-        dstRect.fTop = dst->height() - dstPoint.fY - srcVkRect.height();
-    } else {
-        dstRect.fTop = dstPoint.fY;
-    }
-    dstRect.fBottom = dstRect.fTop + srcVkRect.height();
-
-    // If we have different origins, we need to flip the top and bottom of the dst rect so that we
-    // get the correct origintation of the copied data.
-    if (srcOrigin != dstOrigin) {
-        using std::swap;
-        swap(dstRect.fTop, dstRect.fBottom);
-    }
+    SkIRect dstRect = SkIRect::MakeXYWH(dstPoint.fX, dstPoint.fY, srcRect.width(),
+                                        srcRect.height());
 
     VkImageBlit blitRegion;
     memset(&blitRegion, 0, sizeof(VkImageBlit));
     blitRegion.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
-    blitRegion.srcOffsets[0] = { srcVkRect.fLeft, srcVkRect.fTop, 0 };
-    blitRegion.srcOffsets[1] = { srcVkRect.fRight, srcVkRect.fBottom, 1 };
+    blitRegion.srcOffsets[0] = { srcRect.fLeft, srcRect.fTop, 0 };
+    blitRegion.srcOffsets[1] = { srcRect.fRight, srcRect.fBottom, 1 };
     blitRegion.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
     blitRegion.dstOffsets[0] = { dstRect.fLeft, dstRect.fTop, 0 };
     blitRegion.dstOffsets[1] = { dstRect.fRight, dstRect.fBottom, 1 };
 
-    fCurrentCmdBuffer->blitImage(this,
-                                 *srcImage,
-                                 *dstImage,
-                                 1,
-                                 &blitRegion,
-                                 VK_FILTER_NEAREST); // We never scale so any filter works here
+    this->currentCommandBuffer()->addGrSurface(sk_ref_sp<const GrSurface>(src));
+    this->currentCommandBuffer()->addGrSurface(sk_ref_sp<const GrSurface>(dst));
+    this->currentCommandBuffer()->blitImage(this,
+                                            *srcImage,
+                                            *dstImage,
+                                            1,
+                                            &blitRegion,
+                                            VK_FILTER_NEAREST); // We never scale so any filter works here
 
-    dstRect = SkIRect::MakeXYWH(dstPoint.fX, dstPoint.fY, srcRect.width(), srcRect.height());
-    this->didWriteToSurface(dst, dstOrigin, &dstRect);
+    // The rect is already in device space so we pass in kTopLeft so no flip is done.
+    this->didWriteToSurface(dst, kTopLeft_GrSurfaceOrigin, &dstRect);
 }
 
-void GrVkGpu::copySurfaceAsResolve(GrSurface* dst, GrSurfaceOrigin dstOrigin, GrSurface* src,
-                                   GrSurfaceOrigin srcOrigin, const SkIRect& origSrcRect,
-                                   const SkIPoint& origDstPoint) {
-    GrVkRenderTarget* srcRT = static_cast<GrVkRenderTarget*>(src->asRenderTarget());
-    SkIRect srcRect = origSrcRect;
-    SkIPoint dstPoint = origDstPoint;
-    if (kBottomLeft_GrSurfaceOrigin == srcOrigin) {
-        SkASSERT(kBottomLeft_GrSurfaceOrigin == dstOrigin);
-        srcRect = {origSrcRect.fLeft, src->height() - origSrcRect.fBottom,
-                   origSrcRect.fRight, src->height() - origSrcRect.fTop};
-        dstPoint.fY = dst->height() - dstPoint.fY - srcRect.height();
+void GrVkGpu::copySurfaceAsResolve(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+                                   const SkIPoint& dstPoint) {
+    if (src->isProtected() && !dst->isProtected()) {
+        SkDebugf("Can't copy from protected memory to non-protected");
+        return;
     }
+    GrVkRenderTarget* srcRT = static_cast<GrVkRenderTarget*>(src->asRenderTarget());
     this->resolveImage(dst, srcRT, srcRect, dstPoint);
-    SkIRect dstRect = SkIRect::MakeXYWH(origDstPoint.fX, origDstPoint.fY,
+    SkIRect dstRect = SkIRect::MakeXYWH(dstPoint.fX, dstPoint.fY,
                                         srcRect.width(), srcRect.height());
-    this->didWriteToSurface(dst, dstOrigin, &dstRect);
+    // The rect is already in device space so we pass in kTopLeft so no flip is done.
+    this->didWriteToSurface(dst, kTopLeft_GrSurfaceOrigin, &dstRect);
 }
 
-bool GrVkGpu::onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin,
-                            GrSurface* src, GrSurfaceOrigin srcOrigin,
-                            const SkIRect& srcRect, const SkIPoint& dstPoint,
-                            bool canDiscardOutsideDstRect) {
+bool GrVkGpu::onCopySurface(GrSurface* dst, GrSurface* src, const SkIRect& srcRect,
+                            const SkIPoint& dstPoint) {
 #ifdef SK_DEBUG
     if (GrVkRenderTarget* srcRT = static_cast<GrVkRenderTarget*>(src->asRenderTarget())) {
         SkASSERT(!srcRT->wrapsSecondaryCommandBuffer());
@@ -2075,12 +2299,10 @@ bool GrVkGpu::onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin,
         SkASSERT(!dstRT->wrapsSecondaryCommandBuffer());
     }
 #endif
-
-    GrPixelConfig dstConfig = dst->config();
-    GrPixelConfig srcConfig = src->config();
-
-    int dstSampleCnt = get_surface_sample_cnt(dst);
-    int srcSampleCnt = get_surface_sample_cnt(src);
+    if (src->isProtected() && !dst->isProtected()) {
+        SkDebugf("Can't copy from protected memory to non-protected");
+        return false;
+    }
 
     GrVkImage* dstImage;
     GrVkImage* srcImage;
@@ -2090,59 +2312,86 @@ bool GrVkGpu::onCopySurface(GrSurface* dst, GrSurfaceOrigin dstOrigin,
         if (vkRT->wrapsSecondaryCommandBuffer()) {
             return false;
         }
-        dstImage = vkRT->numColorSamples() > 1 ? vkRT->msaaImage() : vkRT;
+        // This will technically return true for single sample rts that used DMSAA in which case we
+        // don't have to pick the resolve attachment. But in that case the resolve and color
+        // attachments will be the same anyways.
+        if (this->vkCaps().renderTargetSupportsDiscardableMSAA(vkRT)) {
+            dstImage = vkRT->resolveAttachment();
+        } else {
+            dstImage = vkRT->colorAttachment();
+        }
+    } else if (dst->asTexture()) {
+        dstImage = static_cast<GrVkTexture*>(dst->asTexture())->textureImage();
     } else {
-        SkASSERT(dst->asTexture());
-        dstImage = static_cast<GrVkTexture*>(dst->asTexture());
+        // The surface in a GrAttachment already
+        dstImage = static_cast<GrVkImage*>(dst);
     }
     GrRenderTarget* srcRT = src->asRenderTarget();
     if (srcRT) {
         GrVkRenderTarget* vkRT = static_cast<GrVkRenderTarget*>(srcRT);
-        srcImage = vkRT->numColorSamples() > 1 ? vkRT->msaaImage() : vkRT;
-    } else {
+        // This will technically return true for single sample rts that used DMSAA in which case we
+        // don't have to pick the resolve attachment. But in that case the resolve and color
+        // attachments will be the same anyways.
+        if (this->vkCaps().renderTargetSupportsDiscardableMSAA(vkRT)) {
+            srcImage = vkRT->resolveAttachment();
+        } else {
+            srcImage = vkRT->colorAttachment();
+        }
+    } else if (src->asTexture()) {
         SkASSERT(src->asTexture());
-        srcImage = static_cast<GrVkTexture*>(src->asTexture());
+        srcImage = static_cast<GrVkTexture*>(src->asTexture())->textureImage();
+    } else {
+        // The surface in a GrAttachment already
+        srcImage = static_cast<GrVkImage*>(src);
     }
+
+    VkFormat dstFormat = dstImage->imageFormat();
+    VkFormat srcFormat = srcImage->imageFormat();
+
+    int dstSampleCnt = dstImage->numSamples();
+    int srcSampleCnt = srcImage->numSamples();
 
     bool dstHasYcbcr = dstImage->ycbcrConversionInfo().isValid();
     bool srcHasYcbcr = srcImage->ycbcrConversionInfo().isValid();
 
-    if (this->vkCaps().canCopyAsResolve(dstConfig, dstSampleCnt, dstOrigin, dstHasYcbcr,
-                                        srcConfig, srcSampleCnt, srcOrigin, srcHasYcbcr)) {
-        this->copySurfaceAsResolve(dst, dstOrigin, src, srcOrigin, srcRect, dstPoint);
+    if (this->vkCaps().canCopyAsResolve(dstFormat, dstSampleCnt, dstHasYcbcr,
+                                        srcFormat, srcSampleCnt, srcHasYcbcr)) {
+        this->copySurfaceAsResolve(dst, src, srcRect, dstPoint);
         return true;
     }
 
-    if (this->vkCaps().canCopyAsDraw(dstConfig, SkToBool(dst->asRenderTarget()), dstHasYcbcr,
-                                     srcConfig, SkToBool(src->asTexture()), srcHasYcbcr)) {
-        SkAssertResult(fCopyManager.copySurfaceAsDraw(this, dst, dstOrigin, src, srcOrigin, srcRect,
-                                                      dstPoint, canDiscardOutsideDstRect));
-        auto dstRect = srcRect.makeOffset(dstPoint.fX, dstPoint.fY);
-        this->didWriteToSurface(dst, dstOrigin, &dstRect);
+    if (this->vkCaps().canCopyImage(dstFormat, dstSampleCnt, dstHasYcbcr,
+                                    srcFormat, srcSampleCnt, srcHasYcbcr)) {
+        this->copySurfaceAsCopyImage(dst, src, dstImage, srcImage, srcRect, dstPoint);
         return true;
     }
 
-    if (this->vkCaps().canCopyImage(dstConfig, dstSampleCnt, dstOrigin, dstHasYcbcr,
-                                    srcConfig, srcSampleCnt, srcOrigin, srcHasYcbcr)) {
-        this->copySurfaceAsCopyImage(dst, dstOrigin, src, srcOrigin, dstImage, srcImage,
-                                     srcRect, dstPoint);
-        return true;
-    }
-
-    if (this->vkCaps().canCopyAsBlit(dstConfig, dstSampleCnt, dstImage->isLinearTiled(),
-                                     dstHasYcbcr, srcConfig, srcSampleCnt,
-                                     srcImage->isLinearTiled(), srcHasYcbcr)) {
-        this->copySurfaceAsBlit(dst, dstOrigin, src, srcOrigin, dstImage, srcImage,
-                                srcRect, dstPoint);
+    if (this->vkCaps().canCopyAsBlit(dstFormat,
+                                     dstSampleCnt,
+                                     dstImage->isLinearTiled(),
+                                     dstHasYcbcr,
+                                     srcFormat,
+                                     srcSampleCnt,
+                                     srcImage->isLinearTiled(),
+                                     srcHasYcbcr)) {
+        this->copySurfaceAsBlit(dst, src, dstImage, srcImage, srcRect, dstPoint);
         return true;
     }
 
     return false;
 }
 
-bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int height,
-                           GrColorType dstColorType, void* buffer, size_t rowBytes) {
-    if (GrPixelConfigToColorType(surface->config()) != dstColorType) {
+bool GrVkGpu::onReadPixels(GrSurface* surface,
+                           SkIRect rect,
+                           GrColorType surfaceColorType,
+                           GrColorType dstColorType,
+                           void* buffer,
+                           size_t rowBytes) {
+    if (surface->isProtected()) {
+        return false;
+    }
+
+    if (!this->currentCommandBuffer()) {
         return false;
     }
 
@@ -2155,87 +2404,18 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
         if (rt->wrapsSecondaryCommandBuffer()) {
             return false;
         }
-        // resolve the render target if necessary
-        switch (rt->getResolveType()) {
-            case GrVkRenderTarget::kCantResolve_ResolveType:
-                return false;
-            case GrVkRenderTarget::kAutoResolves_ResolveType:
-                break;
-            case GrVkRenderTarget::kCanResolve_ResolveType:
-                this->resolveRenderTargetNoFlush(rt);
-                break;
-            default:
-                SK_ABORT("Unknown resolve type");
-        }
-        image = rt;
+        image = rt->nonMSAAAttachment();
     } else {
-        image = static_cast<GrVkTexture*>(surface->asTexture());
+        image = static_cast<GrVkTexture*>(surface->asTexture())->textureImage();
     }
 
     if (!image) {
         return false;
     }
 
-    // Skia's RGB_888x color type, which we map to the vulkan R8G8B8_UNORM, expects the data to be
-    // 32 bits, but the Vulkan format is only 24. So we first copy the surface into an R8G8B8A8
-    // image and then do the read pixels from that.
-    sk_sp<GrVkTextureRenderTarget> copySurface;
-    if (dstColorType == GrColorType::kRGB_888x && image->imageFormat() == VK_FORMAT_R8G8B8_UNORM) {
-        SkASSERT(surface->config() == kRGB_888_GrPixelConfig);
-
-        // Make a new surface that is RGBA to copy the RGB surface into.
-        GrSurfaceDesc surfDesc;
-        surfDesc.fFlags = kRenderTarget_GrSurfaceFlag;
-        surfDesc.fWidth = width;
-        surfDesc.fHeight = height;
-        surfDesc.fConfig = kRGBA_8888_GrPixelConfig;
-        surfDesc.fSampleCnt = 1;
-
-        VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                       VK_IMAGE_USAGE_SAMPLED_BIT |
-                                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                                       VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-        GrVkImage::ImageDesc imageDesc;
-        imageDesc.fImageType = VK_IMAGE_TYPE_2D;
-        imageDesc.fFormat = VK_FORMAT_R8G8B8A8_UNORM;
-        imageDesc.fWidth = width;
-        imageDesc.fHeight = height;
-        imageDesc.fLevels = 1;
-        imageDesc.fSamples = 1;
-        imageDesc.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
-        imageDesc.fUsageFlags = usageFlags;
-        imageDesc.fMemProps = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-        copySurface = GrVkTextureRenderTarget::MakeNewTextureRenderTarget(
-                this, SkBudgeted::kYes, surfDesc, imageDesc, GrMipMapsStatus::kNotAllocated);
-        if (!copySurface) {
-            return false;
-        }
-
-        int srcSampleCount = 0;
-        if (rt) {
-            srcSampleCount = rt->numColorSamples();
-        }
-        bool srcHasYcbcr = image->ycbcrConversionInfo().isValid();
-        static const GrSurfaceOrigin kOrigin = kTopLeft_GrSurfaceOrigin;
-        if (!this->vkCaps().canCopyAsBlit(copySurface->config(), 1, kOrigin, false,
-                                          surface->config(), srcSampleCount, kOrigin,
-                                          srcHasYcbcr) &&
-            !this->vkCaps().canCopyAsDraw(copySurface->config(), false, false,
-                                          surface->config(), SkToBool(surface->asTexture()),
-                                          srcHasYcbcr)) {
-            return false;
-        }
-        SkIRect srcRect = SkIRect::MakeXYWH(left, top, width, height);
-        if (!this->copySurface(copySurface.get(), kOrigin, surface, kOrigin,
-                               srcRect, SkIPoint::Make(0,0))) {
-            return false;
-        }
-        top = 0;
-        left = 0;
-        dstColorType = GrColorType::kRGBA_8888;
-        image = copySurface.get();
+    if (dstColorType == GrColorType::kUnknown ||
+        dstColorType != this->vkCaps().transferColorType(image->imageFormat(), surfaceColorType)) {
+        return false;
     }
 
     // Change layout of our target so it can be used as copy
@@ -2245,138 +2425,74 @@ bool GrVkGpu::onReadPixels(GrSurface* surface, int left, int top, int width, int
                           VK_PIPELINE_STAGE_TRANSFER_BIT,
                           false);
 
-    int bpp = GrColorTypeBytesPerPixel(dstColorType);
-    size_t tightRowBytes = bpp * width;
+    size_t bpp = GrColorTypeBytesPerPixel(dstColorType);
+    if (GrVkFormatBytesPerBlock(image->imageFormat()) != bpp) {
+        return false;
+    }
+    size_t tightRowBytes = bpp*rect.width();
 
     VkBufferImageCopy region;
     memset(&region, 0, sizeof(VkBufferImageCopy));
-
-    bool copyFromOrigin = this->vkCaps().mustDoCopiesFromOrigin();
-    if (copyFromOrigin) {
-        region.imageOffset = { 0, 0, 0 };
-        region.imageExtent = { (uint32_t)(left + width), (uint32_t)(top + height), 1 };
-    } else {
-        VkOffset3D offset = { left, top, 0 };
-        region.imageOffset = offset;
-        region.imageExtent = { (uint32_t)width, (uint32_t)height, 1 };
-    }
+    VkOffset3D offset = { rect.left(), rect.top(), 0 };
+    region.imageOffset = offset;
+    region.imageExtent = { (uint32_t)rect.width(), (uint32_t)rect.height(), 1 };
 
     size_t transBufferRowBytes = bpp * region.imageExtent.width;
     size_t imageRows = region.imageExtent.height;
-    auto transferBuffer = sk_sp<GrVkTransferBuffer>(
-            static_cast<GrVkTransferBuffer*>(this->createBuffer(transBufferRowBytes * imageRows,
-                                                                GrGpuBufferType::kXferGpuToCpu,
-                                                                kStream_GrAccessPattern)
-                                                     .release()));
+    GrResourceProvider* resourceProvider = this->getContext()->priv().resourceProvider();
+    sk_sp<GrGpuBuffer> transferBuffer = resourceProvider->createBuffer(
+            transBufferRowBytes * imageRows, GrGpuBufferType::kXferGpuToCpu,
+            kDynamic_GrAccessPattern);
+
+    if (!transferBuffer) {
+        return false;
+    }
+
+    GrVkBuffer* vkBuffer = static_cast<GrVkBuffer*>(transferBuffer.get());
 
     // Copy the image to a buffer so we can map it to cpu memory
-    region.bufferOffset = transferBuffer->offset();
+    region.bufferOffset = 0;
     region.bufferRowLength = 0; // Forces RowLength to be width. We handle the rowBytes below.
     region.bufferImageHeight = 0; // Forces height to be tightly packed. Only useful for 3d images.
     region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
 
-    fCurrentCmdBuffer->copyImageToBuffer(this,
-                                         image,
-                                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                         transferBuffer.get(),
-                                         1,
-                                         &region);
+    this->currentCommandBuffer()->copyImageToBuffer(this,
+                                                    image,
+                                                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                                    transferBuffer,
+                                                    1,
+                                                    &region);
 
     // make sure the copy to buffer has finished
-    transferBuffer->addMemoryBarrier(this,
-                                     VK_ACCESS_TRANSFER_WRITE_BIT,
-                                     VK_ACCESS_HOST_READ_BIT,
-                                     VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                     VK_PIPELINE_STAGE_HOST_BIT,
-                                     false);
+    vkBuffer->addMemoryBarrier(VK_ACCESS_TRANSFER_WRITE_BIT,
+                               VK_ACCESS_HOST_READ_BIT,
+                               VK_PIPELINE_STAGE_TRANSFER_BIT,
+                               VK_PIPELINE_STAGE_HOST_BIT,
+                               false);
 
     // We need to submit the current command buffer to the Queue and make sure it finishes before
     // we can copy the data out of the buffer.
-    this->submitCommandBuffer(kForce_SyncQueue);
-    void* mappedMemory = transferBuffer->map();
-    const GrVkAlloc& transAlloc = transferBuffer->alloc();
-    GrVkMemory::InvalidateMappedAlloc(this, transAlloc, 0, transAlloc.fSize);
-
-    if (copyFromOrigin) {
-        uint32_t skipRows = region.imageExtent.height - height;
-        mappedMemory = (char*)mappedMemory + transBufferRowBytes * skipRows + bpp * left;
+    if (!this->submitCommandBuffer(kForce_SyncQueue)) {
+        return false;
     }
+    void* mappedMemory = transferBuffer->map();
 
-    SkRectMemcpy(buffer, rowBytes, mappedMemory, transBufferRowBytes, tightRowBytes, height);
+    SkRectMemcpy(buffer, rowBytes, mappedMemory, transBufferRowBytes, tightRowBytes, rect.height());
 
     transferBuffer->unmap();
     return true;
 }
 
-// The RenderArea bounds we pass into BeginRenderPass must have a start x value that is a multiple
-// of the granularity. The width must also be a multiple of the granularity or eaqual to the width
-// the the entire attachment. Similar requirements for the y and height components.
-void adjust_bounds_to_granularity(SkIRect* dstBounds, const SkIRect& srcBounds,
-                                  const VkExtent2D& granularity, int maxWidth, int maxHeight) {
-    // Adjust Width
-    if ((0 != granularity.width && 1 != granularity.width)) {
-        // Start with the right side of rect so we know if we end up going pass the maxWidth.
-        int rightAdj = srcBounds.fRight % granularity.width;
-        if (rightAdj != 0) {
-            rightAdj = granularity.width - rightAdj;
-        }
-        dstBounds->fRight = srcBounds.fRight + rightAdj;
-        if (dstBounds->fRight > maxWidth) {
-            dstBounds->fRight = maxWidth;
-            dstBounds->fLeft = 0;
-        } else {
-            dstBounds->fLeft = srcBounds.fLeft - srcBounds.fLeft % granularity.width;
-        }
-    } else {
-        dstBounds->fLeft = srcBounds.fLeft;
-        dstBounds->fRight = srcBounds.fRight;
+bool GrVkGpu::beginRenderPass(const GrVkRenderPass* renderPass,
+                              sk_sp<const GrVkFramebuffer> framebuffer,
+                              const VkClearValue* colorClear,
+                              const GrSurface* target,
+                              const SkIRect& renderPassBounds,
+                              bool forSecondaryCB) {
+    if (!this->currentCommandBuffer()) {
+        return false;
     }
-
-    // Adjust height
-    if ((0 != granularity.height && 1 != granularity.height)) {
-        // Start with the bottom side of rect so we know if we end up going pass the maxHeight.
-        int bottomAdj = srcBounds.fBottom % granularity.height;
-        if (bottomAdj != 0) {
-            bottomAdj = granularity.height - bottomAdj;
-        }
-        dstBounds->fBottom = srcBounds.fBottom + bottomAdj;
-        if (dstBounds->fBottom > maxHeight) {
-            dstBounds->fBottom = maxHeight;
-            dstBounds->fTop = 0;
-        } else {
-            dstBounds->fTop = srcBounds.fTop - srcBounds.fTop % granularity.height;
-        }
-    } else {
-        dstBounds->fTop = srcBounds.fTop;
-        dstBounds->fBottom = srcBounds.fBottom;
-    }
-}
-
-void GrVkGpu::submitSecondaryCommandBuffer(const SkTArray<GrVkSecondaryCommandBuffer*>& buffers,
-                                           const GrVkRenderPass* renderPass,
-                                           const VkClearValue* colorClear,
-                                           GrVkRenderTarget* target, GrSurfaceOrigin origin,
-                                           const SkIRect& bounds) {
-    SkASSERT (!target->wrapsSecondaryCommandBuffer());
-    const SkIRect* pBounds = &bounds;
-    SkIRect flippedBounds;
-    if (kBottomLeft_GrSurfaceOrigin == origin) {
-        flippedBounds = bounds;
-        flippedBounds.fTop = target->height() - bounds.fBottom;
-        flippedBounds.fBottom = target->height() - bounds.fTop;
-        pBounds = &flippedBounds;
-    }
-
-    // The bounds we use for the render pass should be of the granularity supported
-    // by the device.
-    const VkExtent2D& granularity = renderPass->granularity();
-    SkIRect adjustedBounds;
-    if ((0 != granularity.width && 1 != granularity.width) ||
-        (0 != granularity.height && 1 != granularity.height)) {
-        adjust_bounds_to_granularity(&adjustedBounds, *pBounds, granularity,
-                                     target->width(), target->height());
-        pBounds = &adjustedBounds;
-    }
+    SkASSERT (!framebuffer->isExternal());
 
 #ifdef SK_DEBUG
     uint32_t index;
@@ -2387,32 +2503,52 @@ void GrVkGpu::submitSecondaryCommandBuffer(const SkTArray<GrVkSecondaryCommandBu
         SkASSERT(1 == index);
     }
 #endif
-    VkClearValue clears[2];
+    VkClearValue clears[3];
+    int stencilIndex = renderPass->hasResolveAttachment() ? 2 : 1;
     clears[0].color = colorClear->color;
-    clears[1].depthStencil.depth = 0.0f;
-    clears[1].depthStencil.stencil = 0;
+    clears[stencilIndex].depthStencil.depth = 0.0f;
+    clears[stencilIndex].depthStencil.stencil = 0;
 
-    fCurrentCmdBuffer->beginRenderPass(this, renderPass, clears, *target, *pBounds, true);
-    for (int i = 0; i < buffers.count(); ++i) {
-        fCurrentCmdBuffer->executeCommands(this, buffers[i]);
-    }
-    fCurrentCmdBuffer->endRenderPass(this);
+   return this->currentCommandBuffer()->beginRenderPass(
+        this, renderPass, std::move(framebuffer), clears, target, renderPassBounds, forSecondaryCB);
+}
 
+void GrVkGpu::endRenderPass(GrRenderTarget* target, GrSurfaceOrigin origin,
+                            const SkIRect& bounds) {
+    // We had a command buffer when we started the render pass, we should have one now as well.
+    SkASSERT(this->currentCommandBuffer());
+    this->currentCommandBuffer()->endRenderPass(this);
     this->didWriteToSurface(target, origin, &bounds);
 }
 
-void GrVkGpu::submit(GrGpuCommandBuffer* buffer) {
-    if (buffer->asRTCommandBuffer()) {
-        SkASSERT(fCachedRTCommandBuffer.get() == buffer);
-
-        fCachedRTCommandBuffer->submit();
-        fCachedRTCommandBuffer->reset();
-    } else {
-        SkASSERT(fCachedTexCommandBuffer.get() == buffer);
-
-        fCachedTexCommandBuffer->submit();
-        fCachedTexCommandBuffer->reset();
+bool GrVkGpu::checkVkResult(VkResult result) {
+    switch (result) {
+        case VK_SUCCESS:
+            return true;
+        case VK_ERROR_DEVICE_LOST:
+            fDeviceIsLost = true;
+            return false;
+        case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+        case VK_ERROR_OUT_OF_HOST_MEMORY:
+            this->setOOMed();
+            return false;
+        default:
+            return false;
     }
+}
+
+void GrVkGpu::submitSecondaryCommandBuffer(std::unique_ptr<GrVkSecondaryCommandBuffer> buffer) {
+    if (!this->currentCommandBuffer()) {
+        return;
+    }
+    this->currentCommandBuffer()->executeCommands(this, std::move(buffer));
+}
+
+void GrVkGpu::submit(GrOpsRenderPass* renderPass) {
+    SkASSERT(fCachedOpsRenderPass.get() == renderPass);
+
+    fCachedOpsRenderPass->submit();
+    fCachedOpsRenderPass->reset();
 }
 
 GrFence SK_WARN_UNUSED_RESULT GrVkGpu::insertFence() {
@@ -2422,18 +2558,27 @@ GrFence SK_WARN_UNUSED_RESULT GrVkGpu::insertFence() {
     createInfo.pNext = nullptr;
     createInfo.flags = 0;
     VkFence fence = VK_NULL_HANDLE;
+    VkResult result;
 
-    VK_CALL_ERRCHECK(CreateFence(this->device(), &createInfo, nullptr, &fence));
-    VK_CALL(QueueSubmit(this->queue(), 0, nullptr, fence));
+    VK_CALL_RET(result, CreateFence(this->device(), &createInfo, nullptr, &fence));
+    if (result != VK_SUCCESS) {
+        return 0;
+    }
+    VK_CALL_RET(result, QueueSubmit(this->queue(), 0, nullptr, fence));
+    if (result != VK_SUCCESS) {
+        VK_CALL(DestroyFence(this->device(), fence, nullptr));
+        return 0;
+    }
 
-    GR_STATIC_ASSERT(sizeof(GrFence) >= sizeof(VkFence));
+    static_assert(sizeof(GrFence) >= sizeof(VkFence));
     return (GrFence)fence;
 }
 
-bool GrVkGpu::waitFence(GrFence fence, uint64_t timeout) {
+bool GrVkGpu::waitFence(GrFence fence) {
     SkASSERT(VK_NULL_HANDLE != (VkFence)fence);
 
-    VkResult result = VK_CALL(WaitForFences(this->device(), 1, (VkFence*)&fence, VK_TRUE, timeout));
+    VkResult result;
+    VK_CALL_RET(result, WaitForFences(this->device(), 1, (VkFence*)&fence, VK_TRUE, 0));
     return (VK_SUCCESS == result);
 }
 
@@ -2441,18 +2586,20 @@ void GrVkGpu::deleteFence(GrFence fence) const {
     VK_CALL(DestroyFence(this->device(), (VkFence)fence, nullptr));
 }
 
-sk_sp<GrSemaphore> SK_WARN_UNUSED_RESULT GrVkGpu::makeSemaphore(bool isOwned) {
+std::unique_ptr<GrSemaphore> SK_WARN_UNUSED_RESULT GrVkGpu::makeSemaphore(bool isOwned) {
     return GrVkSemaphore::Make(this, isOwned);
 }
 
-sk_sp<GrSemaphore> GrVkGpu::wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
-                                                 GrResourceProvider::SemaphoreWrapType wrapType,
-                                                 GrWrapOwnership ownership) {
+std::unique_ptr<GrSemaphore> GrVkGpu::wrapBackendSemaphore(const GrBackendSemaphore& semaphore,
+                                                           GrSemaphoreWrapType wrapType,
+                                                           GrWrapOwnership ownership) {
     return GrVkSemaphore::MakeWrapped(this, semaphore.vkSemaphore(), wrapType, ownership);
 }
 
-void GrVkGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore) {
-    GrVkSemaphore* vkSem = static_cast<GrVkSemaphore*>(semaphore.get());
+void GrVkGpu::insertSemaphore(GrSemaphore* semaphore) {
+    SkASSERT(semaphore);
+
+    GrVkSemaphore* vkSem = static_cast<GrVkSemaphore*>(semaphore);
 
     GrVkSemaphore::Resource* resource = vkSem->getResource();
     if (resource->shouldSignal()) {
@@ -2461,8 +2608,10 @@ void GrVkGpu::insertSemaphore(sk_sp<GrSemaphore> semaphore) {
     }
 }
 
-void GrVkGpu::waitSemaphore(sk_sp<GrSemaphore> semaphore) {
-    GrVkSemaphore* vkSem = static_cast<GrVkSemaphore*>(semaphore.get());
+void GrVkGpu::waitSemaphore(GrSemaphore* semaphore) {
+    SkASSERT(semaphore);
+
+    GrVkSemaphore* vkSem = static_cast<GrVkSemaphore*>(semaphore);
 
     GrVkSemaphore::Resource* resource = vkSem->getResource();
     if (resource->shouldWait()) {
@@ -2471,36 +2620,29 @@ void GrVkGpu::waitSemaphore(sk_sp<GrSemaphore> semaphore) {
     }
 }
 
-sk_sp<GrSemaphore> GrVkGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {
+std::unique_ptr<GrSemaphore> GrVkGpu::prepareTextureForCrossContextUsage(GrTexture* texture) {
     SkASSERT(texture);
-    GrVkTexture* vkTexture = static_cast<GrVkTexture*>(texture);
+    GrVkImage* vkTexture = static_cast<GrVkTexture*>(texture)->textureImage();
     vkTexture->setImageLayout(this,
                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                               VK_ACCESS_SHADER_READ_BIT,
                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                               false);
-    this->submitCommandBuffer(kSkip_SyncQueue);
+    // TODO: should we have a way to notify the caller that this has failed? Currently if the submit
+    // fails (caused by DEVICE_LOST) this will just cause us to fail the next use of the gpu.
+    // Eventually we will abandon the whole GPU if this fails.
+    this->submitToGpu(false);
 
-    // The image layout change serves as a barrier, so no semaphore is needed
+    // The image layout change serves as a barrier, so no semaphore is needed.
+    // If we ever decide we need to return a semaphore here, we need to make sure GrVkSemaphore is
+    // thread safe so that only the first thread that tries to use the semaphore actually submits
+    // it. This additionally would also require thread safety in command buffer submissions to
+    // queues in general.
     return nullptr;
 }
 
 void GrVkGpu::addDrawable(std::unique_ptr<SkDrawable::GpuDrawHandler> drawable) {
     fDrawables.emplace_back(std::move(drawable));
-}
-
-uint32_t GrVkGpu::getExtraSamplerKeyForProgram(const GrSamplerState& samplerState,
-                                               const GrBackendFormat& format) {
-    const GrVkYcbcrConversionInfo* ycbcrInfo = format.getVkYcbcrConversionInfo();
-    SkASSERT(ycbcrInfo);
-    if (!ycbcrInfo->isValid()) {
-        return 0;
-    }
-
-    const GrVkSampler* sampler = this->resourceProvider().findOrCreateCompatibleSampler(
-            samplerState, *ycbcrInfo);
-
-    return sampler->uniqueID();
 }
 
 void GrVkGpu::storeVkPipelineCacheData() {

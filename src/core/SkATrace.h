@@ -8,7 +8,7 @@
 #ifndef SkATrace_DEFINED
 #define SkATrace_DEFINED
 
-#include "SkEventTracer.h"
+#include "include/utils/SkEventTracer.h"
 
 /**
  * This class is used to support ATrace in android apps. It hooks into the SkEventTracer system. It
@@ -45,6 +45,9 @@ public:
     }
 
 private:
+    SkATrace(const SkATrace&) = delete;
+    SkATrace& operator=(const SkATrace&) = delete;
+
     void (*fBeginSection)(const char*);
     void (*fEndSection)(void);
     bool (*fIsEnabled)(void);

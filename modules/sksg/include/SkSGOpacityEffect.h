@@ -8,7 +8,7 @@
 #ifndef SkSGOpacityEffect_DEFINED
 #define SkSGOpacityEffect_DEFINED
 
-#include "SkSGEffectNode.h"
+#include "modules/sksg/include/SkSGEffectNode.h"
 
 namespace sksg {
 
@@ -35,7 +35,7 @@ protected:
 private:
     float fOpacity;
 
-    typedef EffectNode INHERITED;
+    using INHERITED = EffectNode;
 };
 
 } // namespace sksg

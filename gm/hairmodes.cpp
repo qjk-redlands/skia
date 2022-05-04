@@ -5,10 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkColorPriv.h"
-#include "SkShader.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
 
 constexpr SkBlendMode gModes[] = {
     SkBlendMode::kClear,
@@ -63,7 +75,7 @@ static sk_sp<SkShader> make_bg_shader() {
 
     SkMatrix m;
     m.setScale(SkIntToScalar(6), SkIntToScalar(6));
-    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, &m);
+    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat, SkSamplingOptions(), m);
 }
 
 namespace skiagm {
@@ -76,7 +88,7 @@ namespace skiagm {
             return SkString("hairmodes");
         }
 
-        virtual SkISize onISize() override { return SkISize::Make(640, 480); }
+        SkISize onISize() override { return SkISize::Make(640, 480); }
 
         void onOnceBeforeDraw() override {
             fBGPaint.setShader(make_bg_shader());
@@ -114,10 +126,10 @@ namespace skiagm {
         }
 
     private:
-        typedef GM INHERITED;
+        using INHERITED = GM;
     };
 
     //////////////////////////////////////////////////////////////////////////////
 
     DEF_GM( return new HairModesGM; )
-}
+}  // namespace skiagm

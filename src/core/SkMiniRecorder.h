@@ -8,9 +8,10 @@
 #ifndef SkMiniRecorder_DEFINED
 #define SkMiniRecorder_DEFINED
 
-#include "SkRecords.h"
-#include "SkScalar.h"
-#include "SkTypes.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkNoncopyable.h"
+#include "src/core/SkRecords.h"
 class SkCanvas;
 
 // Records small pictures, but only a limited subset of the canvas API, and may fail.
@@ -51,7 +52,7 @@ private:
         Max<sizeof(SkRecords::DrawPath),
         Max<sizeof(SkRecords::DrawRect),
             sizeof(SkRecords::DrawTextBlob)>::val>::val;
-    SkAlignedSStorage<kInlineStorage> fBuffer;
+    alignas(void*) alignas(double) char fBuffer[kInlineStorage];
 };
 
 #endif//SkMiniRecorder_DEFINED

@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkScanPriv.h"
+#include "src/core/SkScanPriv.h"
 
-#include "SkAntiRun.h"
-#include "SkBlitter.h"
-#include "SkMatrix.h"
-#include "SkPath.h"
-#include "SkPathPriv.h"
-#include "SkRegion.h"
-#include "SkTo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRegion.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkAntiRun.h"
+#include "src/core/SkBlitter.h"
+#include "src/core/SkPathPriv.h"
 
 #define SHIFT   SK_SUPERSAMPLE_SHIFT
 #define SCALE   (1 << SHIFT)
@@ -44,8 +44,7 @@ public:
                      const SkIRect& clipBounds, bool isInverse);
 
     /// Must be explicitly defined on subclasses.
-    virtual void blitAntiH(int x, int y, const SkAlpha antialias[],
-                           const int16_t runs[]) override {
+    void blitAntiH(int x, int y, const SkAlpha antialias[], const int16_t runs[]) override {
         SkDEBUGFAIL("How did I get here?");
     }
     /// May not be called on BaseSuperBlitter because it blits out of order.
@@ -658,7 +657,7 @@ static bool ShouldUseAAA(const SkPath& path, SkScalar avgLength, SkScalar comple
         // every pixel row/column is significantly greater than zero. Hence
         // Aanlytic AA is not likely to produce visible quality improvements,
         // and Analytic AA might be slower than supersampling.
-        return path.countPoints() < SkTMax(bounds.width(), bounds.height()) / 2 - 10;
+        return path.countPoints() < std::max(bounds.width(), bounds.height()) / 2 - 10;
     #else
         if (path.countPoints() >= path.getBounds().height()) {
             // SAA is faster than AAA in this case even if there are no
@@ -801,7 +800,7 @@ void SkScan::AntiFillPath(const SkPath& path, const SkRegion& origClip,
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkRasterClip.h"
+#include "src/core/SkRasterClip.h"
 
 void SkScan::FillPath(const SkPath& path, const SkRasterClip& clip, SkBlitter* blitter) {
     if (clip.isEmpty() || !path.isFinite()) {

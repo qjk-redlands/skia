@@ -8,10 +8,12 @@
 #ifndef GrShadowGeoProc_DEFINED
 #define GrShadowGeoProc_DEFINED
 
-#include "GrProcessor.h"
-#include "GrGeometryProcessor.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrProcessor.h"
 
 class GrGLRRectShadowGeoProc;
+class GrSurfaceProxyView;
 
 /**
  * The output color of this effect is a coverage mask for a rrect shadow,
@@ -19,8 +21,10 @@ class GrGLRRectShadowGeoProc;
  */
 class GrRRectShadowGeoProc : public GrGeometryProcessor {
 public:
-    static sk_sp<GrGeometryProcessor> Make() {
-        return sk_sp<GrGeometryProcessor>(new GrRRectShadowGeoProc());
+    static GrGeometryProcessor* Make(SkArenaAlloc* arena, const GrSurfaceProxyView& lutView) {
+        return arena->make([&](void* ptr) {
+            return new (ptr) GrRRectShadowGeoProc(lutView);
+        });
     }
 
     const char* name() const override { return "RRectShadow"; }
@@ -30,14 +34,19 @@ public:
     const Attribute& inShadowParams() const { return fInShadowParams; }
     GrColor color() const { return fColor; }
 
-    void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {}
+    void addToKey(const GrShaderCaps&, GrProcessorKeyBuilder*) const override {}
 
-    GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override;
+    std::unique_ptr<ProgramImpl> makeProgramImpl(const GrShaderCaps&) const override;
 
 private:
-    GrRRectShadowGeoProc();
+    class Impl;
+
+    GrRRectShadowGeoProc(const GrSurfaceProxyView& lutView);
+
+    const TextureSampler& onTextureSampler(int i) const override { return fLUTTextureSampler; }
 
     GrColor          fColor;
+    TextureSampler   fLUTTextureSampler;
 
     Attribute fInPosition;
     Attribute fInColor;
@@ -45,8 +54,7 @@ private:
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
-    typedef GrGeometryProcessor INHERITED;
+    using INHERITED = GrGeometryProcessor;
 };
-
 
 #endif

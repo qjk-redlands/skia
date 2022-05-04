@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=7e7c46bb4572e21e13529ff364eb0a9c
 REG_FIDDLE(Color_Type_RGB_565, 256, 96, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -10,7 +10,7 @@ void draw(SkCanvas* canvas) {
     bitmap.allocPixels(imageInfo);
     SkCanvas offscreen(bitmap);
     offscreen.clear(SK_ColorGREEN);
-    canvas->drawBitmap(bitmap, 0, 0);
+    canvas->drawImage(bitmap.asImage(), 0, 0);
     auto pack565 = [](unsigned r, unsigned g, unsigned b) -> uint16_t {
         return (b << 0) | (g << 5) | (r << 11);
     };
@@ -20,11 +20,11 @@ void draw(SkCanvas* canvas) {
                            pack565(0x00, 0x00, 0x0F), pack565(0x00, 0x00, 0x07) };
     SkPixmap redPixmap(imageInfo, &red565, imageInfo.minRowBytes());
     if (bitmap.writePixels(redPixmap, 0, 0)) {
-        canvas->drawBitmap(bitmap, 2, 2);
+        canvas->drawImage(bitmap.asImage(), 2, 2);
     }
     SkPixmap bluePixmap(imageInfo, &blue565, imageInfo.minRowBytes());
     if (bitmap.writePixels(bluePixmap, 0, 0)) {
-        canvas->drawBitmap(bitmap, 4, 4);
+        canvas->drawImage(bitmap.asImage(), 4, 4);
     }
 }
 }  // END FIDDLE

@@ -5,17 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "GrMtlTrampoline.h"
+#include "src/gpu/mtl/GrMtlTrampoline.h"
 
-#include "GrMtlGpu.h"
+#include "src/gpu/mtl/GrMtlGpu.h"
 
-sk_sp<GrGpu> GrMtlTrampoline::MakeGpu(GrContext* context,
+#if !__has_feature(objc_arc)
+#error This file must be compiled with Arc. Use -fobjc-arc flag
+#endif
+
+GR_NORETAIN_BEGIN
+
+sk_sp<GrGpu> GrMtlTrampoline::MakeGpu(const GrMtlBackendContext& backendContext,
                                       const GrContextOptions& options,
-                                      void* device,
-                                      void* queue) {
-    return GrMtlGpu::Make(context,
-                          options,
-                          (__bridge_transfer id<MTLDevice>)device,
-                          (__bridge_transfer id<MTLCommandQueue>)queue);
+                                      GrDirectContext* direct) {
+    return GrMtlGpu::Make(backendContext, options, direct);
 }
 
+GR_NORETAIN_END

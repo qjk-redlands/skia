@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "Response.h"
+#include "tools/skiaserve/Response.h"
 
-#include "Request.h"
+#include "tools/skiaserve/Request.h"
 
-#include "CommandLineFlags.h"
-#include "SkData.h"
-#include "SkString.h"
+#include "include/core/SkData.h"
+#include "include/core/SkString.h"
+#include "tools/flags/CommandLineFlags.h"
 
 #include "microhttpd.h"
 
@@ -25,7 +25,7 @@ static SkString generate_template(SkString source) {
         "<head>\n"
         "    <title>SkDebugger</title>\n"
         "    <meta charset='utf-8' />\n"
-        "    <meta http-equiv='X-UA-Compatible' content='IE=egde,chrome=1'>\n"
+        "    <meta http-equiv='X-UA-Compatible' content='IE=edge'>\n"
         "    <meta name='viewport' content='width=device-width, initial-scale=1.0'>\n"
         "    <script src='%s/res/js/core.js' type='text/javascript' charset='utf-8'></script>\n"
         "    <link href='%s/res/vul/elements.html' rel='import' />\n"

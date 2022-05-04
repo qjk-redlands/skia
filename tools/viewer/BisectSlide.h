@@ -8,9 +8,9 @@
 #ifndef BisectSlide_DEFINED
 #define BisectSlide_DEFINED
 
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "Slide.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPath.h"
+#include "tools/viewer/Slide.h"
 
 #include <stack>
 
@@ -23,7 +23,7 @@
  *   'Z': Back up one level.
  *   'D': Dump the path.
  */
-class BisectSlide : public Slide, public SkCanvas {
+class BisectSlide : public Slide {
 public:
     static sk_sp<BisectSlide> Create(const char filepath[]);
 
@@ -34,9 +34,6 @@ public:
 
 private:
     BisectSlide(const char filepath[]);
-
-    // SkCanvas override called only during creation.
-    void onDrawPath(const SkPath& path, const SkPaint& paint) override;
 
     struct FoundPath {
         SkPath fPath;

@@ -7,12 +7,18 @@
 #ifndef SkPDFFont_DEFINED
 #define SkPDFFont_DEFINED
 
-#include "SkAdvancedTypefaceMetrics.h"
-#include "SkPDFDocument.h"
-#include "SkPDFGlyphUse.h"
-#include "SkPDFTypes.h"
-#include "SkStrikeCache.h"
-#include "SkTypeface.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "src/core/SkAdvancedTypefaceMetrics.h"
+#include "src/core/SkStrikeCache.h"
+#include "src/pdf/SkPDFGlyphUse.h"
+#include "src/pdf/SkPDFTypes.h"
+
+#include <vector>
+
+class SkPDFDocument;
+class SkString;
 
 /** \class SkPDFFont
     A PDF Object class representing a font.  The font may have resources
@@ -23,7 +29,6 @@
 */
 class SkPDFFont {
 public:
-    SkPDFFont() {}
     ~SkPDFFont();
     SkPDFFont(SkPDFFont&&);
     SkPDFFont& operator=(SkPDFFont&&);
@@ -38,15 +43,14 @@ public:
      */
     SkAdvancedTypefaceMetrics::FontType getType() const { return fFontType; }
 
-    static SkAdvancedTypefaceMetrics::FontType FontType(const SkAdvancedTypefaceMetrics&);
+    static SkAdvancedTypefaceMetrics::FontType FontType(const SkTypeface&,
+                                                        const SkAdvancedTypefaceMetrics&);
     static void GetType1GlyphNames(const SkTypeface&, SkString*);
 
     static bool IsMultiByte(SkAdvancedTypefaceMetrics::FontType type) {
         return type == SkAdvancedTypefaceMetrics::kType1CID_Font ||
                type == SkAdvancedTypefaceMetrics::kTrueType_Font;
     }
-
-    static SkExclusiveStrikePtr MakeVectorCache(SkTypeface*, int* sizeOut);
 
     /** Returns true if this font encoding supports glyph IDs above 255.
      */
@@ -84,9 +88,8 @@ public:
      *  @param glyphID   Specify which section of a large font is of interest.
      */
     static SkPDFFont* GetFontResource(SkPDFDocument* doc,
-                                      SkStrike* cache,
-                                      SkTypeface* typeface,
-                                      SkGlyphID glyphID);
+                                      const SkGlyph* glyphs,
+                                      SkTypeface* typeface);
 
     /** Gets SkAdvancedTypefaceMetrics, and caches the result.
      *  @param typeface can not be nullptr.
@@ -97,6 +100,11 @@ public:
 
     static const std::vector<SkUnichar>& GetUnicodeMap(const SkTypeface* typeface,
                                                        SkPDFDocument* canon);
+
+    static void PopulateCommonFontDescriptor(SkPDFDict* descriptor,
+                                             const SkAdvancedTypefaceMetrics&,
+                                             uint16_t emSize,
+                                             int16_t defaultWidth);
 
     void emitSubset(SkPDFDocument*) const;
 
@@ -115,7 +123,7 @@ private:
     sk_sp<SkTypeface> fTypeface;
     SkPDFGlyphUse fGlyphUsage;
     SkPDFIndirectReference fIndirectReference;
-    SkAdvancedTypefaceMetrics::FontType fFontType = (SkAdvancedTypefaceMetrics::FontType)(-1);
+    SkAdvancedTypefaceMetrics::FontType fFontType;
 
     SkPDFFont(sk_sp<SkTypeface>,
               SkGlyphID firstGlyphID,
@@ -125,6 +133,7 @@ private:
     // The glyph IDs accessible with this font.  For Type1 (non CID) fonts,
     // this will be a subset if the font has more than 255 glyphs.
 
+    SkPDFFont() = delete;
     SkPDFFont(const SkPDFFont&) = delete;
     SkPDFFont& operator=(const SkPDFFont&) = delete;
 };

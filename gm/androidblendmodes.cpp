@@ -5,10 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkTextUtils.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/utils/SkTextUtils.h"
+#include "tools/ToolUtils.h"
+
+#include <initializer_list>
 
 namespace skiagm {
 
@@ -59,9 +71,9 @@ protected:
         canvas->saveLayer(nullptr, nullptr);
 
         SkPaint p;
-        canvas->drawBitmap(fCompositeDst, 0, 0, &p);
+        canvas->drawImage(fCompositeDst.asImage(), 0, 0, SkSamplingOptions(), &p);
         p.setBlendMode(mode);
-        canvas->drawBitmap(fCompositeSrc, 0, 0, &p);
+        canvas->drawImage(fCompositeSrc.asImage(), 0, 0, SkSamplingOptions(), &p);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -115,10 +127,10 @@ private:
     SkBitmap fCompositeSrc;
     SkBitmap fCompositeDst;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new AndroidBlendModesGM;)
-}
+}  // namespace skiagm

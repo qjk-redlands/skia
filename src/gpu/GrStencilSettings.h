@@ -9,8 +9,8 @@
 #ifndef GrStencilSettings_DEFINED
 #define GrStencilSettings_DEFINED
 
-#include "GrUserStencilSettings.h"
-#include "SkRegion.h"
+#include "include/core/SkRegion.h"
+#include "src/gpu/GrUserStencilSettings.h"
 
 class GrProcessorKeyBuilder;
 
@@ -68,7 +68,7 @@ public:
     bool usesWrapOp() const { SkASSERT(this->isValid());
                               return !(fFlags & kNoWrapOps_StencilFlag); }
 
-    void genKey(GrProcessorKeyBuilder* b) const;
+    void genKey(GrProcessorKeyBuilder* b, bool includeRefsAndMasks) const;
 
     bool operator!=(const GrStencilSettings& that) const { return !(*this == that); }
     bool operator==(const GrStencilSettings&) const;
@@ -78,47 +78,40 @@ public:
         void setDisabled();
     };
 
-    const Face& front() const { SkASSERT(!this->isDisabled()); return fFront; }
-    const Face& back() const { SkASSERT(this->isTwoSided()); return fBack; }
-
-    /**
-     * Given a thing to draw into the stencil clip, a fill type, and a set op
-     * this function determines:
-     *      1. Whether the thing can be draw directly to the stencil clip or
-     *      needs to be drawn to the client portion of the stencil first.
-     *      2. How many passes are needed.
-     *      3. What those passes are.
-     *
-     * @param op                the set op to combine this element with the existing clip
-     * @param canBeDirect       can the caller draw this element directly (without using stencil)?
-     * @param invertedFill      is this path inverted
-     * @param drawDirectToClip  out: true if caller should draw the element directly, false if it
-     *                          should draw it into the user stencil bits first.
-     *
-     * @return a null-terminated array of settings for stencil passes.
-     *
-     *         If drawDirectToClip is false, the caller must first draw the element into the user
-     *         stencil bits, and then cover the clip area with multiple passes using the returned
-     *         stencil settings.
-     *
-     *         If drawDirectToClip is true, the returned array will only have one pass and the
-     *         caller should use those stencil settings while drawing the element directly.
-     */
-    static GrUserStencilSettings const* const* GetClipPasses(SkRegion::Op op,
-                                                             bool canBeDirect,
-                                                             bool invertedFill,
-                                                             bool* drawDirectToClip);
+    const Face& singleSidedFace() const {
+        SkASSERT(!this->isDisabled());
+        SkASSERT(!this->isTwoSided());
+        return fCWFace;
+    }
+    // Returns the stencil settings for triangles that wind clockwise in "post-origin" space.
+    // (i.e., the space that results after a potential y-axis flip on device space for bottom-left
+    // origins.)
+    const Face& postOriginCWFace(GrSurfaceOrigin origin) const {
+        SkASSERT(this->isTwoSided());
+        return (kTopLeft_GrSurfaceOrigin == origin) ? fCWFace : fCCWFace;
+    }
+    // Returns the stencil settings for triangles that wind counter-clockwise in "post-origin"
+    // space. (i.e., the space that results after a potential y-axis flip on device space for
+    // bottom-left origins.)
+    const Face& postOriginCCWFace(GrSurfaceOrigin origin) const {
+        SkASSERT(this->isTwoSided());
+        return (kTopLeft_GrSurfaceOrigin == origin) ? fCCWFace : fCWFace;
+    }
 
     /** Gets the user stencil settings to directly set the clip bit. */
     static const GrUserStencilSettings* SetClipBitSettings(bool setToInside);
 
 private:
     // Internal flag for backends to optionally mark their tracked stencil state as invalid.
-    enum { kInvalid_PrivateFlag = (kLast_StencilFlag << 1) };
+    // NOTE: This value is outside the declared range of GrStencilFlags, but since that type is
+    // explicitly backed by 'int', it can still represent this constant. clang 11 complains about
+    // mixing enum types in bit operations, so this works around that.
+    inline static constexpr GrStencilFlags kInvalid_PrivateFlag =
+            static_cast<GrStencilFlags>(kLast_StencilFlag << 1);
 
     uint32_t   fFlags;
-    Face       fFront;
-    Face       fBack;
+    Face       fCWFace;
+    Face       fCCWFace;
 };
 
 #endif

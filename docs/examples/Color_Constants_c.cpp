@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=6971489f28291f08e429cc6ccc73b09b
 REG_FIDDLE(Color_Constants_c, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -15,7 +15,7 @@ void draw(SkCanvas* canvas) {
     pixmap.erase(SK_ColorBLACK, { 48, 48, 168, 168 } );
     SkBitmap bitmap;
     bitmap.installPixels(pixmap);
-    canvas->drawBitmap(bitmap, 0, 0);
-    canvas->drawBitmap(bitmap, 48, 48);
+    canvas->drawImage(bitmap.asImage(), 0, 0);
+    canvas->drawImage(bitmap.asImage(), 48, 48);
 }
 }  // END FIDDLE

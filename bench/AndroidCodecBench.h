@@ -8,12 +8,12 @@
 #ifndef AndroidCodecBench_DEFINED
 #define AndroidCodecBench_DEFINED
 
-#include "Benchmark.h"
-#include "SkAutoMalloc.h"
-#include "SkData.h"
-#include "SkImageInfo.h"
-#include "SkRefCnt.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkString.h"
+#include "src/core/SkAutoMalloc.h"
 
 /**
  *  Time SkAndroidCodec.
@@ -35,6 +35,6 @@ private:
     const int               fSampleSize;
     SkImageInfo             fInfo;          // Set in onDelayedSetup.
     SkAutoMalloc            fPixelStorage;  // Set in onDelayedSetup.
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 #endif // AndroidCodecBench_DEFINED

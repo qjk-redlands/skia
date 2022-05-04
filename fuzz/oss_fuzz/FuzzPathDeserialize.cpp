@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPath.h"
-#include "SkReadBuffer.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkReadBuffer.h"
 
 void FuzzPathDeserialize(SkReadBuffer& buf) {
     SkPath path;
@@ -26,9 +26,10 @@ void FuzzPathDeserialize(SkReadBuffer& buf) {
     s->getCanvas()->drawPath(path, SkPaint());
 }
 
-#if defined(IS_FUZZING_WITH_LIBFUZZER)
+// TODO(kjlubick): remove IS_FUZZING... after https://crrev.com/c/2410304 lands
+#if defined(SK_BUILD_FOR_LIBFUZZER) || defined(IS_FUZZING_WITH_LIBFUZZER)
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
-    if (size < 4) {
+    if (size < 4 || size > 2000) {
         return 0;
     }
     uint32_t packed;

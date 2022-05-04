@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "mac/SkUniqueCFRef.h"
-#include "SkCGUtils.h"
-#include "SkEncodedOrigin.h"
-#include "SkImageGeneratorCG.h"
-#include "SkPixmapPriv.h"
-#include "SkTemplates.h"
+#include "include/codec/SkEncodedOrigin.h"
+#include "include/ports/SkImageGeneratorCG.h"
+#include "include/private/SkTemplates.h"
+#include "include/utils/mac/SkCGUtils.h"
+#include "src/core/SkPixmapPriv.h"
+#include "src/utils/mac/SkUniqueCFRef.h"
 
 #ifdef SK_BUILD_FOR_MAC
 #include <ApplicationServices/ApplicationServices.h>
@@ -38,7 +38,7 @@ private:
     const sk_sp<SkData> fData;
     const SkEncodedOrigin fOrigin;
 
-    typedef SkImageGenerator INHERITED;
+    using INHERITED = SkImageGenerator;
 };
 
 static SkUniqueCFRef<CGImageSourceRef> data_to_CGImageSrc(SkData* data) {
@@ -92,7 +92,7 @@ std::unique_ptr<SkImageGenerator> SkImageGeneratorCG::MakeFromEncodedCG(sk_sp<Sk
         origin = (SkEncodedOrigin) originInt;
     }
 
-    if (SkPixmapPriv::ShouldSwapWidthHeight(origin)) {
+    if (SkEncodedOriginSwapsWidthHeight(origin)) {
         info = SkPixmapPriv::SwapWidthHeight(info);
     }
 

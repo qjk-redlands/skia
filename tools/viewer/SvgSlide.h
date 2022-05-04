@@ -8,7 +8,7 @@
 #ifndef SvgSlide_DEFINED
 #define SvgSlide_DEFINED
 
-#include "Slide.h"
+#include "tools/viewer/Slide.h"
 
 class SkSVGDOM;
 
@@ -18,6 +18,7 @@ public:
 
     void load(SkScalar winWidth, SkScalar winHeight) override;
     void unload() override;
+    void resize(SkScalar, SkScalar) override;
 
     SkISize getDimensions() const override;
 
@@ -28,7 +29,7 @@ private:
     SkSize          fWinSize = SkSize::MakeEmpty();
     sk_sp<SkSVGDOM> fDom;
 
-    typedef Slide INHERITED;
+    using INHERITED = Slide;
 };
 
 #endif // SvgSlide_DEFINED

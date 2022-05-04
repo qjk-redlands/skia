@@ -15,12 +15,14 @@ import os
 import shutil
 import subprocess
 
+
 # See https://cloud.google.com/sdk/downloads#versioned for documentation on
 # scripting gcloud and also for updates.
 BASE_URL = 'https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/%s'
 GCLOUD_BASE_NAME='google-cloud-sdk'
-GCLOUD_ARCHIVE = '%s-215.0.0-linux-x86_64.tar.gz' % GCLOUD_BASE_NAME
+GCLOUD_ARCHIVE = '%s-343.0.0-linux-x86_64.tar.gz' % GCLOUD_BASE_NAME
 GCLOUD_URL = BASE_URL % GCLOUD_ARCHIVE
+
 
 def create_asset(target_dir):
   """Create the asset."""
@@ -46,16 +48,25 @@ def create_asset(target_dir):
   subprocess.check_call([gcloud_exe, 'components',
                          'install', 'pubsub-emulator',
                          '--quiet'], env=env)
+  subprocess.check_call([gcloud_exe, 'components',
+                         'install', 'beta', 'cloud-firestore-emulator',
+                         '--quiet'], env=env)
+  # As of gcloud v250.0.0 and Cloud Firestore Emulator v1.4.6, there is a bug
+  # that something expects the JAR to be executable, but it isn't.
+  fs_jar = 'platform/cloud-firestore-emulator/cloud-firestore-emulator.jar'
+  subprocess.check_call(['chmod', '+x', os.path.join(target_dir, fs_jar)])
   subprocess.check_call([gcloud_exe, 'components','update', '--quiet'], env=env)
 
   # Remove the tarball.
   os.remove(GCLOUD_ARCHIVE)
+
 
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--target_dir', '-t', required=True)
   args = parser.parse_args()
   create_asset(args.target_dir)
+
 
 if __name__ == '__main__':
   main()

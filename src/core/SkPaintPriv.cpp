@@ -5,15 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "SkColorFilter.h"
-#include "SkPaintPriv.h"
-#include "SkPaint.h"
-#include "SkShaderBase.h"
-#include "SkXfermodePriv.h"
+#include "include/core/SkPaint.h"
+#include "src/core/SkColorFilterBase.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkPaintPriv.h"
+#include "src/core/SkXfermodePriv.h"
+#include "src/shaders/SkColorFilterShader.h"
+#include "src/shaders/SkShaderBase.h"
 
 static bool changes_alpha(const SkPaint& paint) {
     SkColorFilter* cf = paint.getColorFilter();
-    return cf && !(cf->getFlags() & SkColorFilter::kAlphaUnchanged_Flag);
+    return cf && !as_CFB(cf)->isAlphaUnchanged();
 }
 
 bool SkPaintPriv::Overwrites(const SkPaint* paint, ShaderOverrideOpacity overrideOpacity) {
@@ -40,7 +42,11 @@ bool SkPaintPriv::Overwrites(const SkPaint* paint, ShaderOverrideOpacity overrid
         }
     }
 
-    return SkXfermode::IsOpaque(paint->getBlendMode(), opacityType);
+    const auto bm = paint->asBlendMode();
+    if (!bm) {
+        return false;   // don't know for sure, so we play it safe and return false.
+    }
+    return SkXfermode::IsOpaque(bm.value(), opacityType);
 }
 
 bool SkPaintPriv::ShouldDither(const SkPaint& p, SkColorType dstCT) {
@@ -55,8 +61,8 @@ bool SkPaintPriv::ShouldDither(const SkPaint& p, SkColorType dstCT) {
     }
 
     // Otherwise, dither is only needed for non-const paints.
-    return p.getImageFilter() || p.getMaskFilter()
-        || !p.getShader() || !as_SB(p.getShader())->isConstant();
+    return p.getImageFilter() || p.getMaskFilter() ||
+           (p.getShader() && !as_SB(p.getShader())->isConstant());
 }
 
 // return true if the paint is just a single color (i.e. not a shader). If its
@@ -83,4 +89,33 @@ SkColor SkPaintPriv::ComputeLuminanceColor(const SkPaint& paint) {
         c = SkColorSetRGB(0x7F, 0x80, 0x7F);
     }
     return c;
+}
+
+void SkPaintPriv::RemoveColorFilter(SkPaint* p, SkColorSpace* dstCS) {
+    if (SkColorFilter* filter = p->getColorFilter()) {
+        if (SkShader* shader = p->getShader()) {
+            // SkColorFilterShader will modulate the shader color by paint alpha
+            // before applying the filter, so we'll reset it to opaque.
+            p->setShader(sk_make_sp<SkColorFilterShader>(sk_ref_sp(shader),
+                                                         p->getAlphaf(),
+                                                         sk_ref_sp(filter)));
+            p->setAlphaf(1.0f);
+        } else {
+            p->setColor(filter->filterColor4f(p->getColor4f(), sk_srgb_singleton(), dstCS), dstCS);
+        }
+        p->setColorFilter(nullptr);
+    }
+}
+
+SkScalar SkPaintPriv::ComputeResScaleForStroking(const SkMatrix& matrix) {
+    // Not sure how to handle perspective differently, so we just don't try (yet)
+    SkScalar sx = SkPoint::Length(matrix[SkMatrix::kMScaleX], matrix[SkMatrix::kMSkewY]);
+    SkScalar sy = SkPoint::Length(matrix[SkMatrix::kMSkewX],  matrix[SkMatrix::kMScaleY]);
+    if (SkScalarsAreFinite(sx, sy)) {
+        SkScalar scale = std::max(sx, sy);
+        if (scale > 0) {
+            return scale;
+        }
+    }
+    return 1;
 }

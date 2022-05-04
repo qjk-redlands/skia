@@ -1,18 +1,18 @@
-﻿/*
+/*
  * Copyright 2018 Google Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "ToolUtils.h"
+#include "samplecode/Sample.h"
+#include "tools/ToolUtils.h"
 
-#include "AnimTimer.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkRRect.h"
-#include "SkRandom.h"
-#include "SkTypeface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRRect.h"
+#include "include/core/SkTypeface.h"
+#include "include/utils/SkRandom.h"
+#include "tools/timer/TimeUtils.h"
 
 #include <cmath>
 
@@ -30,13 +30,7 @@ protected:
         fEmojiFont.fText     = ToolUtils::emoji_sample_text();
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "Glyph Transform");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("Glyph Transform"); }
 
     void onDrawContent(SkCanvas* canvas) override {
         SkPaint paint;
@@ -55,14 +49,14 @@ protected:
 
         // d3 by default anchors text around the middle
         SkRect bounds;
-        font.measureText(text, strlen(text), kUTF8_SkTextEncoding, &bounds);
-        canvas->drawSimpleText(text, strlen(text), kUTF8_SkTextEncoding, -bounds.centerX(), -bounds.centerY(),
+        font.measureText(text, strlen(text), SkTextEncoding::kUTF8, &bounds);
+        canvas->drawSimpleText(text, strlen(text), SkTextEncoding::kUTF8, -bounds.centerX(), -bounds.centerY(),
                                font, paint);
     }
 
-    bool onAnimate(const AnimTimer& timer) override {
+    bool onAnimate(double nanos) override {
         constexpr SkScalar maxt = 100000;
-        double t = timer.pingPong(20, 0, 0, maxt); // d3 t is in milliseconds
+        double t = TimeUtils::PingPong(1e-9 * nanos, 20, 0, 0, maxt); // d3 t is in milliseconds
 
         fTranslate.set(sin(t / 3000) - t * this->width() * 0.7 / maxt, sin(t / 999) / t);
         fScale = 4.5 - std::sqrt(t) / 99;
@@ -81,7 +75,7 @@ private:
     SkScalar fScale;
     SkScalar fRotate;
 
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////

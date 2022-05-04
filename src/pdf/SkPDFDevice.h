@@ -8,20 +8,20 @@
 #ifndef SkPDFDevice_DEFINED
 #define SkPDFDevice_DEFINED
 
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkClipStack.h"
-#include "SkClipStackDevice.h"
-#include "SkData.h"
-#include "SkKeyedImage.h"
-#include "SkPDFGraphicStackState.h"
-#include "SkPDFTypes.h"
-#include "SkPaint.h"
-#include "SkRect.h"
-#include "SkRefCnt.h"
-#include "SkStream.h"
-#include "SkTHash.h"
-#include "SkTextBlobPriv.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkData.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkTHash.h"
+#include "src/core/SkClipStack.h"
+#include "src/core/SkClipStackDevice.h"
+#include "src/core/SkTextBlobPriv.h"
+#include "src/pdf/SkKeyedImage.h"
+#include "src/pdf/SkPDFGraphicStackState.h"
+#include "src/pdf/SkPDFTypes.h"
 
 #include <vector>
 
@@ -77,23 +77,19 @@ public:
     void drawOval(const SkRect& oval, const SkPaint& paint) override;
     void drawRRect(const SkRRect& rr, const SkPaint& paint) override;
     void drawPath(const SkPath& origpath, const SkPaint& paint, bool pathIsMutable) override;
-    void drawBitmapRect(const SkBitmap& bitmap, const SkRect* src,
-                        const SkRect& dst, const SkPaint&, SkCanvas::SrcRectConstraint) override;
-    void drawSprite(const SkBitmap& bitmap, int x, int y,
-                    const SkPaint& paint) override;
 
     void drawImageRect(const SkImage*,
                        const SkRect* src,
                        const SkRect& dst,
+                       const SkSamplingOptions&,
                        const SkPaint&,
                        SkCanvas::SrcRectConstraint) override;
-    void drawGlyphRunList(const SkGlyphRunList& glyphRunList) override;
-    void drawVertices(const SkVertices*, const SkVertices::Bone bones[], int boneCount, SkBlendMode,
-                      const SkPaint&) override;
-    void drawDevice(SkBaseDevice*, int x, int y,
-                    const SkPaint&) override;
+    void onDrawGlyphRunList(const SkGlyphRunList& glyphRunList, const SkPaint& paint) override;
+    void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) override;
 
     // PDF specific methods.
+    void drawSprite(const SkBitmap& bitmap, int x, int y,
+                    const SkPaint& paint);
 
     /** Create the resource dictionary for this device. Destructive. */
     std::unique_ptr<SkPDFDict> makeResourceDict();
@@ -105,8 +101,6 @@ public:
     SkISize size() const { return this->imageInfo().dimensions(); }
     SkIRect bounds() const { return this->imageInfo().bounds(); }
 
-    void DrawGlyphRunAsPath(SkPDFDevice* dev, const SkGlyphRun& glyphRun, SkPoint offset);
-
     const SkMatrix& initialTransform() const { return fInitialTransform; }
 
 protected:
@@ -114,11 +108,12 @@ protected:
 
     void drawAnnotation(const SkRect&, const char key[], SkData* value) override;
 
-    void drawSpecial(SkSpecialImage*, int x, int y, const SkPaint&,
-                     SkImage*, const SkMatrix&) override;
+    void drawDevice(SkBaseDevice*, const SkSamplingOptions&, const SkPaint&) override;
+    void drawSpecial(SkSpecialImage*, const SkMatrix&, const SkSamplingOptions&,
+                     const SkPaint&) override;
+
     sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
     sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
-    sk_sp<SkSpecialImage> snapSpecial() override;
     SkImageFilterCache* getImageFilterCache() override;
 
 private:
@@ -171,6 +166,7 @@ private:
     void internalDrawImageRect(SkKeyedImage,
                                const SkRect* src,
                                const SkRect& dst,
+                               const SkSamplingOptions&,
                                const SkPaint&,
                                const SkMatrix& canvasTransformationMatrix);
 
@@ -195,7 +191,7 @@ private:
 
     void reset();
 
-    typedef SkClipStackDevice INHERITED;
+    using INHERITED = SkClipStackDevice;
 };
 
 #endif

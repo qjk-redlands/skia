@@ -8,19 +8,18 @@
 #ifndef SkPathMeasure_DEFINED
 #define SkPathMeasure_DEFINED
 
-#include "../private/SkNoncopyable.h"
-#include "../private/SkTDArray.h"
-#include "SkContourMeasure.h"
-#include "SkPath.h"
+#include "include/core/SkContourMeasure.h"
+#include "include/core/SkPath.h"
+#include "include/private/SkTDArray.h"
 
-class SK_API SkPathMeasure : SkNoncopyable {
+class SK_API SkPathMeasure {
 public:
     SkPathMeasure();
     /** Initialize the pathmeasure with the specified path. The parts of the path that are needed
      *  are copied, so the client is free to modify/delete the path after this call.
      *
      *  resScale controls the precision of the measure. values > 1 increase the
-     *  precision (and possible slow down the computation).
+     *  precision (and possibly slow down the computation).
      */
     SkPathMeasure(const SkPath& path, bool forceClosed, SkScalar resScale = 1);
     ~SkPathMeasure();
@@ -81,6 +80,9 @@ public:
 private:
     SkContourMeasureIter    fIter;
     sk_sp<SkContourMeasure> fContour;
+
+    SkPathMeasure(const SkPathMeasure&) = delete;
+    SkPathMeasure& operator=(const SkPathMeasure&) = delete;
 };
 
 #endif

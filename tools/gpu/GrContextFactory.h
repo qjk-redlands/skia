@@ -8,11 +8,11 @@
 #ifndef GrContextFactory_DEFINED
 #define GrContextFactory_DEFINED
 
-#include "GrContext.h"
-#include "GrContextOptions.h"
+#include "include/gpu/GrContextOptions.h"
+#include "include/gpu/GrDirectContext.h"
 
-#include "gl/GLTestContext.h"
-#include "SkTArray.h"
+#include "include/private/SkTArray.h"
+#include "tools/gpu/gl/GLTestContext.h"
 
 struct GrVkBackendContext;
 
@@ -31,17 +31,20 @@ public:
     // The availability of context types is subject to platform and build configuration
     // restrictions.
     enum ContextType {
-        kGL_ContextType,             //! OpenGL context.
-        kGLES_ContextType,           //! OpenGL ES context.
-        kANGLE_D3D9_ES2_ContextType, //! ANGLE on Direct3D9 OpenGL ES 2 context.
-        kANGLE_D3D11_ES2_ContextType,//! ANGLE on Direct3D11 OpenGL ES 2 context.
-        kANGLE_D3D11_ES3_ContextType,//! ANGLE on Direct3D11 OpenGL ES 3 context.
-        kANGLE_GL_ES2_ContextType,   //! ANGLE on OpenGL OpenGL ES 2 context.
-        kANGLE_GL_ES3_ContextType,   //! ANGLE on OpenGL OpenGL ES 3 context.
-        kCommandBuffer_ContextType,  //! Chromium command buffer OpenGL ES context.
-        kVulkan_ContextType,         //! Vulkan
-        kMetal_ContextType,          //! Metal
-        kMock_ContextType,           //! Mock context that does not draw.
+        kGL_ContextType,                 //! OpenGL context.
+        kGLES_ContextType,               //! OpenGL ES context.
+        kANGLE_D3D9_ES2_ContextType,     //! ANGLE on Direct3D9 OpenGL ES 2 context.
+        kANGLE_D3D11_ES2_ContextType,    //! ANGLE on Direct3D11 OpenGL ES 2 context.
+        kANGLE_D3D11_ES3_ContextType,    //! ANGLE on Direct3D11 OpenGL ES 3 context.
+        kANGLE_GL_ES2_ContextType,       //! ANGLE on OpenGL OpenGL ES 2 context.
+        kANGLE_GL_ES3_ContextType,       //! ANGLE on OpenGL OpenGL ES 3 context.
+        kCommandBuffer_ES2_ContextType,  //! Chromium command buffer OpenGL ES 2 context.
+        kCommandBuffer_ES3_ContextType,  //! Chromium command buffer OpenGL ES 3 context.
+        kVulkan_ContextType,             //! Vulkan
+        kMetal_ContextType,              //! Metal
+        kDirect3D_ContextType,           //! Direct3D 12
+        kDawn_ContextType,               //! Dawn
+        kMock_ContextType,               //! Mock context that does not draw.
         kLastContextType = kMock_ContextType
     };
 
@@ -53,10 +56,9 @@ public:
      */
     enum class ContextOverrides {
         kNone                          = 0x0,
-        kDisableNVPR                   = 0x1,
-        kAvoidStencilBuffers           = 0x2,
-
-        kRequireNVPRSupport            = 0x4,
+        kAvoidStencilBuffers           = 0x1,
+        kFakeGLESVersionAs2            = 0x2,
+        kReducedShaders                = 0x4,
     };
 
     static bool IsRenderingContext(ContextType type) {
@@ -74,6 +76,10 @@ public:
                 return GrBackendApi::kVulkan;
             case kMetal_ContextType:
                 return GrBackendApi::kMetal;
+            case kDirect3D_ContextType:
+                return GrBackendApi::kDirect3D;
+            case kDawn_ContextType:
+                return GrBackendApi::kDawn;
             case kMock_ContextType:
                 return GrBackendApi::kMock;
             default:
@@ -97,17 +103,22 @@ public:
                 return "ANGLE GL ES2";
             case kANGLE_GL_ES3_ContextType:
                 return "ANGLE GL ES3";
-            case kCommandBuffer_ContextType:
-                return "Command Buffer";
+            case kCommandBuffer_ES2_ContextType:
+                return "Command Buffer ES2";
+            case kCommandBuffer_ES3_ContextType:
+                return "Command Buffer ES3";
             case kVulkan_ContextType:
                 return "Vulkan";
             case kMetal_ContextType:
                 return "Metal";
+            case kDirect3D_ContextType:
+                return "Direct3D";
+            case kDawn_ContextType:
+                return "Dawn";
             case kMock_ContextType:
                 return "Mock";
         }
         SK_ABORT("Unreachable");
-        return "Unknown";
     }
 
     explicit GrContextFactory(const GrContextOptions& opts);
@@ -122,37 +133,36 @@ public:
     /**
      * Get a context initialized with a type of GL context. It also makes the GL context current.
      */
-    ContextInfo getContextInfo(ContextType type,
-                               ContextOverrides overrides = ContextOverrides::kNone);
+    ContextInfo getContextInfo(ContextType type, ContextOverrides = ContextOverrides::kNone);
 
     /**
      * Get a context in the same share group as the passed in GrContext, with the same type and
      * overrides. To get multiple contexts in a single share group, pass the same shareContext,
      * with different values for shareIndex.
      */
-    ContextInfo getSharedContextInfo(GrContext* shareContext, uint32_t shareIndex = 0);
+    ContextInfo getSharedContextInfo(GrDirectContext* shareContext, uint32_t shareIndex = 0);
 
     /**
      * Get a GrContext initialized with a type of GL context. It also makes the GL context current.
      */
-    GrContext* get(ContextType type, ContextOverrides overrides = ContextOverrides::kNone);
+    GrDirectContext* get(ContextType type, ContextOverrides overrides = ContextOverrides::kNone);
     const GrContextOptions& getGlobalOptions() const { return fGlobalOptions; }
 
 private:
     ContextInfo getContextInfoInternal(ContextType type, ContextOverrides overrides,
-                                       GrContext* shareContext, uint32_t shareIndex);
+                                       GrDirectContext* shareContext, uint32_t shareIndex);
 
     struct Context {
         ContextType       fType;
         ContextOverrides  fOverrides;
         GrContextOptions  fOptions;
-        GrBackendApi         fBackend;
+        GrBackendApi      fBackend;
         TestContext*      fTestContext;
-        GrContext*        fGrContext;
-        GrContext*        fShareContext;
+        GrDirectContext*  fGrContext;
+        GrDirectContext*  fShareContext;
         uint32_t          fShareIndex;
 
-        bool            fAbandoned;
+        bool              fAbandoned;
     };
     SkTArray<Context, true>         fContexts;
     std::unique_ptr<GLTestContext>  fSentinelGLContext;
@@ -162,31 +172,35 @@ private:
 class ContextInfo {
 public:
     ContextInfo() = default;
+    ContextInfo(const ContextInfo&) = default;
     ContextInfo& operator=(const ContextInfo&) = default;
 
     GrContextFactory::ContextType type() const { return fType; }
     GrBackendApi backend() const { return GrContextFactory::ContextTypeBackend(fType); }
 
-    GrContext* grContext() const { return fGrContext; }
-
+    GrDirectContext* directContext() const { return fContext; }
     TestContext* testContext() const { return fTestContext; }
 
+#ifdef SK_GL
     GLTestContext* glContext() const {
         SkASSERT(GrBackendApi::kOpenGL == this->backend());
         return static_cast<GLTestContext*>(fTestContext);
     }
+#endif
 
     const GrContextOptions& options() const { return fOptions; }
 
 private:
-    ContextInfo(GrContextFactory::ContextType type, TestContext* testContext, GrContext* grContext,
+    ContextInfo(GrContextFactory::ContextType type,
+                TestContext* testContext,
+                GrDirectContext* context,
                 const GrContextOptions& options)
-            : fType(type), fTestContext(testContext), fGrContext(grContext), fOptions(options) {}
+            : fType(type), fTestContext(testContext), fContext(context), fOptions(options) {}
 
     GrContextFactory::ContextType fType = GrContextFactory::kGL_ContextType;
     // Valid until the factory destroys it via abandonContexts() or destroyContexts().
     TestContext* fTestContext = nullptr;
-    GrContext* fGrContext = nullptr;
+    GrDirectContext* fContext = nullptr;
     GrContextOptions fOptions;
 
     friend class GrContextFactory;
@@ -194,6 +208,6 @@ private:
 
 }  // namespace sk_gpu_test
 
-GR_MAKE_BITFIELD_CLASS_OPS(sk_gpu_test::GrContextFactory::ContextOverrides);
+GR_MAKE_BITFIELD_CLASS_OPS(sk_gpu_test::GrContextFactory::ContextOverrides)
 
 #endif

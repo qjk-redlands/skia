@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=56ede4b7d45c15d5936f81ac3d74f070
 REG_FIDDLE(Bitmap_shiftPerPixel, 256, 256, true, 0) {
 void draw(SkCanvas* canvas) {
@@ -17,7 +17,7 @@ void draw(SkCanvas* canvas) {
                                  } ) {
         bitmap.setInfo(info.makeColorType(colorType));
         SkDebugf("color: k" "%s" "_SkColorType" "%*s" "shiftPerPixel: %d\n",
-                colors[colorType], 14 - strlen(colors[colorType]), " ",
+                colors[colorType], (int)(14 - strlen(colors[colorType])), " ",
                 bitmap.shiftPerPixel());
     }
 }

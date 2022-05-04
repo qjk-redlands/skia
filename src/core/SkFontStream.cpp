@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkAutoMalloc.h"
-#include "SkEndian.h"
-#include "SkFontStream.h"
-#include "SkStream.h"
+#include "include/core/SkStream.h"
+#include "src/core/SkAutoMalloc.h"
+#include "src/core/SkEndian.h"
+#include "src/core/SkFontStream.h"
 
 struct SkSFNTHeader {
     uint32_t    fVersion;
@@ -180,8 +180,8 @@ size_t SkFontStream::GetTableData(SkStream* stream, int ttcIndex,
         if (SkEndian_SwapBE32(header.fDir[i].fTag) == tag) {
             size_t realOffset = SkEndian_SwapBE32(header.fDir[i].fOffset);
             size_t realLength = SkEndian_SwapBE32(header.fDir[i].fLength);
-            // now sanity check the caller's offset/length
             if (offset >= realLength) {
+                // invalid
                 return 0;
             }
             // if the caller is trusting the length from the file, then a

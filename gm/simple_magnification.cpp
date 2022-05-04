@@ -5,13 +5,28 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkColorPriv.h"
-#include "SkImageSource.h"
-#include "SkMagnifierImageFilter.h"
-#include "SkSurface.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkImageFilters.h"
+#include "include/gpu/GrTypes.h"
 
-static sk_sp<SkImage> make_image(GrContext* context, int size, GrSurfaceOrigin origin) {
+#include <utility>
+
+static sk_sp<SkImage> make_image(GrRecordingContext* context, int size, GrSurfaceOrigin origin) {
     if (context) {
         SkImageInfo ii = SkImageInfo::Make(size, size, kN32_SkColorType, kPremul_SkAlphaType);
         sk_sp<SkSurface> surf(SkSurface::MakeRenderTarget(context, SkBudgeted::kYes, ii, 0,
@@ -45,7 +60,7 @@ static sk_sp<SkImage> make_image(GrContext* context, int size, GrSurfaceOrigin o
     *bm.getAddr32(2, 1) = SkPackARGB32(0xFF, 0x00, 0x00, 0xFF);
     *bm.getAddr32(1, 2) = SkPackARGB32(0xFF, 0x00, 0xFF, 0xFF);
     *bm.getAddr32(2, 2) = SkPackARGB32(0xFF, 0x88, 0x88, 0x88);
-    return SkImage::MakeFromBitmap(bm);
+    return bm.asImage();
 }
 
 /*
@@ -80,10 +95,10 @@ protected:
     }
 
     void draw(SkCanvas* canvas, sk_sp<SkImage> image, const SkIPoint& offset, int inset) {
-        sk_sp<SkImageFilter> imgSrc(SkImageSource::Make(std::move(image)));
+        sk_sp<SkImageFilter> imgSrc(SkImageFilters::Image(std::move(image)));
 
         SkRect srcRect = SkRect::MakeXYWH(1.0f, 1.0f, 2.0f, 2.0f);
-        sk_sp<SkImageFilter> magFilter(SkMagnifierImageFilter::Make(srcRect, inset, imgSrc));
+        sk_sp<SkImageFilter> magFilter(SkImageFilters::Magnifier(srcRect, inset, imgSrc));
 
         SkPaint paint;
         paint.setImageFilter(std::move(magFilter));
@@ -97,7 +112,7 @@ protected:
     }
 
     DrawResult onDraw(SkCanvas* canvas, SkString* errorMsg) override {
-        GrContext* context = canvas->getGrContext();
+        auto context = canvas->recordingContext();
 
         sk_sp<SkImage> bottomLImg = make_image(context, kImgSize, kBottomLeft_GrSurfaceOrigin);
         sk_sp<SkImage> topLImg = make_image(context, kImgSize, kTopLeft_GrSurfaceOrigin);
@@ -119,7 +134,7 @@ private:
     static const int kImgSize = 33;
     static const int kPad = 2;
 
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////

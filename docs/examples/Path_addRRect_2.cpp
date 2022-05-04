@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=888edd4c4a91ca62ceb01bce8ab675b2
 REG_FIDDLE(Path_addRRect_2, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -13,7 +13,7 @@ void draw(SkCanvas* canvas) {
     canvas->drawPath(path, paint);
     for (int start = 0; start < 8; ++start) {
         SkPath textPath;
-        textPath.addRRect(rrect, SkPath::kCW_Direction, start);
+        textPath.addRRect(rrect, SkPathDirection::kCW, start);
         SkPathMeasure pathMeasure(textPath, false);
         SkPoint position;
         SkVector tangent;

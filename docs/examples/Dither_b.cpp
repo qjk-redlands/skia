@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=76d4d4a7931a48495e4d5f54e073be53
 REG_FIDDLE(Dither_b, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -15,12 +15,14 @@ void draw(SkCanvas* canvas) {
                      points, colors, nullptr, SK_ARRAY_COUNT(colors),
                      SkTileMode::kClamp));
     paint.setDither(true);
+    auto img = bm32.asImage();
     c32.drawPaint(paint);
     canvas->scale(12, 12);
-    canvas->drawBitmap(bm32, 0, 0);
+    canvas->drawImage(img, 0, 0);
     paint.setBlendMode(SkBlendMode::kPlus);
-    canvas->drawBitmap(bm32, 0, 11, &paint);
-    canvas->drawBitmap(bm32, 0, 11, &paint);
-    canvas->drawBitmap(bm32, 0, 11, &paint);
+    SkSamplingOptions sampling;
+    canvas->drawImage(img, 0, 11, sampling, &paint);
+    canvas->drawImage(img, 0, 11, sampling, &paint);
+    canvas->drawImage(img, 0, 11, sampling, &paint);
 }
 }  // END FIDDLE

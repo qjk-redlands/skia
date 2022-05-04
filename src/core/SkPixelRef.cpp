@@ -5,11 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmapCache.h"
-#include "SkMutex.h"
-#include "SkNextID.h"
-#include "SkPixelRef.h"
-#include "SkTraceEvent.h"
+#include "include/core/SkPixelRef.h"
+#include "include/private/SkMutex.h"
+#include "src/core/SkBitmapCache.h"
+#include "src/core/SkNextID.h"
+#include "src/core/SkPixelRefPriv.h"
+#include "src/core/SkTraceEvent.h"
+
 #include <atomic>
 
 uint32_t SkNextID::ImageID() {
@@ -18,7 +20,7 @@ uint32_t SkNextID::ImageID() {
 
     uint32_t id;
     do {
-        id = nextID.fetch_add(2);
+        id = nextID.fetch_add(2, std::memory_order_relaxed);
     } while (id == 0);
     return id;
 }
@@ -71,31 +73,28 @@ uint32_t SkPixelRef::getGenerationID() const {
     return id & ~1u;  // Mask off bottom unique bit.
 }
 
-void SkPixelRef::addGenIDChangeListener(GenIDChangeListener* listener) {
-    if (nullptr == listener || !this->genIDIsUnique()) {
+void SkPixelRef::addGenIDChangeListener(sk_sp<SkIDChangeListener> listener) {
+    if (!listener || !this->genIDIsUnique()) {
         // No point in tracking this if we're not going to call it.
-        delete listener;
         return;
     }
-    SkAutoMutexAcquire lock(fGenIDChangeListenersMutex);
-    *fGenIDChangeListeners.append() = listener;
+    SkASSERT(!listener->shouldDeregister());
+    fGenIDChangeListeners.add(std::move(listener));
 }
 
 // we need to be called *before* the genID gets changed or zerod
 void SkPixelRef::callGenIDChangeListeners() {
-    SkAutoMutexAcquire lock(fGenIDChangeListenersMutex);
     // We don't invalidate ourselves if we think another SkPixelRef is sharing our genID.
     if (this->genIDIsUnique()) {
-        for (int i = 0; i < fGenIDChangeListeners.count(); i++) {
-            fGenIDChangeListeners[i]->onChange();
-        }
-
+        fGenIDChangeListeners.changed();
         if (fAddedToCache.exchange(false)) {
             SkNotifyBitmapGenIDIsStale(this->getGenerationID());
         }
+    } else {
+        // Listeners get at most one shot, so even though these weren't triggered or not, blow them
+        // away.
+        fGenIDChangeListeners.reset();
     }
-    // Listeners get at most one shot, so whether these triggered or not, blow them away.
-    fGenIDChangeListeners.deleteAll();
 }
 
 void SkPixelRef::notifyPixelsChanged() {
@@ -131,4 +130,20 @@ void SkPixelRef::setTemporarilyImmutable() {
 void SkPixelRef::restoreMutability() {
     SkASSERT(fMutability != kImmutable);
     fMutability = kMutable;
+}
+
+sk_sp<SkPixelRef> SkMakePixelRefWithProc(int width, int height, size_t rowBytes, void* addr,
+                                         void (*releaseProc)(void* addr, void* ctx), void* ctx) {
+    SkASSERT(width >= 0 && height >= 0);
+    if (nullptr == releaseProc) {
+        return sk_make_sp<SkPixelRef>(width, height, addr, rowBytes);
+    }
+    struct PixelRef final : public SkPixelRef {
+        void (*fReleaseProc)(void*, void*);
+        void* fReleaseProcContext;
+        PixelRef(int w, int h, void* s, size_t r, void (*proc)(void*, void*), void* ctx)
+            : SkPixelRef(w, h, s, r), fReleaseProc(proc), fReleaseProcContext(ctx) {}
+        ~PixelRef() override { fReleaseProc(this->pixels(), fReleaseProcContext); }
+    };
+    return sk_sp<SkPixelRef>(new PixelRef(width, height, addr, rowBytes, releaseProc, ctx));
 }

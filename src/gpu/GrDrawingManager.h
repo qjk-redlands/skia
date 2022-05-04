@@ -8,153 +8,200 @@
 #ifndef GrDrawingManager_DEFINED
 #define GrDrawingManager_DEFINED
 
-#include "GrBufferAllocPool.h"
-#include "GrDeferredUpload.h"
-#include "GrPathRenderer.h"
-#include "GrPathRendererChain.h"
-#include "GrResourceCache.h"
-#include "SkSurface.h"
-#include "SkTArray.h"
-#include "text/GrTextContext.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkSurface.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTHash.h"
+#include "src/gpu/GrBufferAllocPool.h"
+#include "src/gpu/GrDeferredUpload.h"
+#include "src/gpu/GrHashMapWithCache.h"
+#include "src/gpu/GrResourceCache.h"
+#include "src/gpu/GrSurfaceProxy.h"
 
-class GrCoverageCountingPathRenderer;
+#if SK_GPU_V1
+#include "src/gpu/v1/PathRenderer.h"
+#include "src/gpu/v1/PathRendererChain.h"
+#endif
+
+// Enabling this will print out which path renderers are being chosen
+#define GR_PATH_RENDERER_SPEW 0
+
+class GrArenas;
+class GrGpuBuffer;
 class GrOnFlushCallbackObject;
 class GrOpFlushState;
 class GrRecordingContext;
-class GrRenderTargetContext;
 class GrRenderTargetProxy;
-class GrRenderTargetOpList;
-class GrSoftwarePathRenderer;
-class GrTextureContext;
-class GrTextureOpList;
+class GrRenderTask;
+class GrResourceAllocator;
+class GrSemaphore;
+class GrSurfaceProxyView;
+class GrTextureResolveRenderTask;
 class SkDeferredDisplayList;
+namespace skgpu { namespace v1 {
+    class OpsTask;
+    class SoftwarePathRenderer;
+}}
 
-// The GrDrawingManager allocates a new GrRenderTargetContext for each GrRenderTarget
-// but all of them still land in the same GrOpList!
-//
-// In the future this class will allocate a new GrRenderTargetContext for
-// each GrRenderTarget/GrOpList and manage the DAG.
 class GrDrawingManager {
 public:
     ~GrDrawingManager();
 
     void freeGpuResources();
 
-    sk_sp<GrRenderTargetContext> makeRenderTargetContext(sk_sp<GrSurfaceProxy>,
-                                                         sk_sp<SkColorSpace>,
-                                                         const SkSurfaceProps*,
-                                                         bool managedOpList = true);
-    sk_sp<GrTextureContext> makeTextureContext(sk_sp<GrSurfaceProxy>, sk_sp<SkColorSpace>);
+#if SK_GPU_V1
+    // OpsTasks created at flush time are stored and handled different from the others.
+    sk_sp<skgpu::v1::OpsTask> newOpsTask(GrSurfaceProxyView,
+                                         sk_sp<GrArenas> arenas,
+                                         bool flushTimeOpsTask);
 
-    // A managed opList is controlled by the drawing manager (i.e., sorted & flushed with the
-    // others). An unmanaged one is created and used by the onFlushCallback.
-    sk_sp<GrRenderTargetOpList> newRTOpList(sk_sp<GrRenderTargetProxy>, bool managedOpList);
-    sk_sp<GrTextureOpList> newTextureOpList(sk_sp<GrTextureProxy>);
+    // Adds 'atlasTask' to the DAG and leaves it open.
+    //
+    // If 'previousAtlasTask' is provided, closes it and configures dependencies to guarantee
+    // previousAtlasTask and all its users are completely out of service before atlasTask executes.
+    void addAtlasTask(sk_sp<GrRenderTask> atlasTask, GrRenderTask* previousAtlasTask);
+#endif
+
+    // Create a render task that can resolve MSAA and/or regenerate mipmap levels on proxies. This
+    // method will only add the new render task to the list. It is up to the caller to call
+    // addProxy() on the returned object.
+    GrTextureResolveRenderTask* newTextureResolveRenderTask(const GrCaps&);
+
+    // Create a new render task that will cause the gpu to wait on semaphores before executing any
+    // more RenderTasks that target proxy. It is possible for this wait to also block additional
+    // work (even to other proxies) that has already been recorded or will be recorded later. The
+    // only guarantee is that future work to the passed in proxy will wait on the semaphores to be
+    // signaled.
+    void newWaitRenderTask(sk_sp<GrSurfaceProxy> proxy,
+                           std::unique_ptr<std::unique_ptr<GrSemaphore>[]>,
+                           int numSemaphores);
+
+    // Create a new render task which copies the pixels from the srcProxy into the dstBuffer. This
+    // is used to support the asynchronous readback API. The srcRect is the region of the srcProxy
+    // to be copied. The surfaceColorType says how we should interpret the data when reading back
+    // from the source. DstColorType describes how the data should be stored in the dstBuffer.
+    // DstOffset is the offset into the dstBuffer where we will start writing data.
+    void newTransferFromRenderTask(sk_sp<GrSurfaceProxy> srcProxy, const SkIRect& srcRect,
+                                   GrColorType surfaceColorType, GrColorType dstColorType,
+                                   sk_sp<GrGpuBuffer> dstBuffer, size_t dstOffset);
+
+    // Creates a new render task which copies a pixel rectangle from srcView into dstView. The src
+    // pixels copied are specified by srcRect. They are copied to a rect of the same size in
+    // dstProxy with top left at dstPoint. If the src rect is clipped by the src bounds then  pixel
+    // values in the dst rect corresponding to the area clipped by the src rect are not overwritten.
+    // This method is not guaranteed to succeed depending on the type of surface, formats, etc, and
+    // the backend-specific limitations. On success the task is returned so that the caller may
+    // mark it skippable if the copy is later deemed unnecessary.
+    sk_sp<GrRenderTask> newCopyRenderTask(sk_sp<GrSurfaceProxy> src,
+                                          SkIRect srcRect,
+                                          sk_sp<GrSurfaceProxy> dst,
+                                          SkIPoint dstPoint,
+                                          GrSurfaceOrigin);
+
+    // Adds a task that writes the data from the passed GrMipLevels to dst. The lifetime of the
+    // pixel data in the levels should be tied to the passed SkData or the caller must flush the
+    // context before the data may become invalid. srcColorType is the color type of the
+    // GrMipLevels. dstColorType is the color type being used with dst and must be compatible with
+    // dst's format according to GrCaps::areColorTypeAndFormatCompatible().
+    bool newWritePixelsTask(sk_sp<GrSurfaceProxy> dst,
+                            SkIRect rect,
+                            GrColorType srcColorType,
+                            GrColorType dstColorType,
+                            const GrMipLevel[],
+                            int levelCount);
 
     GrRecordingContext* getContext() { return fContext; }
 
-    GrTextContext* getTextContext();
+#if SK_GPU_V1
+    using PathRenderer = skgpu::v1::PathRenderer;
+    using PathRendererChain = skgpu::v1::PathRendererChain;
 
-    GrPathRenderer* getPathRenderer(const GrPathRenderer::CanDrawPathArgs& args,
-                                    bool allowSW,
-                                    GrPathRendererChain::DrawType drawType,
-                                    GrPathRenderer::StencilSupport* stencilSupport = nullptr);
+    PathRenderer* getPathRenderer(const PathRenderer::CanDrawPathArgs&,
+                                  bool allowSW,
+                                  PathRendererChain::DrawType,
+                                  PathRenderer::StencilSupport* = nullptr);
 
-    GrPathRenderer* getSoftwarePathRenderer();
+    PathRenderer* getSoftwarePathRenderer();
 
-    // Returns a direct pointer to the coverage counting path renderer, or null if it is not
-    // supported and turned on.
-    GrCoverageCountingPathRenderer* getCoverageCountingPathRenderer();
+    // Returns a direct pointer to the atlas path renderer, or null if it is not supported and
+    // turned on.
+    skgpu::v1::AtlasPathRenderer* getAtlasPathRenderer();
+
+    // Returns a direct pointer to the tessellation path renderer, or null if it is not supported
+    // and turned on.
+    PathRenderer* getTessellationPathRenderer();
+#endif
 
     void flushIfNecessary();
 
-    static bool ProgramUnitTest(GrContext* context, int maxStages, int maxLevels);
+    static bool ProgramUnitTest(GrDirectContext*, int maxStages, int maxLevels);
 
-    GrSemaphoresSubmitted flushSurface(GrSurfaceProxy*,
-                                       SkSurface::BackendSurfaceAccess access,
-                                       const GrFlushInfo& info);
+    GrSemaphoresSubmitted flushSurfaces(SkSpan<GrSurfaceProxy*>,
+                                        SkSurface::BackendSurfaceAccess,
+                                        const GrFlushInfo&,
+                                        const GrBackendSurfaceMutableState* newState);
 
     void addOnFlushCallbackObject(GrOnFlushCallbackObject*);
 
 #if GR_TEST_UTILS
     void testingOnly_removeOnFlushCallbackObject(GrOnFlushCallbackObject*);
+#if SK_GPU_V1
+    PathRendererChain::Options testingOnly_getOptionsForPathRendererChain() {
+        return fOptionsForPathRendererChain;
+    }
+#endif
 #endif
 
-    void moveOpListsToDDL(SkDeferredDisplayList* ddl);
-    void copyOpListsFromDDL(const SkDeferredDisplayList*, GrRenderTargetProxy* newDest);
+    GrRenderTask* getLastRenderTask(const GrSurfaceProxy*) const;
+    skgpu::v1::OpsTask* getLastOpsTask(const GrSurfaceProxy*) const;
+    void setLastRenderTask(const GrSurfaceProxy*, GrRenderTask*);
+
+    void moveRenderTasksToDDL(SkDeferredDisplayList* ddl);
+    void createDDLTask(sk_sp<const SkDeferredDisplayList>,
+                       sk_sp<GrRenderTargetProxy> newDest,
+                       SkIPoint offset);
 
 private:
-    // This class encapsulates maintenance and manipulation of the drawing manager's DAG of opLists.
-    class OpListDAG {
-    public:
-        OpListDAG(bool explicitlyAllocating, bool sortOpLists);
-        ~OpListDAG();
-
-        // Currently, when explicitly allocating resources, this call will topologically sort the
-        // opLists.
-        // MDB TODO: remove once incremental opList sorting is enabled
-        void prepForFlush();
-
-        void closeAll(const GrCaps* caps);
-
-        // A yucky combination of closeAll and reset
-        void cleanup(const GrCaps* caps);
-
-        void gatherIDs(SkSTArray<8, uint32_t, true>* idArray) const;
-
-        void reset();
-
-        // These calls forceably remove an opList from the DAG. They are problematic bc they just
-        // remove the opList but don't cleanup any refering pointers (i.e., dependency pointers
-        // in the DAG). They work right now bc they are only called at flush time, after the
-        // topological sort is complete (so the dangling pointers aren't used).
-        void removeOpList(int index);
-        void removeOpLists(int startIndex, int stopIndex);
-
-        bool empty() const { return fOpLists.empty(); }
-        int numOpLists() const { return fOpLists.count(); }
-
-        bool isUsed(GrSurfaceProxy*) const;
-
-        GrOpList* opList(int index) { return fOpLists[index].get(); }
-        const GrOpList* opList(int index) const { return fOpLists[index].get(); }
-
-        GrOpList* back() { return fOpLists.back().get(); }
-        const GrOpList* back() const { return fOpLists.back().get(); }
-
-        void add(sk_sp<GrOpList>);
-        void add(const SkTArray<sk_sp<GrOpList>>&);
-
-        void swap(SkTArray<sk_sp<GrOpList>>* opLists);
-
-        bool sortingOpLists() const { return fSortOpLists; }
-
-    private:
-        SkTArray<sk_sp<GrOpList>> fOpLists;
-        bool                      fSortOpLists;
-    };
-
-    GrDrawingManager(GrRecordingContext*, const GrPathRendererChain::Options&,
-                     const GrTextContext::Options&,
-                     bool explicitlyAllocating,
-                     bool sortOpLists,
-                     GrContextOptions::Enable reduceOpListSplitting);
+#if SK_GPU_V1
+    GrDrawingManager(GrRecordingContext*,
+                     const PathRendererChain::Options&,
+                     bool reduceOpsTaskSplitting);
+#else
+    GrDrawingManager(GrRecordingContext*, bool reduceOpsTaskSplitting);
+#endif
 
     bool wasAbandoned() const;
 
-    void cleanup();
+    void closeActiveOpsTask();
 
-    // return true if any opLists were actually executed; false otherwise
-    bool executeOpLists(int startIndex, int stopIndex, GrOpFlushState*, int* numOpListsExecuted);
+    // return true if any GrRenderTasks were actually executed; false otherwise
+    bool executeRenderTasks(GrOpFlushState*);
 
-    GrSemaphoresSubmitted flush(GrSurfaceProxy* proxy,
-                                SkSurface::BackendSurfaceAccess access,
-                                const GrFlushInfo&);
+    void removeRenderTasks();
+
+    void sortTasks();
+
+    // Attempt to reorder tasks to reduce render passes, and check the memory budget of the
+    // resulting intervals. Returns whether the reordering was successful & the memory budget
+    // acceptable. If it returns true, fDAG has been updated to reflect the reordered tasks.
+    bool reorderTasks(GrResourceAllocator*);
+
+    void closeAllTasks();
+
+    GrRenderTask* appendTask(sk_sp<GrRenderTask>);
+    GrRenderTask* insertTaskBeforeLast(sk_sp<GrRenderTask>);
+
+    bool flush(SkSpan<GrSurfaceProxy*> proxies,
+               SkSurface::BackendSurfaceAccess access,
+               const GrFlushInfo&,
+               const GrBackendSurfaceMutableState* newState);
+
+    bool submitToGpu(bool syncToCpu);
 
     SkDEBUGCODE(void validate() const);
 
-    friend class GrContext; // access to: flush & cleanup
-    friend class GrContextPriv; // access to: flush
+    friend class GrDirectContext; // access to: flush & cleanup
+    friend class GrDirectContextPriv; // access to: flush
     friend class GrOnFlushResourceProvider; // this is just a shallow wrapper around this class
     friend class GrRecordingContext;  // access to: ctor
     friend class SkImage; // for access to: flush
@@ -162,30 +209,39 @@ private:
     static const int kNumPixelGeometries = 5; // The different pixel geometries
     static const int kNumDFTOptions = 2;      // DFT or no DFT
 
-    GrRecordingContext*               fContext;
-    GrPathRendererChain::Options      fOptionsForPathRendererChain;
-    GrTextContext::Options            fOptionsForTextContext;
+    GrRecordingContext*                      fContext;
+
     // This cache is used by both the vertex and index pools. It reuses memory across multiple
     // flushes.
     sk_sp<GrBufferAllocPool::CpuBufferCache> fCpuBufferCache;
 
-    OpListDAG                         fDAG;
-    GrOpList*                         fActiveOpList = nullptr;
-    // These are the IDs of the opLists currently being flushed (in internalFlush)
-    SkSTArray<8, uint32_t, true>      fFlushingOpListIDs;
-    // These are the new opLists generated by the onFlush CBs
-    SkSTArray<8, sk_sp<GrOpList>>     fOnFlushCBOpLists;
+    SkTArray<sk_sp<GrRenderTask>>            fDAG;
+    skgpu::v1::OpsTask*                      fActiveOpsTask = nullptr;
+    // These are the IDs of the opsTask currently being flushed (in internalFlush). They are
+    // only stored here to prevent memory thrashing.
+    SkSTArray<8, uint32_t, true>             fFlushingRenderTaskIDs;
+    // These are the new renderTasks generated by the onFlush CBs
+    SkSTArray<4, sk_sp<GrRenderTask>>        fOnFlushRenderTasks;
 
-    std::unique_ptr<GrTextContext>    fTextContext;
+#if SK_GPU_V1
+    PathRendererChain::Options               fOptionsForPathRendererChain;
+    std::unique_ptr<PathRendererChain>       fPathRendererChain;
+    sk_sp<skgpu::v1::SoftwarePathRenderer>   fSoftwarePathRenderer;
+#endif
 
-    std::unique_ptr<GrPathRendererChain> fPathRendererChain;
-    sk_sp<GrSoftwarePathRenderer>     fSoftwarePathRenderer;
+    GrTokenTracker                           fTokenTracker;
+    bool                                     fFlushing = false;
+    const bool                               fReduceOpsTaskSplitting;
 
-    GrTokenTracker                    fTokenTracker;
-    bool                              fFlushing;
-    bool                              fReduceOpListSplitting;
+    SkTArray<GrOnFlushCallbackObject*>       fOnFlushCBObjects;
 
-    SkTArray<GrOnFlushCallbackObject*> fOnFlushCBObjects;
+    struct SurfaceIDKeyTraits {
+        static uint32_t GetInvalidKey() {
+            return GrSurfaceProxy::UniqueID::InvalidID().asUInt();
+        }
+    };
+
+    GrHashMapWithCache<uint32_t, GrRenderTask*, SurfaceIDKeyTraits, GrCheapHash> fLastRenderTasks;
 };
 
 #endif

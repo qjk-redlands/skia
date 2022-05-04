@@ -8,7 +8,7 @@
 #ifndef GrRectanizer_DEFINED
 #define GrRectanizer_DEFINED
 
-#include "GrTypes.h"
+#include "include/gpu/GrTypes.h"
 
 struct SkIPoint16;
 
@@ -37,8 +37,8 @@ public:
     static GrRectanizer* Factory(int width, int height);
 
 private:
-    int fWidth;
-    int fHeight;
+    const int fWidth;
+    const int fHeight;
 };
 
 #endif

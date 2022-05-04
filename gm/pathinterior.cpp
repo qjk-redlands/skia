@@ -5,14 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkBlurMaskFilter.h"
-#include "SkCanvas.h"
-#include "SkGraphics.h"
-#include "SkLayerDrawLooper.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "tools/ToolUtils.h"
 
 static SkRect inset(const SkRect& r) {
     SkRect rect = r;
@@ -73,9 +75,9 @@ protected:
                         for (int outerCW = 0; outerCW <= 1; ++outerCW) {
                             for (int innerCW = 0; innerCW <= 1; ++innerCW) {
                                 SkPath path;
-                                path.setFillType(doEvenOdd ? SkPath::kEvenOdd_FillType : SkPath::kWinding_FillType);
-                                SkPath::Direction outerDir = outerCW ? SkPath::kCW_Direction : SkPath::kCCW_Direction;
-                                SkPath::Direction innerDir = innerCW ? SkPath::kCW_Direction : SkPath::kCCW_Direction;
+                                path.setFillType(doEvenOdd ? SkPathFillType::kEvenOdd : SkPathFillType::kWinding);
+                                SkPathDirection outerDir = outerCW ? SkPathDirection::kCW : SkPathDirection::kCCW;
+                                SkPathDirection innerDir = innerCW ? SkPathDirection::kCW : SkPathDirection::kCCW;
 
                                 SkRect r = insetFirst ? inset(rect) : rect;
                                 if (outerRR) {
@@ -106,7 +108,7 @@ protected:
 
 private:
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////

@@ -10,8 +10,8 @@
 #ifndef SkTraceEvent_DEFINED
 #define SkTraceEvent_DEFINED
 
-#include "SkEventTracer.h"
-#include "SkTraceEventCommon.h"
+#include "include/utils/SkEventTracer.h"
+#include "src/core/SkTraceEventCommon.h"
 #include <atomic>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -346,6 +346,9 @@ class TRACE_EVENT_API_CLASS_EXPORT ScopedTracer {
   }
 
  private:
+    ScopedTracer(const ScopedTracer&) = delete;
+    ScopedTracer& operator=(const ScopedTracer&) = delete;
+
   // This Data struct workaround is to avoid initializing all the members
   // in Data during construction of this object, since this object is always
   // constructed, even when tracing is disabled. If the members of Data were

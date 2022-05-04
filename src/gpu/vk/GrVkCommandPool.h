@@ -8,18 +8,19 @@
 #ifndef GrVkCommandPool_DEFINED
 #define GrVkCommandPool_DEFINED
 
-#include "GrVkGpuCommandBuffer.h"
-#include "GrVkInterface.h"
-#include "GrVkResource.h"
-#include "GrVkResourceProvider.h"
+#include "src/gpu/vk/GrVkInterface.h"
+#include "src/gpu/vk/GrVkManagedResource.h"
+#include "src/gpu/vk/GrVkResourceProvider.h"
+
+#include <cinttypes>
 
 class GrVkPrimaryCommandBuffer;
 class GrVkSecondaryCommandBuffer;
 class GrVkGpu;
 
-class GrVkCommandPool : public GrVkResource {
+class GrVkCommandPool : public GrVkManagedResource {
 public:
-    static GrVkCommandPool* Create(const GrVkGpu* gpu);
+    static GrVkCommandPool* Create(GrVkGpu* gpu);
 
     VkCommandPool vkCommandPool() const {
         return fCommandPool;
@@ -27,11 +28,10 @@ public:
 
     void reset(GrVkGpu* gpu);
 
-    void releaseResources(GrVkGpu* gpu);
 
-    GrVkPrimaryCommandBuffer* getPrimaryCommandBuffer() { return fPrimaryCommandBuffer; }
+    GrVkPrimaryCommandBuffer* getPrimaryCommandBuffer() { return fPrimaryCommandBuffer.get(); }
 
-    GrVkSecondaryCommandBuffer* findOrCreateSecondaryCommandBuffer(GrVkGpu* gpu);
+    std::unique_ptr<GrVkSecondaryCommandBuffer> findOrCreateSecondaryCommandBuffer(GrVkGpu* gpu);
 
     void recycleSecondaryCommandBuffer(GrVkSecondaryCommandBuffer* buffer);
 
@@ -42,29 +42,31 @@ public:
     // returns true if close() has not been called
     bool isOpen() const { return fOpen; }
 
-#ifdef SK_DEBUG
+#ifdef SK_TRACE_MANAGED_RESOURCES
     void dumpInfo() const override {
-        SkDebugf("GrVkCommandPool: %p (%d refs)\n", fCommandPool, this->getRefCnt());
+        SkDebugf("GrVkCommandPool: %" PRIdPTR " (%d refs)\n",
+                 (intptr_t)fCommandPool, this->getRefCnt());
     }
 #endif
 
 private:
     GrVkCommandPool() = delete;
 
-    GrVkCommandPool(const GrVkGpu* gpu, VkCommandPool commandPool);
+    GrVkCommandPool(GrVkGpu* gpu, VkCommandPool commandPool, GrVkPrimaryCommandBuffer*);
 
-    void abandonGPUData() const override;
+    void releaseResources();
 
-    void freeGPUData(GrVkGpu* gpu) const override;
+    void freeGPUData() const override;
 
     bool fOpen = true;
 
     VkCommandPool fCommandPool;
 
-    GrVkPrimaryCommandBuffer* fPrimaryCommandBuffer;
+    std::unique_ptr<GrVkPrimaryCommandBuffer> fPrimaryCommandBuffer;
 
     // Array of available secondary command buffers that are not in flight
-    SkSTArray<4, GrVkSecondaryCommandBuffer*, true> fAvailableSecondaryBuffers;
+    SkSTArray<4, std::unique_ptr<GrVkSecondaryCommandBuffer>, true> fAvailableSecondaryBuffers;
+    int fMaxCachedSecondaryCommandBuffers;
 };
 
 #endif

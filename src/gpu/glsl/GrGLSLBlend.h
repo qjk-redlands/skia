@@ -8,21 +8,25 @@
 #ifndef GrGLBlend_DEFINED
 #define GrGLBlend_DEFINED
 
-#include "SkBlendMode.h"
-#include "SkRegion.h"
+#include "include/core/SkBlendMode.h"
 
-class GrGLSLFragmentBuilder;
+class GrGLSLShaderBuilder;
 
 namespace GrGLSLBlend {
-    /*
-     * Appends GLSL code to fsBuilder that assigns a specified blend of the srcColor and dstColor
-     * variables to the outColor variable.
-     */
-    void AppendMode(GrGLSLFragmentBuilder* fsBuilder, const char* srcColor,
-                    const char* dstColor, const char* outColor, SkBlendMode mode);
+/*
+ * Returns the name of the built in blend function for a SkBlendMode.
+ */
+const char* BlendFuncName(SkBlendMode mode);
 
-    void AppendRegionOp(GrGLSLFragmentBuilder* fsBuilder, const char* srcColor,
-                        const char* dstColor, const char* outColor, SkRegion::Op regionOp);
-};
+/*
+ * Appends GLSL code to fsBuilder that assigns a specified blend of the srcColor and dstColor
+ * variables to the outColor variable.
+ */
+void AppendMode(GrGLSLShaderBuilder* fsBuilder,
+                const char* srcColor,
+                const char* dstColor,
+                const char* outColor,
+                SkBlendMode mode);
+}  // namespace GrGLSLBlend
 
 #endif

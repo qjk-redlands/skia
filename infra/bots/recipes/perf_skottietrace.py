@@ -8,9 +8,11 @@
 
 
 import calendar
+import json
 import re
 import string
 
+PYTHON_VERSION_COMPATIBILITY = "PY3"
 
 DEPS = [
   'flavor',
@@ -42,7 +44,6 @@ def perf_steps(api):
       test_data=['lottie1.json', 'lottie(test)\'!2.json', 'lottie 3!.json',
                  'LICENSE'])
   perf_results = {}
-  push_dm = True
   # Run DM on each lottie file and parse the trace files.
   for idx, lottie_file in enumerate(lottie_files):
     lottie_filename = api.path.basename(lottie_file)
@@ -68,19 +69,16 @@ def perf_steps(api):
       dm_args.extend(['--config', 'gles', '--nocpu'])
     elif api.vars.builder_cfg.get('cpu_or_gpu') == 'CPU':
       dm_args.extend(['--config', '8888', '--nogpu'])
-    api.run(api.flavor.step, 'dm', cmd=dm_args, abort_on_failure=False,
-            skip_binary_push=not push_dm)
-    # We already pushed the binary once. No need to waste time by pushing
-    # the same binary for future runs.
-    push_dm = False
+    api.run(api.flavor.step, 'dm', cmd=dm_args, abort_on_failure=False)
 
     trace_test_data = api.properties.get('trace_test_data', '{}')
     trace_file_content = api.flavor.read_file_on_device(trace_output_path)
     if not trace_file_content and trace_test_data:
       trace_file_content = trace_test_data
 
-    perf_results[lottie_filename] = parse_trace(
-        trace_file_content, lottie_filename, api)
+    perf_results[lottie_filename] = {
+        'gles': parse_trace(trace_file_content, lottie_filename, api),
+    }
     api.flavor.remove_file_on_device(trace_output_path)
 
   # Construct contents of the output JSON.
@@ -88,13 +86,12 @@ def perf_steps(api):
       'gitHash': api.properties['revision'],
       'swarming_bot_id': api.vars.swarming_bot_id,
       'swarming_task_id': api.vars.swarming_task_id,
+      'renderer': 'skottie',
       'key': {
         'bench_type': 'tracing',
         'source_type': 'skottie',
       },
-      'results': {
-        'gles': perf_results,
-      },
+      'results': perf_results,
   }
   if api.vars.is_trybot:
     perf_json['issue'] = api.vars.issue
@@ -123,13 +120,9 @@ def perf_steps(api):
   ts = int(calendar.timegm(now.utctimetuple()))
   json_path = api.flavor.host_dirs.perf_data_dir.join(
       'perf_%s_%d.json' % (api.properties['revision'], ts))
-  api.run(
-      api.python.inline,
-      'write output JSON',
-      program="""import json
-with open('%s', 'w') as outfile:
-  json.dump(obj=%s, fp=outfile, indent=4)
-  """ % (json_path, perf_json))
+  json_contents = json.dumps(
+      perf_json, indent=4, sort_keys=True, separators=(',', ': '))
+  api.file.write_text('write output JSON', json_path, json_contents)
 
 
 def get_trace_match(lottie_filename, is_android):
@@ -180,12 +173,8 @@ def parse_trace(trace_json, lottie_filename, api):
   current_frame_duration = 0
   total_frames = 0
   frame_start = False
-  skipped_first_seek = False  # Skip the first seek constructor call.
   for trace in trace_json:
     if '%s' in trace['name']:
-      if not skipped_first_seek:
-        skipped_first_seek = True
-        continue
       if frame_start:
         raise Exception('We got consecutive Animation::seek without a ' +
                         'render. Something is wrong.')
@@ -230,7 +219,7 @@ def parse_trace(trace_json, lottie_filename, api):
 def RunSteps(api):
   api.vars.setup()
   api.file.ensure_directory('makedirs tmp_dir', api.vars.tmp_dir)
-  api.flavor.setup()
+  api.flavor.setup('dm')
 
   with api.context():
     try:
@@ -268,13 +257,32 @@ def GenTests(api):
       'frame_min_us': 141.17,
       'frame_max_us': 218.25
   }
-  buildername = ('Perf-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-Release-'
-                  'All-Android_SkottieTracing')
-  cpu_buildername = ('Perf-Debian9-Clang-GCE-CPU-AVX2-x86_64-Release-All-'
+  android_buildername = ('Perf-Android-Clang-AndroidOne-GPU-Mali400MP2-arm-'
+                         'Release-All-Android_SkottieTracing')
+  gpu_buildername = ('Perf-Debian10-Clang-NUC7i5BNK-GPU-IntelIris640-x86_64-'
+                     'Release-All-SkottieTracing')
+  cpu_buildername = ('Perf-Debian10-Clang-GCE-CPU-AVX2-x86_64-Release-All-'
                      'SkottieTracing')
   yield (
-      api.test(buildername) +
-      api.properties(buildername=buildername,
+      api.test(android_buildername) +
+      api.properties(buildername=android_buildername,
+                     repository='https://skia.googlesource.com/skia.git',
+                     revision='abc123',
+                     task_id='abc123',
+                     trace_test_data=trace_output,
+                     dm_json_test_data=dm_json_test_data,
+                     path_config='kitchen',
+                     swarm_out_dir='[SWARM_OUT_DIR]') +
+      api.step_data('parse lottie(test)\'!2.json trace',
+                    api.json.output(parse_trace_json)) +
+      api.step_data('parse lottie1.json trace',
+                    api.json.output(parse_trace_json)) +
+      api.step_data('parse lottie 3!.json trace',
+                    api.json.output(parse_trace_json))
+  )
+  yield (
+      api.test(gpu_buildername) +
+      api.properties(buildername=gpu_buildername,
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',
                      task_id='abc123',
@@ -308,7 +316,7 @@ def GenTests(api):
   )
   yield (
       api.test('skottietracing_parse_trace_error') +
-      api.properties(buildername=buildername,
+      api.properties(buildername=android_buildername,
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',
                      task_id='abc123',
@@ -321,7 +329,7 @@ def GenTests(api):
   )
   yield (
       api.test('skottietracing_trybot') +
-      api.properties(buildername=buildername,
+      api.properties(buildername=android_buildername,
                      repository='https://skia.googlesource.com/skia.git',
                      revision='abc123',
                      task_id='abc123',

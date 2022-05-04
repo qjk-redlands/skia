@@ -7,9 +7,9 @@
 
 #include <algorithm>
 
-#include "TouchGesture.h"
-#include "SkMatrix.h"
-#include "SkTime.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkTime.h"
+#include "tools/viewer/TouchGesture.h"
 
 #define DISCRETIZE_TRANSLATE_TO_AVOID_FLICKER   true
 
@@ -169,7 +169,7 @@ void TouchGesture::touchBegin(void* owner, float x, float y) {
             fState = kTranslate_State;
             break;
         case 2:
-            fState = kZoom_State;
+            this->startZoom();
             break;
         default:
             break;
@@ -189,19 +189,20 @@ static SkScalar center(float pos0, float pos1) {
     return (pos0 + pos1) * 0.5f;
 }
 
-static const float MAX_ZOOM_SCALE = 4;
-static const float MIN_ZOOM_SCALE = 0.25f;
+void TouchGesture::startZoom() {
+    fState = kZoom_State;
+}
 
-float TouchGesture::limitTotalZoom(float scale) const {
-    // this query works 'cause we know that we're square-scale w/ no skew/rotation
-    const float curr = SkScalarToFloat(fGlobalM[0]);
+void TouchGesture::updateZoom(float scale, float startX, float startY, float lastX, float lastY) {
+    fLocalM.setTranslate(-startX, -startY);
+    fLocalM.postScale(scale, scale);
+    fLocalM.postTranslate(lastX, lastY);
+}
 
-    if (scale > 1 && curr * scale > MAX_ZOOM_SCALE) {
-        scale = MAX_ZOOM_SCALE / curr;
-    } else if (scale < 1 && curr * scale < MIN_ZOOM_SCALE) {
-        scale = MIN_ZOOM_SCALE / curr;
-    }
-    return scale;
+void TouchGesture::endZoom() {
+    this->flushLocalM();
+    SkASSERT(kZoom_State == fState);
+    fState = kEmpty_State;
 }
 
 void TouchGesture::touchMoved(void* owner, float x, float y) {
@@ -246,13 +247,11 @@ void TouchGesture::touchMoved(void* owner, float x, float y) {
             const Rec& rec1 = fTouches[1];
 
             float scale = this->computePinch(rec0, rec1);
-            scale = this->limitTotalZoom(scale);
-
-            fLocalM.setTranslate(-center(rec0.fStartX, rec1.fStartX),
-                                 -center(rec0.fStartY, rec1.fStartY));
-            fLocalM.postScale(scale, scale);
-            fLocalM.postTranslate(center(rec0.fLastX, rec1.fLastX),
-                                  center(rec0.fLastY, rec1.fLastY));
+            this->updateZoom(scale,
+                             center(rec0.fStartX, rec1.fStartX),
+                             center(rec0.fStartY, rec1.fStartY),
+                             center(rec0.fLastX, rec1.fLastX),
+                             center(rec0.fLastY, rec1.fLastY));
         } break;
         default:
             break;
@@ -286,9 +285,7 @@ void TouchGesture::touchEnd(void* owner) {
             fState = kEmpty_State;
         } break;
         case 2:
-            this->flushLocalM();
-            SkASSERT(kZoom_State == fState);
-            fState = kEmpty_State;
+            this->endZoom();
             break;
         default:
             SkASSERT(kZoom_State == fState);

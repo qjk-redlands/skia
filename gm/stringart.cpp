@@ -5,11 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "AnimTimer.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "tools/ToolUtils.h"
+#include "tools/timer/TimeUtils.h"
 
 // Reproduces https://code.google.com/p/chromium/issues/detail?id=279014
 
@@ -37,7 +43,7 @@ protected:
 
     void onDraw(SkCanvas* canvas) override {
         SkScalar angle = kAngle*SK_ScalarPI + SkScalarHalf(SK_ScalarPI);
-        SkScalar size = SkIntToScalar(SkMin32(kWidth, kHeight));
+        SkScalar size = SkIntToScalar(std::min(kWidth, kHeight));
         SkPoint center = SkPoint::Make(SkScalarHalf(kWidth), SkScalarHalf(kHeight));
         SkScalar length = 5;
         SkScalar step = angle;
@@ -61,11 +67,11 @@ protected:
         canvas->drawPath(path, paint);
     }
 
-    bool onAnimate(const AnimTimer& timer) override {
+    bool onAnimate(double nanos) override {
         constexpr SkScalar kDesiredDurationSecs = 3.0f;
 
         // Make the animation ping-pong back and forth but start in the fully drawn state
-        SkScalar fraction = 1.0f - timer.scaled(2.0f/kDesiredDurationSecs, 2.0f);
+        SkScalar fraction = 1.0f - TimeUtils::Scaled(1e-9 * nanos, 2.0f/kDesiredDurationSecs, 2.0f);
         if (fraction <= 0.0f) {
             fraction = -fraction;
         }
@@ -79,7 +85,7 @@ protected:
 private:
     int fNumSteps;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 DEF_GM( return new StringArtGM; )
@@ -87,7 +93,7 @@ DEF_GM( return new StringArtGM; )
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if 0
-#include "Skottie.h"
+#include "modules/skottie/include/Skottie.h"
 
 class SkottieGM : public skiagm::GM {
     enum {
@@ -141,8 +147,8 @@ protected:
         }
     }
 
-    bool onAnimate(const AnimTimer& timer) override {
-        SkScalar time = (float)(fmod(timer.secs(), fDur) / fDur);
+    bool onAnimate(double nanos) override {
+        SkScalar time = (float)(fmod(1e-9 * nanos, fDur) / fDur);
         for (auto anim : fAnims) {
             anim->seek(time);
         }
@@ -150,7 +156,7 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 DEF_GM( return new SkottieGM; )
 #endif

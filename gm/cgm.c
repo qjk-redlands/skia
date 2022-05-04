@@ -8,13 +8,17 @@
 // EXPERIMENTAL EXPERIMENTAL EXPERIMENTAL EXPERIMENTAL
 // DO NOT USE -- FOR INTERNAL TESTING ONLY
 
-#include "sk_canvas.h"
-#include "sk_data.h"
-#include "sk_image.h"
-#include "sk_imageinfo.h"
-#include "sk_paint.h"
-#include "sk_shader.h"
-#include "sk_surface.h"
+#include "include/c/sk_canvas.h"
+#include "include/c/sk_data.h"
+#include "include/c/sk_image.h"
+#include "include/c/sk_imageinfo.h"
+#include "include/c/sk_paint.h"
+#include "include/c/sk_shader.h"
+#include "include/c/sk_surface.h"
+#include "include/c/sk_types.h"
+
+#include <stdbool.h>
+#include <stddef.h>
 
 extern void sk_test_c_api(sk_canvas_t*);
 
@@ -61,16 +65,16 @@ void sk_test_c_api(sk_canvas_t* canvas) {
     sk_image_t* img0 = sk_surface_new_image_snapshot(surf);
     sk_surface_unref(surf);
 
-    sk_canvas_draw_image(canvas, img0, W + 10, 10, NULL);
+    sk_canvas_draw_image(canvas, img0, W + 10, 10, NULL, NULL);
 
     sk_data_t* data = sk_image_encode(img0);
     sk_image_unref(img0);
 
-    sk_image_t* img1 = sk_image_new_from_encoded(data, NULL);
+    sk_image_t* img1 = sk_image_new_from_encoded(data);
     sk_data_unref(data);
 
     if (img1) {
-        sk_canvas_draw_image(canvas, img1, W/2, H/2, NULL);
+        sk_canvas_draw_image(canvas, img1, W/2, H/2, NULL, NULL);
         sk_image_unref(img1);
     }
 }

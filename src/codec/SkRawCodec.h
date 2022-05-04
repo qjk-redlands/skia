@@ -8,10 +8,10 @@
 #ifndef SkRawCodec_DEFINED
 #define SkRawCodec_DEFINED
 
-#include "SkCodec.h"
-#include "SkColorSpace.h"
-#include "SkImageInfo.h"
-#include "SkTypes.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkTypes.h"
 
 class SkDngImage;
 class SkStream;
@@ -59,7 +59,7 @@ private:
 
     std::unique_ptr<SkDngImage> fDngImage;
 
-    typedef SkCodec INHERITED;
+    using INHERITED = SkCodec;
 };
 
 #endif

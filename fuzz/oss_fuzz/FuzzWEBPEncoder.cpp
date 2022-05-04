@@ -5,11 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "../Fuzz.h"
+#include "fuzz/Fuzz.h"
 
 void fuzz_WEBPEncoder(Fuzz* f);
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    if (size > 262150) {
+        return 0;
+    }
     auto fuzz = Fuzz(SkData::MakeWithoutCopy(data, size));
     fuzz_WEBPEncoder(&fuzz);
     return 0;

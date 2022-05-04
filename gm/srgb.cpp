@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "Resources.h"
-#include "SkCanvas.h"
-#include "SkColorFilter.h"
-#include "SkImage.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "tools/Resources.h"
 
 DEF_SIMPLE_GM(srgb_colorfilter, canvas, 512, 256*3) {
     auto img = GetResourceAsImage("images/mandrill_256.png");
@@ -21,22 +21,23 @@ DEF_SIMPLE_GM(srgb_colorfilter, canvas, 512, 256*3) {
         0, 0, 1, 0, 0,
         -1, 0, 0, 1, 0,
     };
-    auto cf0 = SkColorFilters::MatrixRowMajor255(array);
+    auto cf0 = SkColorFilters::Matrix(array);
     auto cf1 = SkColorFilters::LinearToSRGBGamma();
     auto cf2 = SkColorFilters::SRGBToLinearGamma();
 
+    SkSamplingOptions sampling;
     SkPaint p;
     p.setColorFilter(cf0);
-    canvas->drawImage(img, 0, 0, nullptr);
-    canvas->drawImage(img, 256, 0, &p);
+    canvas->drawImage(img, 0, 0);
+    canvas->drawImage(img, 256, 0, sampling, &p);
 
     p.setColorFilter(cf1);
-    canvas->drawImage(img, 0, 256, &p);
+    canvas->drawImage(img, 0, 256, sampling, &p);
     p.setColorFilter(cf1->makeComposed(cf0));
-    canvas->drawImage(img, 256, 256, &p);
+    canvas->drawImage(img, 256, 256, sampling, &p);
 
     p.setColorFilter(cf2);
-    canvas->drawImage(img, 0, 512, &p);
+    canvas->drawImage(img, 0, 512, sampling, &p);
     p.setColorFilter(cf2->makeComposed(cf0));
-    canvas->drawImage(img, 256, 512, &p);
+    canvas->drawImage(img, 256, 512, sampling, &p);
 }

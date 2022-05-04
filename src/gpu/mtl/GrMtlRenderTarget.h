@@ -8,9 +8,12 @@
 #ifndef GrMtlRenderTarget_DEFINED
 #define GrMtlRenderTarget_DEFINED
 
-#include "GrRenderTarget.h"
+#include "src/gpu/GrRenderTarget.h"
 
-#include "GrBackendSurface.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/mtl/GrMtlAttachment.h"
+#include "src/gpu/mtl/GrMtlFramebuffer.h"
 
 #import <Metal/Metal.h>
 
@@ -18,70 +21,80 @@ class GrMtlGpu;
 
 class GrMtlRenderTarget: public GrRenderTarget {
 public:
+    // If sampleCnt is greater than 1 and the texture is single sampled, then a MSAA texture
+    // is created that will resolve to the wrapped single sample texture.
     static sk_sp<GrMtlRenderTarget> MakeWrappedRenderTarget(GrMtlGpu*,
-                                                            const GrSurfaceDesc&,
+                                                            SkISize,
+                                                            int sampleCnt,
                                                             id<MTLTexture>);
 
     ~GrMtlRenderTarget() override;
 
-    // override of GrRenderTarget
-    ResolveType getResolveType() const override {
-        return kCantResolve_ResolveType;
-#if 0 // TODO figure this once we support msaa
-        if (this->numColorSamples() > 1) {
-            return kCanResolve_ResolveType;
-        }
-        return kAutoResolves_ResolveType;
-#endif
-    }
-
-    bool canAttemptStencilAttachment() const override {
+    bool canAttemptStencilAttachment(bool useMSAASurface) const override {
+        SkASSERT(useMSAASurface == (this->numSamples() > 1));
         return true;
     }
 
-    id<MTLTexture> mtlRenderTexture() const { return fRenderTexture; }
+    GrMtlAttachment* colorAttachment() const { return fColorAttachment.get(); }
+    id<MTLTexture> colorMTLTexture() const { return fColorAttachment->mtlTexture(); }
+    GrMtlAttachment* resolveAttachment() const { return fResolveAttachment.get(); }
+    id<MTLTexture> resolveMTLTexture() const { return fResolveAttachment->mtlTexture(); }
+
+    // Returns the GrMtlAttachment of the non-msaa attachment. If the color attachment has 1 sample,
+    // then the color attachment will be returned. Otherwise, the resolve attachment is returned.
+    GrMtlAttachment* nonMSAAAttachment() const {
+        if (fColorAttachment->numSamples() == 1) {
+            return fColorAttachment.get();
+        } else {
+            return fResolveAttachment.get();
+        }
+    }
 
     GrBackendRenderTarget getBackendRenderTarget() const override;
 
     GrBackendFormat backendFormat() const override;
 
+    const GrMtlFramebuffer* getFramebuffer(bool withResolve,
+                                           bool withStencil);
+
 protected:
     GrMtlRenderTarget(GrMtlGpu* gpu,
-                      const GrSurfaceDesc& desc,
-                      id<MTLTexture> renderTexture);
+                      SkISize,
+                      sk_sp<GrMtlAttachment> colorAttachment,
+                      sk_sp<GrMtlAttachment> resolveAttachment);
 
     GrMtlGpu* getMtlGpu() const;
 
     void onAbandon() override;
     void onRelease() override;
 
-    // This accounts for the texture's memory and any MSAA renderbuffer's memory.
-    size_t onGpuMemorySize() const override {
-        int numColorSamples = this->numColorSamples();
-        // TODO: When used as render targets certain formats may actually have a larger size than
-        // the base format size. Check to make sure we are reporting the correct value here.
-        // The plus 1 is to account for the resolve texture or if not using msaa the RT itself
-        if (numColorSamples > 1) {
-            ++numColorSamples;
-        }
-        return GrSurface::ComputeSize(this->config(), this->width(), this->height(),
-                                      numColorSamples, GrMipMapped::kNo);
-    }
+    // This returns zero since the memory should all be handled by the attachments
+    size_t onGpuMemorySize() const override { return 0; }
 
-    id<MTLTexture> fRenderTexture;
-    id<MTLTexture> fResolveTexture;
+    sk_sp<GrMtlAttachment> fColorAttachment;
+    sk_sp<GrMtlAttachment> fResolveAttachment;
 
 private:
     // Extra param to disambiguate from constructor used by subclasses.
     enum Wrapped { kWrapped };
     GrMtlRenderTarget(GrMtlGpu* gpu,
-                      const GrSurfaceDesc& desc,
-                      id<MTLTexture> renderTexture,
+                      SkISize,
+                      sk_sp<GrMtlAttachment> colorAttachment,
+                      sk_sp<GrMtlAttachment> resolveAttachment,
                       Wrapped);
 
-    bool completeStencilAttachment() override;
+    bool completeStencilAttachment(GrAttachment* stencil, bool useMSAASurface) override;
 
-    typedef GrRenderTarget INHERITED;
+    // We can have a renderpass with and without resolve attachment or stencil attachment,
+    // both of these being completely orthogonal. Thus we have a total of 4 types of render passes.
+    // We then cache a framebuffer for each type of these render passes.
+    // TODO: add support for other flags if needed
+    inline static constexpr int kNumCachedFramebuffers = 4;
+
+    sk_sp<const GrMtlFramebuffer> fCachedFramebuffers[kNumCachedFramebuffers];
+
+
+    using INHERITED = GrRenderTarget;
 };
 
 

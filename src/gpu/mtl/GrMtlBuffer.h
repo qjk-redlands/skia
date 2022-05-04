@@ -8,9 +8,10 @@
 #ifndef GrMtlBuffer_DEFINED
 #define GrMtlBuffer_DEFINED
 
-#include "GrGpuBuffer.h"
+#include "src/gpu/GrGpuBuffer.h"
+#include "src/gpu/mtl/GrMtlUniformHandler.h"
 
-#import <metal/metal.h>
+#import <Metal/Metal.h>
 
 class GrMtlCaps;
 class GrMtlGpu;
@@ -46,9 +47,8 @@ private:
 
     bool fIsDynamic;
     id<MTLBuffer> fMtlBuffer;
-    id<MTLBuffer> fMappedBuffer;
 
-    typedef GrGpuBuffer INHERITED;
+    using INHERITED = GrGpuBuffer;
 };
 
 #endif

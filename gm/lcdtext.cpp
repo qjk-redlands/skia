@@ -5,36 +5,30 @@
  * found in the LICENSE file.
  */
 
-
-/* Tests text rendering with LCD and subpixel rendering turned on and off.
- */
-
-#include "SkCanvas.h"
-#include "SkPicture.h"
-#include "SkPictureImageFilter.h"
-#include "SkPictureRecorder.h"
-#include "SkSurface.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
 
 class LcdTextGM : public skiagm::GM {
-public:
-    LcdTextGM() {
-        const int pointSize = 36;
-        textHeight = SkIntToScalar(pointSize);
-    }
+    static constexpr SkScalar kTextHeight = 36;
+    SkScalar fY = kTextHeight;
 
-protected:
+    SkString onShortName() override { return SkString("lcdtext"); }
 
-    SkString onShortName() {
-        return SkString("lcdtext");
-    }
+    SkISize onISize() override { return {640, 480}; }
 
-    SkISize onISize() { return SkISize::Make(640, 480); }
-
-    virtual void onDraw(SkCanvas* canvas) {
-
-        y = textHeight;
+    void onDraw(SkCanvas* canvas) override {
+        fY = kTextHeight;
         drawText(canvas, SkString("TEXT: SubpixelTrue LCDRenderTrue"),
                  true,  true);
         drawText(canvas, SkString("TEXT: SubpixelTrue LCDRenderFalse"),
@@ -50,20 +44,16 @@ protected:
         SkPaint paint;
         paint.setColor(SK_ColorBLACK);
         paint.setDither(true);
-        SkFont font(nullptr, textHeight);
+        SkFont font(nullptr, kTextHeight);
         if (subpixelTextEnabled) {
             font.setSubpixel(true);
         }
         if (lcdRenderTextEnabled) {
             font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
         }
-        canvas->drawString(string, 0, y, font, paint);
-        y += textHeight;
+        canvas->drawString(string, 0, fY, font, paint);
+        fY += kTextHeight;
     }
-
-private:
-    typedef skiagm::GM INHERITED;
-    SkScalar y, textHeight;
 };
 
 /*
@@ -73,29 +63,21 @@ private:
  *  Test this both by changing "textsize" and by changing the computed size (textsize * CTM)
  */
 class LcdTextSizeGM : public skiagm::GM {
-    enum {
-        kLCDTextSizeLimit = 48
-    };
-
     static void ScaleAbout(SkCanvas* canvas, SkScalar sx, SkScalar sy, SkScalar px, SkScalar py) {
         SkMatrix m;
         m.setScale(sx, sy, px, py);
         canvas->concat(m);
     }
 
-public:
-    LcdTextSizeGM() {}
+    SkString onShortName() override { return SkString("lcdtextsize"); }
 
-protected:
-    SkString onShortName() {
-        return SkString("lcdtextsize");
-    }
+    SkISize onISize() override { return {320, 120}; }
 
-    SkISize onISize() { return SkISize::Make(320, 120); }
-
-    virtual void onDraw(SkCanvas* canvas) {
+    void onDraw(SkCanvas* canvas) override {
         const char* lcd_text = "LCD";
         const char* gray_text = "GRAY";
+
+        constexpr static float kLCDTextSizeLimit = 48;
 
         const struct {
             SkPoint     fLoc;
@@ -120,9 +102,38 @@ protected:
             canvas->drawString(rec[i].fText, loc.x(), loc.y(), font, SkPaint());
         }
     }
-
-private:
-    typedef skiagm::GM INHERITED;
 };
-DEF_GM( return new LcdTextGM; )
-DEF_GM( return new LcdTextSizeGM; )
+
+class SaveLayerPreserveLCDTextGM : public skiagm::GM {
+    static constexpr SkScalar kTextHeight = 36;
+
+    SkString onShortName() override { return SkString("savelayerpreservelcdtext"); }
+
+    SkISize onISize() override { return {620, 300}; }
+
+    void onDraw(SkCanvas* canvas) override {
+        drawText(canvas, SkString("SaveLayer PreserveLCDText"), 50,
+                 SkCanvas::kPreserveLCDText_SaveLayerFlag);
+        drawText(canvas, SkString("SaveLayer Default (LCDText not preserved)"), 150, 0);
+    }
+
+    void drawText(SkCanvas* canvas,
+                  const SkString& string,
+                  int y,
+                  SkCanvas::SaveLayerFlags saveLayerFlags) {
+        SkCanvas::SaveLayerRec rec(nullptr, nullptr, saveLayerFlags);
+        canvas->saveLayer(rec);
+        SkPaint paint;
+        paint.setColor(SK_ColorWHITE);
+        canvas->drawRect(SkRect::MakeXYWH(0, y - 10, 640, kTextHeight + 20), paint);
+        paint.setColor(SK_ColorBLACK);
+        SkFont font(nullptr, kTextHeight);
+        font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
+        canvas->drawString(string, 10, y, font, paint);
+        canvas->restore();
+    }
+};
+
+DEF_GM(return new LcdTextGM;)
+DEF_GM(return new LcdTextSizeGM;)
+DEF_GM(return new SaveLayerPreserveLCDTextGM;)

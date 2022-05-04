@@ -8,9 +8,10 @@
 #ifndef ImGuiLayer_DEFINED
 #define ImGuiLayer_DEFINED
 
-#include "SkPaint.h"
-#include "SkTArray.h"
-#include "sk_app/Window.h"
+#include "include/core/SkPaint.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTPin.h"
+#include "tools/sk_app/Window.h"
 
 #include "imgui.h"
 
@@ -33,7 +34,7 @@ struct DragCanvas {
             aspect = h / w;
         }
 
-        float availWidth = SkTMax(ImGui::GetContentRegionAvailWidth(), 1.0f);
+        float availWidth = std::max(ImGui::GetContentRegionAvailWidth(), 1.0f);
         fPos = ImGui::GetCursorScreenPos();
         fSize = ImVec2(availWidth, availWidth * aspect);
 
@@ -72,7 +73,7 @@ struct DragCanvas {
         ImGui::SetCursorScreenPos(ImVec2(center.fX - 5, center.fY - 5));
         ImGui::InvisibleButton("", ImVec2(10, 10));
 
-        if (ImGui::IsItemActive() && ImGui::IsMouseDragging()) {
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(0)) {
             // Update screen position to track mouse, clamped to our area
             ImGuiIO& io = ImGui::GetIO();
             center.set(SkTPin(io.MousePos.x, fPos.x, fPos.x + fSize.x),
@@ -110,12 +111,14 @@ struct DragCanvas {
     bool fDragging;
 };
 
-}
+}  // namespace ImGui
 
 class ImGuiLayer : public sk_app::Window::Layer {
 public:
     ImGuiLayer();
     ~ImGuiLayer() override;
+
+    void setScaleFactor(float scaleFactor);
 
     typedef std::function<void(SkCanvas*)> SkiaWidgetFunc;
     void skiaWidget(const ImVec2& size, SkiaWidgetFunc func);
@@ -123,10 +126,10 @@ public:
     void onAttach(sk_app::Window* window) override;
     void onPrePaint() override;
     void onPaint(SkSurface*) override;
-    bool onMouse(int x, int y, sk_app::Window::InputState state, uint32_t modifiers) override;
-    bool onMouseWheel(float delta, uint32_t modifiers) override;
-    bool onKey(sk_app::Window::Key key, sk_app::Window::InputState state, uint32_t modifiers) override;
-    bool onChar(SkUnichar c, uint32_t modifiers) override;
+    bool onMouse(int x, int y, skui::InputState state, skui::ModifierKey modifiers) override;
+    bool onMouseWheel(float delta, skui::ModifierKey modifiers) override;
+    bool onKey(skui::Key key, skui::InputState state, skui::ModifierKey modifiers) override;
+    bool onChar(SkUnichar c, skui::ModifierKey modifiers) override;
 
 private:
     sk_app::Window* fWindow;

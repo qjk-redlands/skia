@@ -8,7 +8,7 @@
 #ifndef SkColorShader_DEFINED
 #define SkColorShader_DEFINED
 
-#include "SkShaderBase.h"
+#include "src/shaders/SkShaderBase.h"
 
 /** \class SkColorShader
     A Shader that represents a single color. In general, this effect can be
@@ -44,6 +44,10 @@ private:
 
     bool onAppendStages(const SkStageRec&) const override;
 
+    skvm::Color onProgram(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
+                          const SkMatrixProvider&, const SkMatrix* localM, const SkColorInfo& dst,
+                          skvm::Uniforms* uniforms, SkArenaAlloc*) const override;
+
     SkColor fColor;
 };
 
@@ -63,6 +67,10 @@ private:
 
     void flatten(SkWriteBuffer&) const override;
     bool onAppendStages(const SkStageRec&) const override;
+
+    skvm::Color onProgram(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
+                          const SkMatrixProvider&, const SkMatrix* localM, const SkColorInfo& dst,
+                          skvm::Uniforms* uniforms, SkArenaAlloc*) const override;
 
     sk_sp<SkColorSpace> fColorSpace;
     const SkColor4f     fColor;

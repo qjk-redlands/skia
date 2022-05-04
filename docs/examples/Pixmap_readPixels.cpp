@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=df4e355c4845350daede833b4fd21ec1
 REG_FIDDLE(Pixmap_readPixels, 256, 128, false, 0) {
 void draw(SkCanvas* canvas) {
@@ -19,13 +19,13 @@ void draw(SkCanvas* canvas) {
     bitmap.installPixels(srcPixmap);
     SkCanvas srcCanvas(bitmap);
     srcCanvas.drawRect(SkRect::MakeWH(width, height), paint);
-    canvas->drawBitmap(bitmap, 0, 0);
+    canvas->drawImage(bitmap.asImage(), 0, 0);
     std::vector<int32_t> dstPixels;
     dstPixels.resize(height * width * 2);
     SkImageInfo dstInfo = srcInfo.makeColorType(kARGB_4444_SkColorType);
     srcPixmap.readPixels(dstInfo, &dstPixels.front(), width * 2);
     SkPixmap dstPixmap(dstInfo, &dstPixels.front(), width * 2);
     bitmap.installPixels(dstPixmap);
-    canvas->drawBitmap(bitmap, 0, 128);
+    canvas->drawImage(bitmap.asImage(), 0, 128);
 }
 }  // END FIDDLE

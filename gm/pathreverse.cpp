@@ -5,10 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkTypeface.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathBuilder.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkString.h"
 
 /* The hiragino_maru_goth_pro_e path was generated with Mac-specific code:
  *
@@ -21,7 +24,7 @@
  * should future Macs edit or delete the font.
  */
 static SkPath hiragino_maru_goth_pro_e() {
-    SkPath path;
+    SkPathBuilder path;
     path.moveTo(98.6f, 24.7f);
     path.cubicTo(101.7f, 24.7f, 103.6f, 22.8f, 103.6f, 19.2f);
     path.cubicTo(103.6f, 18.9f, 103.6f, 18.7f, 103.6f, 18.4f);
@@ -44,7 +47,7 @@ static SkPath hiragino_maru_goth_pro_e() {
     path.cubicTo(94.5f, 17, 94.1f, 17.4f, 93, 17.4f);
     path.lineTo(63.7f, 17.4f);
     path.close();
-    return path;
+    return path.detach();
 }
 
 static void test_path(SkCanvas* canvas, const SkPath& path) {
