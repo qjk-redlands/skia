@@ -15,10 +15,11 @@ defines {
 }
 
 includedirs {
+  ".",
+  "include/third_party/skcms",
+
   _3RDPARTY_DIR .. "/libjpeg-turbo",
   _3RDPARTY_DIR .. "/libpng",
-  _3RDPARTY_DIR .. "/skia",
-  _3RDPARTY_DIR .. "/skia/**",
   _3RDPARTY_DIR .. "/wuffs/release/c",
   _3RDPARTY_DIR .. "/zlib",
 }
@@ -488,8 +489,15 @@ if (_PLATFORM_MACOS) then
 
   files {
     common_cocoa,
-    opts_sse,
   }
+
+  configuration { "ARM64" }
+
+  files { opts_arm64 }
+
+  configuration { "x64" }
+
+  files { opts_sse }
 end
 
 if (_PLATFORM_WINDOWS) then
