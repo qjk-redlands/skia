@@ -5,56 +5,66 @@
  * found in the LICENSE file.
  */
 
-#include "TestUtils.h"
+#include "tests/TestUtils.h"
 
-#include "GrContextPriv.h"
-#include "GrSurfaceContext.h"
-#include "GrSurfaceContextPriv.h"
-#include "GrSurfaceProxy.h"
-#include "GrTextureProxy.h"
-#include "ProxyUtils.h"
-#include "SkGr.h"
-#include "SkBase64.h"
-#include "SkPngEncoder.h"
+#include "include/encode/SkPngEncoder.h"
+#include "include/utils/SkBase64.h"
+#include "src/core/SkAutoPixmapStorage.h"
+#include "src/core/SkUtils.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrDrawingManager.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrImageInfo.h"
+#include "src/gpu/GrRecordingContextPriv.h"
+#include "src/gpu/GrSurfaceProxy.h"
+#include "src/gpu/GrTextureProxy.h"
+#include "src/gpu/SkGr.h"
+#include "src/gpu/SurfaceContext.h"
 
-void test_read_pixels(skiatest::Reporter* reporter,
-                      GrSurfaceContext* srcContext, uint32_t expectedPixelValues[],
-                      const char* testName) {
+void TestReadPixels(skiatest::Reporter* reporter,
+                    GrDirectContext* dContext,
+                    skgpu::SurfaceContext* srcContext,
+                    uint32_t expectedPixelValues[],
+                    const char* testName) {
     int pixelCnt = srcContext->width() * srcContext->height();
-    SkAutoTMalloc<uint32_t> pixels(pixelCnt);
-    memset(pixels.get(), 0, sizeof(uint32_t)*pixelCnt);
+    SkImageInfo ii = SkImageInfo::Make(srcContext->dimensions(),
+                                       kRGBA_8888_SkColorType,
+                                       kPremul_SkAlphaType);
+    SkAutoPixmapStorage pm;
+    pm.alloc(ii);
+    pm.erase(SK_ColorTRANSPARENT);
 
-    SkImageInfo ii = SkImageInfo::Make(srcContext->width(), srcContext->height(),
-                                       kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    bool read = srcContext->readPixels(ii, pixels.get(), 0, 0, 0);
+    bool read = srcContext->readPixels(dContext, pm, {0, 0});
     if (!read) {
         ERRORF(reporter, "%s: Error reading from texture.", testName);
     }
 
     for (int i = 0; i < pixelCnt; ++i) {
-        if (pixels.get()[i] != expectedPixelValues[i]) {
+        if (pm.addr32()[i] != expectedPixelValues[i]) {
             ERRORF(reporter, "%s: Error, pixel value %d should be 0x%08x, got 0x%08x.",
-                   testName, i, expectedPixelValues[i], pixels.get()[i]);
+                   testName, i, expectedPixelValues[i], pm.addr32()[i]);
             break;
         }
     }
 }
 
-void test_write_pixels(skiatest::Reporter* reporter,
-                       GrSurfaceContext* dstContext, bool expectedToWork,
-                       const char* testName) {
-    int pixelCnt = dstContext->width() * dstContext->height();
-    SkAutoTMalloc<uint32_t> pixels(pixelCnt);
-    for (int y = 0; y < dstContext->width(); ++y) {
-        for (int x = 0; x < dstContext->height(); ++x) {
-            pixels.get()[y * dstContext->width() + x] =
-                SkColorToPremulGrColor(SkColorSetARGB(2*y, x, y, x + y));
+void TestWritePixels(skiatest::Reporter* reporter,
+                     GrDirectContext* dContext,
+                     skgpu::SurfaceContext* dstContext,
+                     bool expectedToWork,
+                     const char* testName) {
+    SkImageInfo ii = SkImageInfo::Make(dstContext->dimensions(),
+                                       kRGBA_8888_SkColorType,
+                                       kPremul_SkAlphaType);
+    SkAutoPixmapStorage pm;
+    pm.alloc(ii);
+    for (int y = 0; y < dstContext->height(); ++y) {
+        for (int x = 0; x < dstContext->width(); ++x) {
+            *pm.writable_addr32(x, y) = SkColorToPremulGrColor(SkColorSetARGB(2*y, x, y, x + y));
         }
     }
 
-    SkImageInfo ii = SkImageInfo::Make(dstContext->width(), dstContext->height(),
-                                       kRGBA_8888_SkColorType, kPremul_SkAlphaType);
-    bool write = dstContext->writePixels(ii, pixels.get(), 0, 0, 0);
+    bool write = dstContext->writePixels(dContext, pm, {0, 0});
     if (!write) {
         if (expectedToWork) {
             ERRORF(reporter, "%s: Error writing to texture.", testName);
@@ -67,88 +77,29 @@ void test_write_pixels(skiatest::Reporter* reporter,
         return;
     }
 
-    test_read_pixels(reporter, dstContext, pixels.get(), testName);
+    TestReadPixels(reporter, dContext, dstContext, pm.writable_addr32(0, 0), testName);
 }
 
-void test_copy_from_surface(skiatest::Reporter* reporter, GrContext* context,
-                            GrSurfaceProxy* proxy, uint32_t expectedPixelValues[],
-                            bool onlyTestRTConfig, const char* testName) {
-    GrSurfaceDesc copyDstDesc;
-    copyDstDesc.fWidth = proxy->width();
-    copyDstDesc.fHeight = proxy->height();
-    copyDstDesc.fConfig = kRGBA_8888_GrPixelConfig;
+void TestCopyFromSurface(skiatest::Reporter* reporter,
+                         GrDirectContext* dContext,
+                         sk_sp<GrSurfaceProxy> proxy,
+                         GrSurfaceOrigin origin,
+                         GrColorType colorType,
+                         uint32_t expectedPixelValues[],
+                         const char* testName) {
+    auto copy = GrSurfaceProxy::Copy(dContext, std::move(proxy), origin, GrMipmapped::kNo,
+                                     SkBackingFit::kExact, SkBudgeted::kYes);
+    SkASSERT(copy && copy->asTextureProxy());
+    auto swizzle = dContext->priv().caps()->getReadSwizzle(copy->backendFormat(), colorType);
+    GrSurfaceProxyView view(std::move(copy), origin, swizzle);
+    auto dstContext = dContext->priv().makeSC(std::move(view),
+                                              {colorType, kPremul_SkAlphaType, nullptr});
+    SkASSERT(dstContext);
 
-    for (auto flags : { kNone_GrSurfaceFlags, kRenderTarget_GrSurfaceFlag }) {
-        if (kNone_GrSurfaceFlags == flags && onlyTestRTConfig) {
-            continue;
-        }
-
-        copyDstDesc.fFlags = flags;
-        auto origin = (kNone_GrSurfaceFlags == flags) ? kTopLeft_GrSurfaceOrigin
-                                                      : kBottomLeft_GrSurfaceOrigin;
-
-        sk_sp<GrSurfaceContext> dstContext(
-                GrSurfaceProxy::TestCopy(context, copyDstDesc, origin, proxy));
-
-        test_read_pixels(reporter, dstContext.get(), expectedPixelValues, testName);
-    }
+    TestReadPixels(reporter, dContext, dstContext.get(), expectedPixelValues, testName);
 }
 
-void test_copy_to_surface(skiatest::Reporter* reporter,
-                          GrContext* context,
-                          GrSurfaceContext* dstContext,
-                          const char* testName) {
-
-    int pixelCnt = dstContext->width() * dstContext->height();
-    SkAutoTMalloc<uint32_t> pixels(pixelCnt);
-    for (int y = 0; y < dstContext->width(); ++y) {
-        for (int x = 0; x < dstContext->height(); ++x) {
-            pixels.get()[y * dstContext->width() + x] =
-                SkColorToPremulGrColor(SkColorSetARGB(2*y, y, x, x * y));
-        }
-    }
-
-    for (auto isRT : {false, true}) {
-        for (auto origin : {kTopLeft_GrSurfaceOrigin, kBottomLeft_GrSurfaceOrigin}) {
-            auto src = sk_gpu_test::MakeTextureProxyFromData(
-                    context, isRT, dstContext->width(),
-                    dstContext->height(), GrColorType::kRGBA_8888, origin, pixels.get(), 0);
-            dstContext->copy(src.get());
-            test_read_pixels(reporter, dstContext, pixels.get(), testName);
-        }
-    }
-}
-
-void fill_pixel_data(int width, int height, GrColor* data) {
-    for (int j = 0; j < height; ++j) {
-        for (int i = 0; i < width; ++i) {
-            unsigned int red = (unsigned int)(256.f * (i / (float)width));
-            unsigned int green = (unsigned int)(256.f * (j / (float)height));
-            data[i + j * width] = GrColorPackRGBA(red - (red >> 8), green - (green >> 8),
-                                                  0xff, 0xff);
-        }
-    }
-}
-
-bool does_full_buffer_contain_correct_color(GrColor* srcBuffer,
-                                            GrColor* dstBuffer,
-                                            int width,
-                                            int height) {
-    GrColor* srcPtr = srcBuffer;
-    GrColor* dstPtr = dstBuffer;
-    for (int j = 0; j < height; ++j) {
-        for (int i = 0; i < width; ++i) {
-            if (srcPtr[i] != dstPtr[i]) {
-                return false;
-            }
-        }
-        srcPtr += width;
-        dstPtr += width;
-    }
-    return true;
-}
-
-bool bitmap_to_base64_data_uri(const SkBitmap& bitmap, SkString* dst) {
+bool BipmapToBase64DataURI(const SkBitmap& bitmap, SkString* dst) {
     SkPixmap pm;
     if (!bitmap.peekPixels(&pm)) {
         dst->set("peekPixels failed");
@@ -183,7 +134,149 @@ bool bitmap_to_base64_data_uri(const SkBitmap& bitmap, SkString* dst) {
     return true;
 }
 
-#include "SkCharToGlyphCache.h"
+static bool compare_colors(int x, int y,
+                           const float rgbaA[],
+                           const float rgbaB[],
+                           const float tolRGBA[4],
+                           std::function<ComparePixmapsErrorReporter>& error) {
+    float diffs[4];
+    bool bad = false;
+    for (int i = 0; i < 4; ++i) {
+        diffs[i] = rgbaB[i] - rgbaA[i];
+        if (std::abs(diffs[i]) > std::abs(tolRGBA[i])) {
+            bad = true;
+        }
+    }
+    if (bad) {
+        error(x, y, diffs);
+        return false;
+    }
+    return true;
+}
+
+bool ComparePixels(const GrCPixmap& a,
+                   const GrCPixmap& b,
+                   const float tolRGBA[4],
+                   std::function<ComparePixmapsErrorReporter>& error) {
+    if (a.dimensions() != b.dimensions()) {
+        static constexpr float kEmptyDiffs[4] = {};
+        error(-1, -1, kEmptyDiffs);
+        return false;
+    }
+
+    SkAlphaType floatAlphaType = a.alphaType();
+    // If one is premul and the other is unpremul we do the comparison in premul space.
+    if ((a.alphaType() == kPremul_SkAlphaType   || b.alphaType() == kPremul_SkAlphaType) &&
+        (a.alphaType() == kUnpremul_SkAlphaType || b.alphaType() == kUnpremul_SkAlphaType)) {
+        floatAlphaType = kPremul_SkAlphaType;
+    }
+    sk_sp<SkColorSpace> floatCS;
+    if (SkColorSpace::Equals(a.colorSpace(), b.colorSpace())) {
+        floatCS = a.refColorSpace();
+    } else {
+        floatCS = SkColorSpace::MakeSRGBLinear();
+    }
+    GrImageInfo floatInfo(GrColorType::kRGBA_F32,
+                          floatAlphaType,
+                          std::move(floatCS),
+                          a.dimensions());
+
+    GrPixmap floatA = GrPixmap::Allocate(floatInfo);
+    GrPixmap floatB = GrPixmap::Allocate(floatInfo);
+    SkAssertResult(GrConvertPixels(floatA, a));
+    SkAssertResult(GrConvertPixels(floatB, b));
+
+    SkASSERT(floatA.rowBytes() == floatB.rowBytes());
+    auto at = [rb = floatA.rowBytes()](const void* base, int x, int y) {
+        return SkTAddOffset<const float>(base, y*rb + x*sizeof(float)*4);
+    };
+
+    for (int y = 0; y < floatA.height(); ++y) {
+        for (int x = 0; x < floatA.width(); ++x) {
+            const float* rgbaA = at(floatA.addr(), x, y);
+            const float* rgbaB = at(floatB.addr(), x, y);
+            if (!compare_colors(x, y, rgbaA, rgbaB, tolRGBA, error)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool CheckSolidPixels(const SkColor4f& col,
+                      const SkPixmap& pixmap,
+                      const float tolRGBA[4],
+                      std::function<ComparePixmapsErrorReporter>& error) {
+    size_t floatBpp = GrColorTypeBytesPerPixel(GrColorType::kRGBA_F32);
+
+    // First convert 'col' to be compatible with 'pixmap'
+    GrPixmap colorPixmap;
+    {
+        sk_sp<SkColorSpace> srcCS = SkColorSpace::MakeSRGBLinear();
+        GrImageInfo srcInfo(GrColorType::kRGBA_F32,
+                            kUnpremul_SkAlphaType,
+                            std::move(srcCS),
+                            {1, 1});
+        GrCPixmap srcPixmap(srcInfo, col.vec(), floatBpp);
+        GrImageInfo dstInfo =
+                srcInfo.makeAlphaType(pixmap.alphaType()).makeColorSpace(pixmap.refColorSpace());
+        colorPixmap = GrPixmap::Allocate(dstInfo);
+        SkAssertResult(GrConvertPixels(colorPixmap, srcPixmap));
+    }
+
+    size_t floatRowBytes = floatBpp * pixmap.width();
+    std::unique_ptr<char[]> floatB(new char[floatRowBytes * pixmap.height()]);
+    // Then convert 'pixmap' to RGBA_F32
+    GrPixmap f32Pixmap = GrPixmap::Allocate(pixmap.info().makeColorType(kRGBA_F32_SkColorType));
+    SkAssertResult(GrConvertPixels(f32Pixmap, pixmap));
+
+    for (int y = 0; y < f32Pixmap.height(); ++y) {
+        for (int x = 0; x < f32Pixmap.width(); ++x) {
+            auto rgbaA = SkTAddOffset<const float>(f32Pixmap.addr(),
+                                                   f32Pixmap.rowBytes()*y + floatBpp*x);
+            auto rgbaB = static_cast<const float*>(colorPixmap.addr());
+            if (!compare_colors(x, y, rgbaA, rgbaB, tolRGBA, error)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void CheckSingleThreadedProxyRefs(skiatest::Reporter* reporter,
+                                  GrSurfaceProxy* proxy,
+                                  int32_t expectedProxyRefs,
+                                  int32_t expectedBackingRefs) {
+    int32_t actualBackingRefs = proxy->testingOnly_getBackingRefCnt();
+
+    REPORTER_ASSERT(reporter, proxy->refCntGreaterThan(expectedProxyRefs - 1) &&
+                              !proxy->refCntGreaterThan(expectedProxyRefs));
+    REPORTER_ASSERT(reporter, actualBackingRefs == expectedBackingRefs);
+}
+
+std::unique_ptr<skgpu::SurfaceContext> CreateSurfaceContext(GrRecordingContext* rContext,
+                                                            const GrImageInfo& info,
+                                                            SkBackingFit fit,
+                                                            GrSurfaceOrigin origin,
+                                                            GrRenderable renderable,
+                                                            int sampleCount,
+                                                            GrMipmapped mipmapped,
+                                                            GrProtected isProtected,
+                                                            SkBudgeted budgeted) {
+    GrBackendFormat format = rContext->priv().caps()->getDefaultBackendFormat(info.colorType(),
+                                                                              renderable);
+    return rContext->priv().makeSC(info,
+                                   format,
+                                   fit,
+                                   origin,
+                                   renderable,
+                                   sampleCount,
+                                   mipmapped,
+                                   isProtected,
+                                   budgeted);
+}
+
+#include "src/utils/SkCharToGlyphCache.h"
 
 static SkGlyphID hash_to_glyph(uint32_t value) {
     return SkToU16(((value >> 16) ^ value) & 0xFFFF);
@@ -201,7 +294,7 @@ public:
         return fU;
     }
 };
-}
+}  // namespace
 
 DEF_TEST(chartoglyph_cache, reporter) {
     SkCharToGlyphCache cache;

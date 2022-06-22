@@ -5,39 +5,37 @@
  * found in the LICENSE file.
  */
 
-#include "AnimTimer.h"
-#include "Resources.h"
-#include "SkAnimCodecPlayer.h"
-#include "SkColor.h"
-#include "SkMakeUnique.h"
-#include "Skottie.h"
-#include "SkottieProperty.h"
-#include "SkottieUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkColor.h"
+#include "include/utils/SkAnimCodecPlayer.h"
+#include "modules/skottie/include/Skottie.h"
+#include "modules/skottie/include/SkottieProperty.h"
+#include "modules/skottie/utils/SkottieUtils.h"
+#include "modules/skresources/include/SkResources.h"
+#include "tools/Resources.h"
 
 #include <cmath>
 #include <vector>
-
-using namespace skottie;
 
 namespace {
 
 static constexpr char kWebFontResource[] = "fonts/Roboto-Regular.ttf";
 static constexpr char kSkottieResource[] = "skottie/skottie_sample_webfont.json";
 
-// Dummy web font loader which serves a single local font (checked in under resources/).
-class FakeWebFontProvider final : public ResourceProvider {
+// Mock web font loader which serves a single local font (checked in under resources/).
+class FakeWebFontProvider final : public skresources::ResourceProvider {
 public:
-    FakeWebFontProvider() : fFontData(GetResourceAsData(kWebFontResource)) {}
+    FakeWebFontProvider()
+        : fTypeface(SkTypeface::MakeFromData(GetResourceAsData(kWebFontResource))) {}
 
-    sk_sp<SkData> loadFont(const char[], const char[]) const override {
-        return fFontData;
+    sk_sp<SkTypeface> loadTypeface(const char[], const char[]) const override {
+        return fTypeface;
     }
 
 private:
-    sk_sp<SkData> fFontData;
+    sk_sp<SkTypeface> fTypeface;
 
-    using INHERITED = ResourceProvider;
+    using INHERITED = skresources::ResourceProvider;
 };
 
 } // namespace
@@ -55,7 +53,7 @@ protected:
 
     void onOnceBeforeDraw() override {
         if (auto stream = GetResourceAsStream(kSkottieResource)) {
-            fAnimation = Animation::Builder()
+            fAnimation = skottie::Animation::Builder()
                             .setResourceProvider(sk_make_sp<FakeWebFontProvider>())
                             .make(stream.get());
         }
@@ -72,32 +70,36 @@ protected:
         return DrawResult::kOk;
     }
 
-    bool onAnimate(const AnimTimer& timer) override {
+    bool onAnimate(double nanos) override {
         if (!fAnimation) {
             return false;
         }
 
         const auto duration = fAnimation->duration();
-        fAnimation->seek(std::fmod(timer.secs(), duration) / duration);
+        fAnimation->seek(std::fmod(1e-9 * nanos, duration) / duration);
         return true;
     }
 
 private:
-    static constexpr SkScalar kSize = 800;
+    inline static constexpr SkScalar kSize = 800;
 
-    sk_sp<Animation> fAnimation;
+    sk_sp<skottie::Animation> fAnimation;
 
     using INHERITED = skiagm::GM;
 };
 
 DEF_GM(return new SkottieWebFontGM;)
 
-using namespace skottie_utils;
-
 class SkottieColorizeGM : public skiagm::GM {
+public:
+    SkottieColorizeGM(const char* name, const char* resource)
+        : fName(name)
+        , fResource(resource)
+    {}
+
 protected:
     SkString onShortName() override {
-        return SkString("skottie_colorize");
+        return SkStringPrintf("skottie_colorize_%s", fName);
     }
 
     SkISize onISize() override {
@@ -105,12 +107,13 @@ protected:
     }
 
     void onOnceBeforeDraw() override {
-        if (auto stream = GetResourceAsStream("skottie/skottie_sample_search.json")) {
-            fPropManager = skstd::make_unique<CustomPropertyManager>();
-            fAnimation   = Animation::Builder()
+        if (auto stream = GetResourceAsStream(fResource)) {
+            fPropManager = std::make_unique<skottie_utils::CustomPropertyManager>();
+            fAnimation   = skottie::Animation::Builder()
                               .setPropertyObserver(fPropManager->getPropertyObserver())
                               .make(stream.get());
-            fColors      = fPropManager->getColorProps();
+            fColorProps  = fPropManager->getColorProps();
+            fTextProps   = fPropManager->getTextProps();
         }
     }
 
@@ -125,17 +128,17 @@ protected:
         return DrawResult::kOk;
     }
 
-    bool onAnimate(const AnimTimer& timer) override {
+    bool onAnimate(double nanos) override {
         if (!fAnimation) {
             return false;
         }
 
         const auto duration = fAnimation->duration();
-        fAnimation->seek(std::fmod(timer.secs(), duration) / duration);
+        fAnimation->seek(std::fmod(1e-9 * nanos, duration) / duration);
         return true;
     }
 
-    bool onHandleKey(SkUnichar uni) override {
+    bool onChar(SkUnichar uni) override {
         static constexpr SkColor kColors[] = {
             SK_ColorBLACK,
             SK_ColorRED,
@@ -146,8 +149,13 @@ protected:
 
         if (uni == 'c') {
             fColorIndex = (fColorIndex + 1) % SK_ARRAY_COUNT(kColors);
-            for (const auto& prop : fColors) {
+            for (const auto& prop : fColorProps) {
                 fPropManager->setColor(prop, kColors[fColorIndex]);
+            }
+            for (const auto& prop : fTextProps) {
+                auto txtval = fPropManager->getText(prop);
+                txtval.fFillColor = kColors[fColorIndex];
+                fPropManager->setText(prop, txtval);
             }
             return true;
         }
@@ -156,17 +164,22 @@ protected:
     }
 
 private:
-    static constexpr SkScalar kSize = 800;
+    inline static constexpr SkScalar kSize = 800;
 
-    sk_sp<Animation>                            fAnimation;
-    std::unique_ptr<CustomPropertyManager>      fPropManager;
-    std::vector<CustomPropertyManager::PropKey> fColors;
-    size_t                                      fColorIndex = 0;
+    const char*                                                fName;
+    const char*                                                fResource;
+
+    sk_sp<skottie::Animation>                                  fAnimation;
+    std::unique_ptr<skottie_utils::CustomPropertyManager>      fPropManager;
+    std::vector<skottie_utils::CustomPropertyManager::PropKey> fColorProps,
+                                                               fTextProps;
+    size_t                                                     fColorIndex = 0;
 
     using INHERITED = skiagm::GM;
 };
 
-DEF_GM(return new SkottieColorizeGM;)
+DEF_GM(return new SkottieColorizeGM("color", "skottie/skottie_sample_search.json");)
+DEF_GM(return new SkottieColorizeGM("text" , "skottie/skottie-text-animator-5.json");)
 
 class SkottieMultiFrameGM : public skiagm::GM {
 public:
@@ -181,9 +194,10 @@ protected:
 
     void onOnceBeforeDraw() override {
         if (auto stream = GetResourceAsStream("skottie/skottie_sample_multiframe.json")) {
-            fAnimation = Animation::Builder()
+            fAnimation = skottie::Animation::Builder()
                             .setResourceProvider(sk_make_sp<MultiFrameResourceProvider>())
                             .make(stream.get());
+            fAnimation->seek(0);
         }
     }
 
@@ -198,28 +212,29 @@ protected:
         return DrawResult::kOk;
     }
 
-    bool onAnimate(const AnimTimer& timer) override {
+    bool onAnimate(double nanos) override {
         if (!fAnimation) {
             return false;
         }
 
         const auto duration = fAnimation->duration();
-        fAnimation->seek(std::fmod(timer.secs(), duration) / duration);
+        fAnimation->seek(std::fmod(1e-9 * nanos, duration) / duration);
         return true;
     }
 
 private:
-    class MultiFrameResourceProvider final : public skottie::ResourceProvider {
+    class MultiFrameResourceProvider final : public skresources::ResourceProvider {
     public:
-        sk_sp<ImageAsset> loadImageAsset(const char[], const char[]) const override {
-            return skottie_utils::MultiFrameImageAsset::Make(
+        sk_sp<skresources::ImageAsset> loadImageAsset(const char[], const char[],
+                                                      const char[]) const override {
+            return skresources::MultiFrameImageAsset::Make(
                         GetResourceAsData("images/flightAnim.gif"));
         }
     };
 
-    static constexpr SkScalar kSize = 800;
+    inline static constexpr SkScalar kSize = 800;
 
-    sk_sp<Animation> fAnimation;
+    sk_sp<skottie::Animation> fAnimation;
 
     using INHERITED = skiagm::GM;
 };

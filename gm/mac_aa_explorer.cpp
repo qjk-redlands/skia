@@ -5,11 +5,23 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkFont.h"
-#include "SkSurface.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+
+#include <string.h>
+#include <initializer_list>
 
 #ifdef SK_BUILD_FOR_MAC
+
+#include "include/core/SkSurface.h"
 
 #import <ApplicationServices/ApplicationServices.h>
 
@@ -38,7 +50,7 @@ static CGContextRef make_cg_ctx(const SkPixmap& pm) {
 
     switch (pm.colorType()) {
         case kRGBA_8888_SkColorType:
-            info = kCGBitmapByteOrder32Host | kCGImageAlphaNoneSkipFirst;
+            info = kCGBitmapByteOrder32Host | (CGBitmapInfo)kCGImageAlphaNoneSkipFirst;
             cs = CGColorSpaceCreateDeviceRGB();
             break;
         case kGray_8_SkColorType:
@@ -79,7 +91,7 @@ static void test_mac_fonts(SkCanvas* canvas, SkScalar size, SkScalar xpos) {
             CGContextSetShouldSmoothFonts(ctx, smooth);
             CGContextShowTextAtPoint(ctx, 2 + xpos, 2, "A", 1);
 
-            surf->draw(canvas, x, y, nullptr);
+            surf->draw(canvas, x, y);
             x += pm.width();
         }
         y += pm.height();
@@ -105,7 +117,7 @@ protected:
 
     SkString onShortName() override { return SkString("macaatest"); }
 
-    bool onHandleKey(SkUnichar uni) override {
+    bool onChar(SkUnichar uni) override {
         switch (uni) {
             case 'i': fSize += 1; return true;
             case 'k': fSize -= 1; return true;
@@ -153,11 +165,11 @@ DEF_SIMPLE_GM(macaa_colors, canvas, 800, 500) {
             for (bool lcd : {false, true}) {
                 font.setEdging(lcd ? SkFont::Edging::kSubpixelAntiAlias
                                    : SkFont::Edging::kAntiAlias);
-                for (auto h : {kNo_SkFontHinting, kNormal_SkFontHinting}) {
+                for (auto h : {SkFontHinting::kNone, SkFontHinting::kNormal}) {
                     font.setHinting(h);
 
                     y += font.getSpacing() + 2;
-                    canvas->drawSimpleText(str, len, kUTF8_SkTextEncoding, x, y, font, paint);
+                    canvas->drawSimpleText(str, len, SkTextEncoding::kUTF8, x, y, font, paint);
                 }
             }
             y += 8;

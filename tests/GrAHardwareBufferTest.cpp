@@ -7,18 +7,19 @@
 
 // This is a GPU-backend specific test. It relies on static intializers to work
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 #if SK_SUPPORT_GPU && defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
 
-#include "GrAHardwareBufferImageGenerator.h"
-#include "GrContext.h"
-#include "GrContextFactory.h"
-#include "GrContextPriv.h"
-#include "GrGpu.h"
-#include "SkImage.h"
-#include "SkSurface.h"
-#include "Test.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrAHardwareBufferImageGenerator.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/GrGpu.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
 
 #include <android/hardware_buffer.h>
 #include <cinttypes>
@@ -101,7 +102,7 @@ static void basic_draw_test_helper(skiatest::Reporter* reporter,
                                    const sk_gpu_test::ContextInfo& info,
                                    GrSurfaceOrigin surfaceOrigin) {
 
-    GrContext* context = info.grContext();
+    auto context = info.directContext();
     if (!context->priv().caps()->supportsAHardwareBufferImages()) {
         return;
     }
@@ -211,7 +212,7 @@ static void surface_draw_test_helper(skiatest::Reporter* reporter,
                                      const sk_gpu_test::ContextInfo& info,
                                      GrSurfaceOrigin surfaceOrigin) {
 
-    GrContext* context = info.grContext();
+    auto context = info.directContext();
     if (!context->priv().caps()->supportsAHardwareBufferImages()) {
         return;
     }
@@ -257,7 +258,7 @@ static void surface_draw_test_helper(skiatest::Reporter* reporter,
         return;
     }
 
-    surface->getCanvas()->drawBitmap(srcBitmap, 0, 0);
+    surface->getCanvas()->drawImage(srcBitmap.asImage(), 0, 0);
 
     SkBitmap readbackBitmap;
     readbackBitmap.allocN32Pixels(DEV_W, DEV_H);

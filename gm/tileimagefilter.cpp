@@ -5,13 +5,25 @@
  * found in the LICENSE file.
  */
 
-#include "SkColorFilterImageFilter.h"
-#include "SkColorMatrixFilter.h"
-#include "SkImage.h"
-#include "SkImageSource.h"
-#include "SkTileImageFilter.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/effects/SkImageFilters.h"
+#include "tools/ToolUtils.h"
+
+#include <stddef.h>
+#include <utility>
 
 #define WIDTH 400
 #define HEIGHT 200
@@ -30,16 +42,14 @@ protected:
         return SkString("tileimagefilter");
     }
 
-    SkISize onISize() override{
+    SkISize onISize() override {
         return SkISize::Make(WIDTH, HEIGHT);
     }
 
     void onOnceBeforeDraw() override {
-        fBitmap = SkImage::MakeFromBitmap(
-                ToolUtils::create_string_bitmap(50, 50, 0xD000D000, 10, 45, 50, "e"));
+        fBitmap = ToolUtils::create_string_image(50, 50, 0xD000D000, 10, 45, 50, "e");
 
-        fCheckerboard = SkImage::MakeFromBitmap(
-                ToolUtils::create_checkerboard_bitmap(80, 80, 0xFFA0A0A0, 0xFF404040, 8));
+        fCheckerboard = ToolUtils::create_checkerboard_image(80, 80, 0xFFA0A0A0, 0xFF404040, 8);
     }
 
     void onDraw(SkCanvas* canvas) override {
@@ -64,15 +74,14 @@ protected:
                                                   SkIntToScalar(i * 4),
                                                   SkIntToScalar(image->width() - i * 12),
                                                   SkIntToScalar(image->height()) - i * 12);
-                sk_sp<SkImageFilter> tileInput(SkImageSource::Make(image));
-                sk_sp<SkImageFilter> filter(SkTileImageFilter::Make(srcRect,
-                                                                    dstRect,
-                                                                    std::move(tileInput)));
+                sk_sp<SkImageFilter> tileInput(SkImageFilters::Image(image));
+                sk_sp<SkImageFilter> filter(SkImageFilters::Tile(srcRect, dstRect,
+                                                                 std::move(tileInput)));
                 canvas->save();
                 canvas->translate(SkIntToScalar(x), SkIntToScalar(y));
                 SkPaint paint;
                 paint.setImageFilter(std::move(filter));
-                canvas->drawImage(fBitmap.get(), 0, 0, &paint);
+                canvas->drawImage(fBitmap.get(), 0, 0, SkSamplingOptions(), &paint);
                 canvas->drawRect(srcRect, red);
                 canvas->drawRect(dstRect, blue);
                 canvas->restore();
@@ -85,20 +94,20 @@ protected:
         }
 
         {
-            SkScalar matrix[20] = { SK_Scalar1, 0, 0, 0, 0,
-                                    0, SK_Scalar1, 0, 0, 0,
-                                    0, 0, SK_Scalar1, 0, 0,
-                                    0, 0, 0, SK_Scalar1, 0 };
+            float matrix[20] = { 1, 0, 0, 0, 0,
+                                 0, 1, 0, 0, 0,
+                                 0, 0, 1, 0, 0,
+                                 0, 0, 0, 1, 0 };
 
             SkRect srcRect = SkRect::MakeWH(SkIntToScalar(fBitmap->width()),
                                             SkIntToScalar(fBitmap->height()));
             SkRect dstRect = SkRect::MakeWH(SkIntToScalar(fBitmap->width() * 2),
                                             SkIntToScalar(fBitmap->height() * 2));
-            sk_sp<SkImageFilter> tile(SkTileImageFilter::Make(srcRect, dstRect, nullptr));
-            sk_sp<SkColorFilter> cf(SkColorFilters::MatrixRowMajor255(matrix));
+            sk_sp<SkImageFilter> tile(SkImageFilters::Tile(srcRect, dstRect, nullptr));
+            sk_sp<SkColorFilter> cf(SkColorFilters::Matrix(matrix));
 
             SkPaint paint;
-            paint.setImageFilter(SkColorFilterImageFilter::Make(std::move(cf), std::move(tile)));
+            paint.setImageFilter(SkImageFilters::ColorFilter(std::move(cf), std::move(tile)));
             canvas->save();
             canvas->translate(SkIntToScalar(x), SkIntToScalar(y));
             canvas->clipRect(dstRect);
@@ -116,24 +125,24 @@ protected:
 
             SkRect srcRect = SkRect::MakeXYWH(0, 0, 50, 50);
             SkRect dstRect = SkRect::MakeXYWH(0, 0, 100, 100);
-            SkImageFilter::CropRect cropRect(SkRect::MakeXYWH(5, 5, 40, 40));
+            SkIRect cropRect = SkIRect::MakeXYWH(5, 5, 40, 40);
             sk_sp<SkColorFilter> greenCF = SkColorFilters::Blend(SK_ColorGREEN, SkBlendMode::kSrc);
-            sk_sp<SkImageFilter> green(SkColorFilterImageFilter::Make(std::move(greenCF),
+            sk_sp<SkImageFilter> green(SkImageFilters::ColorFilter(std::move(greenCF),
                                                                       nullptr,
                                                                       &cropRect));
             SkPaint paint;
             paint.setColor(SK_ColorRED);
-            paint.setImageFilter(SkTileImageFilter::Make(srcRect, dstRect, std::move(green)));
+            paint.setImageFilter(SkImageFilters::Tile(srcRect, dstRect, std::move(green)));
             canvas->drawRect(dstRect, paint);
         }
     }
 private:
     sk_sp<SkImage> fBitmap, fCheckerboard;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM(return new TileImageFilterGM;)
-}
+}  // namespace skiagm

@@ -8,23 +8,22 @@
 #ifndef SkShader_DEFINED
 #define SkShader_DEFINED
 
-#include "SkBlendMode.h"
-#include "SkColor.h"
-#include "SkFilterQuality.h"
-#include "SkFlattenable.h"
-#include "SkImageInfo.h"
-#include "SkMatrix.h"
-#include "SkTileMode.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkTileMode.h"
 
 class SkArenaAlloc;
 class SkBitmap;
+class SkBlender;
 class SkColorFilter;
 class SkColorSpace;
 class SkImage;
 class SkPath;
 class SkPicture;
 class SkRasterPipeline;
-class GrContext;
 class GrFragmentProcessor;
 
 /** \class SkShader
@@ -131,7 +130,7 @@ private:
     SkShader() = default;
     friend class SkShaderBase;
 
-    typedef SkFlattenable INHERITED;
+    using INHERITED = SkFlattenable;
 };
 
 class SK_API SkShaders {
@@ -140,9 +139,7 @@ public:
     static sk_sp<SkShader> Color(SkColor);
     static sk_sp<SkShader> Color(const SkColor4f&, sk_sp<SkColorSpace>);
     static sk_sp<SkShader> Blend(SkBlendMode mode, sk_sp<SkShader> dst, sk_sp<SkShader> src);
-    static sk_sp<SkShader> Lerp(float t, sk_sp<SkShader> dst, sk_sp<SkShader> src);
-
-    static sk_sp<SkShader> Lerp(sk_sp<SkShader> red, sk_sp<SkShader> dst, sk_sp<SkShader> src);
+    static sk_sp<SkShader> Blend(sk_sp<SkBlender>, sk_sp<SkShader> dst, sk_sp<SkShader> src);
 
 private:
     SkShaders() = delete;

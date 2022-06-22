@@ -6,18 +6,18 @@
  * found in the LICENSE file.
  */
 
-#include "VulkanWindowContext.h"
+#include "tools/sk_app/VulkanWindowContext.h"
 
-#include "GrBackendSemaphore.h"
-#include "GrBackendSurface.h"
-#include "GrContext.h"
-#include "SkAutoMalloc.h"
-#include "SkSurface.h"
+#include "include/core/SkSurface.h"
+#include "include/gpu/GrBackendSemaphore.h"
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/core/SkAutoMalloc.h"
 
-#include "vk/GrVkExtensions.h"
-#include "vk/GrVkImage.h"
-#include "vk/GrVkTypes.h"
-#include "vk/GrVkUtil.h"
+#include "include/gpu/vk/GrVkExtensions.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "src/gpu/vk/GrVkImage.h"
+#include "src/gpu/vk/GrVkUtil.h"
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 // windows wants to define this as CreateSemaphoreA or CreateSemaphoreW
@@ -49,6 +49,7 @@ VulkanWindowContext::VulkanWindowContext(const DisplayParams& params,
 }
 
 void VulkanWindowContext::initializeContext() {
+    SkASSERT(!fContext);
     // any config code here (particularly for msaa)?
 
     PFN_vkGetInstanceProcAddr getInstanceProc = fGetInstanceProcAddr;
@@ -117,7 +118,7 @@ void VulkanWindowContext::initializeContext() {
     GET_DEV_PROC(QueuePresentKHR);
     GET_DEV_PROC(GetDeviceQueue);
 
-    fContext = GrContext::MakeVulkan(backendContext, fDisplayParams.fGrContextOptions);
+    fContext = GrDirectContext::MakeVulkan(backendContext, fDisplayParams.fGrContextOptions);
 
     fSurface = fCreateVkSurfaceFn(fInstance);
     if (VK_NULL_HANDLE == fSurface) {
@@ -218,6 +219,12 @@ bool VulkanWindowContext::createSwapchain(int width, int height,
                                    VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                                    VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     SkASSERT((caps.supportedUsageFlags & usageFlags) == usageFlags);
+    if (caps.supportedUsageFlags & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
+        usageFlags |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    }
+    if (caps.supportedUsageFlags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+        usageFlags |= VK_IMAGE_USAGE_SAMPLED_BIT;
+    }
     SkASSERT(caps.supportedTransforms & caps.currentTransform);
     SkASSERT(caps.supportedCompositeAlpha & (VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR |
                                              VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR));
@@ -238,7 +245,7 @@ bool VulkanWindowContext::createSwapchain(int width, int height,
         }
     }
     fDisplayParams = params;
-    fSampleCount = params.fMSAASampleCount;
+    fSampleCount = std::max(1, params.fMSAASampleCount);
     fStencilBits = 8;
 
     if (VK_FORMAT_UNDEFINED == surfaceFormat) {
@@ -252,7 +259,6 @@ bool VulkanWindowContext::createSwapchain(int width, int height,
             colorType = kRGBA_8888_SkColorType;
             break;
         case VK_FORMAT_B8G8R8A8_UNORM: // fall through
-        case VK_FORMAT_B8G8R8A8_SRGB:
             colorType = kBGRA_8888_SkColorType;
             break;
         default:
@@ -318,12 +324,21 @@ bool VulkanWindowContext::createSwapchain(int width, int height,
         fDestroySwapchainKHR(fDevice, swapchainCreateInfo.oldSwapchain, nullptr);
     }
 
-    this->createBuffers(swapchainCreateInfo.imageFormat, colorType);
+    if (!this->createBuffers(swapchainCreateInfo.imageFormat, usageFlags, colorType,
+                             swapchainCreateInfo.imageSharingMode)) {
+        fDeviceWaitIdle(fDevice);
+
+        this->destroyBuffers();
+
+        fDestroySwapchainKHR(fDevice, swapchainCreateInfo.oldSwapchain, nullptr);
+    }
 
     return true;
 }
 
-void VulkanWindowContext::createBuffers(VkFormat format, SkColorType colorType) {
+bool VulkanWindowContext::createBuffers(VkFormat format, VkImageUsageFlags usageFlags,
+                                        SkColorType colorType,
+                                        VkSharingMode sharingMode) {
     fGetSwapchainImagesKHR(fDevice, fSwapchain, &fImageCount, nullptr);
     SkASSERT(fImageCount);
     fImages = new VkImage[fImageCount];
@@ -341,17 +356,30 @@ void VulkanWindowContext::createBuffers(VkFormat format, SkColorType colorType) 
         info.fImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         info.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
         info.fFormat = format;
+        info.fImageUsageFlags = usageFlags;
         info.fLevelCount = 1;
         info.fCurrentQueueFamily = fPresentQueueIndex;
+        info.fSharingMode = sharingMode;
 
-        GrBackendRenderTarget backendRT(fWidth, fHeight, fSampleCount, info);
+        if (usageFlags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+            GrBackendTexture backendTexture(fWidth, fHeight, info);
+            fSurfaces[i] = SkSurface::MakeFromBackendTexture(
+                    fContext.get(), backendTexture, kTopLeft_GrSurfaceOrigin,
+                    fDisplayParams.fMSAASampleCount,
+                    colorType, fDisplayParams.fColorSpace, &fDisplayParams.fSurfaceProps);
+        } else {
+            if (fDisplayParams.fMSAASampleCount > 1) {
+                return false;
+            }
+            GrBackendRenderTarget backendRT(fWidth, fHeight, fSampleCount, info);
+            fSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(
+                    fContext.get(), backendRT, kTopLeft_GrSurfaceOrigin, colorType,
+                    fDisplayParams.fColorSpace, &fDisplayParams.fSurfaceProps);
 
-        fSurfaces[i] = SkSurface::MakeFromBackendRenderTarget(fContext.get(),
-                                                              backendRT,
-                                                              kTopLeft_GrSurfaceOrigin,
-                                                              colorType,
-                                                              fDisplayParams.fColorSpace,
-                                                              &fDisplayParams.fSurfaceProps);
+        }
+        if (!fSurfaces[i]) {
+            return false;
+        }
     }
 
     // set up the backbuffers
@@ -366,11 +394,13 @@ void VulkanWindowContext::createBuffers(VkFormat format, SkColorType colorType) 
     fBackbuffers = new BackbufferInfo[fImageCount + 1];
     for (uint32_t i = 0; i < fImageCount + 1; ++i) {
         fBackbuffers[i].fImageIndex = -1;
-        GR_VK_CALL_ERRCHECK(fInterface,
-                            CreateSemaphore(fDevice, &semaphoreInfo,
-                                            nullptr, &fBackbuffers[i].fRenderSemaphore));
+        SkDEBUGCODE(VkResult result = )GR_VK_CALL(fInterface,
+                CreateSemaphore(fDevice, &semaphoreInfo, nullptr,
+                                &fBackbuffers[i].fRenderSemaphore));
+        SkASSERT(result == VK_SUCCESS);
     }
     fCurrentBackbufferIndex = fImageCount;
+    return true;
 }
 
 void VulkanWindowContext::destroyBuffers() {
@@ -419,6 +449,7 @@ void VulkanWindowContext::destroyContext() {
         }
     }
 
+    SkASSERT(fContext->unique());
     fContext.reset();
     fInterface.reset();
 
@@ -464,8 +495,9 @@ sk_sp<SkSurface> VulkanWindowContext::getBackbufferSurface() {
     semaphoreInfo.pNext = nullptr;
     semaphoreInfo.flags = 0;
     VkSemaphore semaphore;
-    GR_VK_CALL_ERRCHECK(fInterface, CreateSemaphore(fDevice, &semaphoreInfo,
-                                                    nullptr, &semaphore));
+    SkDEBUGCODE(VkResult result = )GR_VK_CALL(fInterface, CreateSemaphore(fDevice, &semaphoreInfo,
+                                                                          nullptr, &semaphore));
+    SkASSERT(result == VK_SUCCESS);
 
     // acquire the image
     VkResult res = fAcquireNextImageKHR(fDevice, fSwapchain, UINT64_MAX,
@@ -517,19 +549,21 @@ void VulkanWindowContext::swapBuffers() {
     GrFlushInfo info;
     info.fNumSemaphores = 1;
     info.fSignalSemaphores = &beSemaphore;
-    surface->flush(SkSurface::BackendSurfaceAccess::kPresent, info);
+    GrBackendSurfaceMutableState presentState(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, fPresentQueueIndex);
+    surface->flush(info, &presentState);
+    surface->recordingContext()->asDirectContext()->submit();
 
     // Submit present operation to present queue
     const VkPresentInfoKHR presentInfo =
     {
         VK_STRUCTURE_TYPE_PRESENT_INFO_KHR, // sType
-        NULL, // pNext
+        nullptr, // pNext
         1, // waitSemaphoreCount
         &backbuffer->fRenderSemaphore, // pWaitSemaphores
         1, // swapchainCount
         &fSwapchain, // pSwapchains
         &backbuffer->fImageIndex, // pImageIndices
-        NULL // pResults
+        nullptr // pResults
     };
 
     fQueuePresentKHR(fPresentQueue, &presentInfo);

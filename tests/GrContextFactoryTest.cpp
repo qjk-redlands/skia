@@ -5,70 +5,39 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
-#include "GrContextFactory.h"
-#include "GrContextPriv.h"
-#include "GrCaps.h"
-#include "SkExecutor.h"
-#include "Test.h"
+#include "include/core/SkExecutor.h"
+#include "include/gpu/GrDirectContext.h"
+#include "src/gpu/GrCaps.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "tests/Test.h"
+#include "tools/gpu/GrContextFactory.h"
 
 using namespace sk_gpu_test;
-
-DEF_GPUTEST(GrContextFactory_NVPRContextOptionHasPathRenderingSupport, reporter, options) {
-    // Test that if NVPR is requested, the context always has path rendering
-    // or the context creation fails.
-    for (int i = 0; i < GrContextFactory::kContextTypeCnt; ++i) {
-        GrContextFactory testFactory(options);
-        // Test that if NVPR is possible, caps are in sync.
-        GrContextFactory::ContextType ctxType = static_cast<GrContextFactory::ContextType>(i);
-        GrContext* context = testFactory.get(ctxType,
-                                           GrContextFactory::ContextOverrides::kRequireNVPRSupport);
-        if (!context) {
-            continue;
-        }
-        REPORTER_ASSERT(reporter,
-                        context->priv().caps()->shaderCaps()->pathRenderingSupport());
-    }
-}
-
-DEF_GPUTEST(GrContextFactory_NoPathRenderingIfNVPRDisabled, reporter, options) {
-    // Test that if NVPR is explicitly disabled, the context has no path rendering support.
-
-    for (int i = 0; i <= GrContextFactory::kLastContextType; ++i) {
-        GrContextFactory testFactory(options);
-        GrContextFactory::ContextType ctxType = (GrContextFactory::ContextType)i;
-        GrContext* context =
-            testFactory.get(ctxType, GrContextFactory::ContextOverrides::kDisableNVPR);
-        if (context) {
-            REPORTER_ASSERT(reporter,
-                            !context->priv().caps()->shaderCaps()->pathRenderingSupport());
-        }
-    }
-}
 
 DEF_GPUTEST(GrContextFactory_abandon, reporter, options) {
     for (int i = 0; i < GrContextFactory::kContextTypeCnt; ++i) {
         GrContextFactory testFactory(options);
         GrContextFactory::ContextType ctxType = (GrContextFactory::ContextType) i;
         ContextInfo info1 = testFactory.getContextInfo(ctxType);
-        if (!info1.grContext()) {
+        if (!info1.directContext()) {
             continue;
         }
         REPORTER_ASSERT(reporter, info1.testContext());
          // Ref for comparison. The API does not explicitly say that this stays alive.
-        info1.grContext()->ref();
+        info1.directContext()->ref();
         testFactory.abandonContexts();
 
         // Test that we get different context after abandon.
         ContextInfo info2 = testFactory.getContextInfo(ctxType);
-        REPORTER_ASSERT(reporter, info2.grContext());
+        REPORTER_ASSERT(reporter, info2.directContext());
         REPORTER_ASSERT(reporter, info2.testContext());
 
-        REPORTER_ASSERT(reporter, info1.grContext() != info2.grContext());
+        REPORTER_ASSERT(reporter, info1.directContext() != info2.directContext());
         // The GL context should also change, but it also could get the same address.
 
-        info1.grContext()->unref();
+        info1.directContext()->unref();
     }
 }
 
@@ -77,39 +46,35 @@ DEF_GPUTEST(GrContextFactory_sharedContexts, reporter, options) {
         GrContextFactory testFactory(options);
         GrContextFactory::ContextType ctxType = static_cast<GrContextFactory::ContextType>(i);
         ContextInfo info1 = testFactory.getContextInfo(ctxType);
-        if (!info1.grContext()) {
+        if (!info1.directContext()) {
             continue;
         }
 
         // Ref for passing in. The API does not explicitly say that this stays alive.
-        info1.grContext()->ref();
+        info1.directContext()->ref();
         testFactory.abandonContexts();
 
         // Test that creating a context in a share group with an abandoned context fails.
-        ContextInfo info2 = testFactory.getSharedContextInfo(info1.grContext());
-        REPORTER_ASSERT(reporter, !info2.grContext());
-        info1.grContext()->unref();
+        ContextInfo info2 = testFactory.getSharedContextInfo(info1.directContext());
+        REPORTER_ASSERT(reporter, !info2.directContext());
+        info1.directContext()->unref();
 
         // Create a new base context
         ContextInfo info3 = testFactory.getContextInfo(ctxType);
-        if (!info3.grContext()) {
-            // Vulkan NexusPlayer bot fails here. Sigh.
-            continue;
-        }
 
         // Creating a context in a share group may fail, but should never crash.
-        ContextInfo info4 = testFactory.getSharedContextInfo(info3.grContext());
-        if (!info4.grContext()) {
+        ContextInfo info4 = testFactory.getSharedContextInfo(info3.directContext());
+        if (!info4.directContext()) {
             continue;
         }
-        REPORTER_ASSERT(reporter, info3.grContext() != info4.grContext());
+        REPORTER_ASSERT(reporter, info3.directContext() != info4.directContext());
         REPORTER_ASSERT(reporter, info3.testContext() != info4.testContext());
 
         // Passing a different index should create a new (unique) context.
-        ContextInfo info5 = testFactory.getSharedContextInfo(info3.grContext(), 1);
-        REPORTER_ASSERT(reporter, info5.grContext());
+        ContextInfo info5 = testFactory.getSharedContextInfo(info3.directContext(), 1);
+        REPORTER_ASSERT(reporter, info5.directContext());
         REPORTER_ASSERT(reporter, info5.testContext());
-        REPORTER_ASSERT(reporter, info5.grContext() != info4.grContext());
+        REPORTER_ASSERT(reporter, info5.directContext() != info4.directContext());
         REPORTER_ASSERT(reporter, info5.testContext() != info4.testContext());
     }
 }
@@ -127,12 +92,12 @@ DEF_GPUTEST(GrContextFactory_executorAndTaskGroup, reporter, options) {
 
         GrContextFactory::ContextType ctxType = static_cast<GrContextFactory::ContextType>(i);
         ContextInfo serialInfo = serialFactory.getContextInfo(ctxType);
-        if (GrContext* serialContext = serialInfo.grContext()) {
+        if (auto serialContext = serialInfo.directContext()) {
             REPORTER_ASSERT(reporter, nullptr == serialContext->priv().getTaskGroup());
         }
 
         ContextInfo threadedInfo = threadedFactory.getContextInfo(ctxType);
-        if (GrContext* threadedContext = threadedInfo.grContext()) {
+        if (auto threadedContext = threadedInfo.directContext()) {
             REPORTER_ASSERT(reporter, nullptr != threadedContext->priv().getTaskGroup());
         }
     }
@@ -140,8 +105,9 @@ DEF_GPUTEST(GrContextFactory_executorAndTaskGroup, reporter, options) {
 
 #ifdef SK_ENABLE_DUMP_GPU
 DEF_GPUTEST_FOR_ALL_CONTEXTS(GrContextDump, reporter, ctxInfo) {
-    // Ensure that GrContext::dump doesn't assert (which is possible, if the JSON code is wrong)
-    SkString result = ctxInfo.grContext()->priv().dump();
+    // Ensure that GrDirectContext::dump doesn't assert (which is possible, if the JSON code
+    // is wrong)
+    SkString result = ctxInfo.directContext()->dump();
     REPORTER_ASSERT(reporter, !result.isEmpty());
 }
 #endif

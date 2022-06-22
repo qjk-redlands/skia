@@ -8,7 +8,7 @@
 #ifndef SkSGGeometryNode_DEFINED
 #define SkSGGeometryNode_DEFINED
 
-#include "SkSGNode.h"
+#include "modules/sksg/include/SkSGNode.h"
 
 class SkCanvas;
 class SkPaint;
@@ -45,7 +45,7 @@ protected:
 private:
     friend class Draw; // wants to know the cached bounds.
 
-    typedef Node INHERITED;
+    using INHERITED = Node;
 };
 
 } // namespace sksg

@@ -5,22 +5,22 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 #if !defined(SK_BUILD_FOR_GOOGLE3)
 
-#include "SkRect.h"
-#include "SkRectPriv.h"
-#include "SkSGDraw.h"
-#include "SkSGGroup.h"
-#include "SkSGInvalidationController.h"
-#include "SkSGPaint.h"
-#include "SkSGRect.h"
-#include "SkSGRenderEffect.h"
-#include "SkSGTransform.h"
-#include "SkTo.h"
+#include "include/core/SkRect.h"
+#include "include/private/SkTo.h"
+#include "modules/sksg/include/SkSGDraw.h"
+#include "modules/sksg/include/SkSGGroup.h"
+#include "modules/sksg/include/SkSGInvalidationController.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "modules/sksg/include/SkSGRect.h"
+#include "modules/sksg/include/SkSGRenderEffect.h"
+#include "modules/sksg/include/SkSGTransform.h"
+#include "src/core/SkRectPriv.h"
 
-#include "Test.h"
+#include "tests/Test.h"
 
 #include <vector>
 
@@ -167,7 +167,7 @@ static void inval_test1(skiatest::Reporter* reporter) {
 
     {
         // Update transform.
-        matrix->setMatrix(SkMatrix::MakeScale(2, 2));
+        matrix->setMatrix(SkMatrix::Scale(2, 2));
         std::vector<SkRect> damage = { {0, 0, 300, 200}, { 0, 0, 600, 400} };
         check_inval(reporter, root,
                     SkRect::MakeWH(600, 400),
@@ -250,7 +250,7 @@ static void inval_test2(skiatest::Reporter* reporter) {
 
     {
         // Update m2.
-        m2->setMatrix(SkMatrix::MakeScale(2, 2));
+        m2->setMatrix(SkMatrix::Scale(2, 2));
         std::vector<SkRect> damage = { {0, 0, 100, 100}, { 0, 0, 200, 200} };
         check_inval(reporter, root,
                     SkRect::MakeWH(200, 200),
@@ -260,7 +260,7 @@ static void inval_test2(skiatest::Reporter* reporter) {
 
     {
         // Update shared m1.
-        m1->setMatrix(SkMatrix::MakeTrans(100, 100));
+        m1->setMatrix(SkMatrix::Translate(100, 100));
         std::vector<SkRect> damage = { {   0,   0, 200, 200},   // draw1 prev bounds
                                        { 100, 100, 300, 300},   // draw1 new bounds
                                        {   0,   0, 100, 100},   // draw2 prev bounds
@@ -326,6 +326,15 @@ static void inval_test3(skiatest::Reporter* reporter) {
                     &damage);
     }
 
+    {
+        // Visibility change -> full inval.
+        group->setVisible(false);
+        std::vector<SkRect> damage = { { 50, 75, 350, 175} };
+        check_inval(reporter, root,
+                    SkRect::MakeLTRB(50, 75, 350, 175),
+                    SkRect::MakeLTRB(50, 75, 350, 175),
+                    &damage);
+    }
 }
 
 static void inval_group_remove(skiatest::Reporter* reporter) {

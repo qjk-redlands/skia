@@ -5,11 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "SkOSFile.h"
-#include "SkString.h"
-#include "SkTFitsIn.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkTFitsIn.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkOSFile.h"
 
 #include <dirent.h>
 #include <new>
@@ -21,7 +21,7 @@
 #include <unistd.h>
 
 #ifdef SK_BUILD_FOR_IOS
-#include "SkOSFile_ios.h"
+#include "src/ports/SkOSFile_ios.h"
 #endif
 
 bool sk_exists(const char *path, SkFILE_Flags flags) {
@@ -130,15 +130,15 @@ struct SkOSFileIterData {
 };
 static_assert(sizeof(SkOSFileIterData) <= SkOSFile::Iter::kStorageSize, "not_enough_space");
 
-SkOSFile::Iter::Iter() { new (fSelf.get()) SkOSFileIterData; }
+SkOSFile::Iter::Iter() { new (fSelf) SkOSFileIterData; }
 
 SkOSFile::Iter::Iter(const char path[], const char suffix[]) {
-    new (fSelf.get()) SkOSFileIterData;
+    new (fSelf) SkOSFileIterData;
     this->reset(path, suffix);
 }
 
 SkOSFile::Iter::~Iter() {
-    SkOSFileIterData& self = *static_cast<SkOSFileIterData*>(fSelf.get());
+    SkOSFileIterData& self = *reinterpret_cast<SkOSFileIterData*>(fSelf);
     if (self.fDIR) {
         ::closedir(self.fDIR);
     }
@@ -146,7 +146,7 @@ SkOSFile::Iter::~Iter() {
 }
 
 void SkOSFile::Iter::reset(const char path[], const char suffix[]) {
-    SkOSFileIterData& self = *static_cast<SkOSFileIterData*>(fSelf.get());
+    SkOSFileIterData& self = *reinterpret_cast<SkOSFileIterData*>(fSelf);
     if (self.fDIR) {
         ::closedir(self.fDIR);
         self.fDIR = nullptr;
@@ -177,7 +177,7 @@ static bool issuffixfor(const SkString& suffix, const char str[]) {
 }
 
 bool SkOSFile::Iter::next(SkString* name, bool getDir) {
-    SkOSFileIterData& self = *static_cast<SkOSFileIterData*>(fSelf.get());
+    SkOSFileIterData& self = *reinterpret_cast<SkOSFileIterData*>(fSelf);
     if (self.fDIR) {
         dirent* entry;
 

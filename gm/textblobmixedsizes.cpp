@@ -5,20 +5,32 @@
  * found in the LICENSE file.
  */
 
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkBlurTypes.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/core/SkTextBlob.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkBlurMask.h"
+#include "tools/Resources.h"
+#include "tools/ToolUtils.h"
 
-#include "Resources.h"
-#include "SkBlurMask.h"
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "SkImage.h"
-#include "SkMaskFilter.h"
-#include "SkRandom.h"
-#include "SkStream.h"
-#include "SkSurface.h"
-#include "SkTextBlob.h"
-#include "SkTypeface.h"
+#include <string.h>
 
 namespace skiagm {
 class TextBlobMixedSizes : public GM {
@@ -41,35 +53,35 @@ protected:
 
         // large
         SkRect bounds;
-        font.measureText(text, strlen(text), kUTF8_SkTextEncoding, &bounds);
+        font.measureText(text, strlen(text), SkTextEncoding::kUTF8, &bounds);
         SkScalar yOffset = bounds.height();
         font.setSize(162);
 
         ToolUtils::add_to_text_blob(&builder, text, font, 0, yOffset);
 
         // Medium
-        font.measureText(text, strlen(text), kUTF8_SkTextEncoding, &bounds);
+        font.measureText(text, strlen(text), SkTextEncoding::kUTF8, &bounds);
         yOffset += bounds.height();
         font.setSize(72);
 
         ToolUtils::add_to_text_blob(&builder, text, font, 0, yOffset);
 
         // Small
-        font.measureText(text, strlen(text), kUTF8_SkTextEncoding, &bounds);
+        font.measureText(text, strlen(text), SkTextEncoding::kUTF8, &bounds);
         yOffset += bounds.height();
         font.setSize(32);
 
         ToolUtils::add_to_text_blob(&builder, text, font, 0, yOffset);
 
         // micro (will fall out of distance field text even if distance field text is enabled)
-        font.measureText(text, strlen(text), kUTF8_SkTextEncoding, &bounds);
+        font.measureText(text, strlen(text), SkTextEncoding::kUTF8, &bounds);
         yOffset += bounds.height();
         font.setSize(14);
 
         ToolUtils::add_to_text_blob(&builder, text, font, 0, yOffset);
 
         // Zero size.
-        font.measureText(text, strlen(text), kUTF8_SkTextEncoding, &bounds);
+        font.measureText(text, strlen(text), SkTextEncoding::kUTF8, &bounds);
         yOffset += bounds.height();
         font.setSize(0);
 
@@ -93,15 +105,18 @@ protected:
         sk_sp<SkSurface> surface;
         if (fUseDFT) {
             // Create a new Canvas to enable DFT
-            GrContext* ctx = inputCanvas->getGrContext();
+            auto ctx = inputCanvas->recordingContext();
             SkISize size = onISize();
             sk_sp<SkColorSpace> colorSpace = inputCanvas->imageInfo().refColorSpace();
             SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(),
                                                     kPremul_SkAlphaType, colorSpace);
-            SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag,
-                                 SkSurfaceProps::kLegacyFontHost_InitType);
+            SkSurfaceProps inputProps;
+            inputCanvas->getProps(&inputProps);
+            SkSurfaceProps props(
+                    SkSurfaceProps::kUseDeviceIndependentFonts_Flag | inputProps.flags(),
+                    inputProps.pixelGeometry());
             surface = SkSurface::MakeRenderTarget(ctx, SkBudgeted::kNo, info, 0, &props);
-            canvas = surface.get() ? surface->getCanvas() : inputCanvas;
+            canvas = surface ? surface->getCanvas() : inputCanvas;
             // init our new canvas with the old canvas's matrix
             canvas->setMatrix(inputCanvas->getTotalMatrix());
         }
@@ -161,7 +176,7 @@ protected:
             SkAutoCanvasRestore acr(inputCanvas, true);
             // since we prepended this matrix already, we blit using identity
             inputCanvas->resetMatrix();
-            inputCanvas->drawImage(surface->makeImageSnapshot().get(), 0, 0, nullptr);
+            inputCanvas->drawImage(surface->makeImageSnapshot().get(), 0, 0);
         }
     }
 
@@ -173,11 +188,11 @@ private:
 
     bool fUseDFT;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new TextBlobMixedSizes(false); )
 DEF_GM( return new TextBlobMixedSizes(true); )
-}
+}  // namespace skiagm

@@ -8,9 +8,11 @@
 #ifndef SkEncodedInfo_DEFINED
 #define SkEncodedInfo_DEFINED
 
-#include "SkData.h"
-#include "SkImageInfo.h"
-#include "../../third_party/skcms/skcms.h"
+#include <memory>
+
+#include "include/core/SkData.h"
+#include "include/core/SkImageInfo.h"
+#include "include/third_party/skcms/skcms.h"
 
 struct SkEncodedInfo {
 public:
@@ -220,7 +222,7 @@ public:
     SkEncodedInfo copy() const {
         auto copy = SkEncodedInfo::Make(fWidth, fHeight, fColor, fAlpha, fBitsPerComponent);
         if (fProfile) {
-            copy.fProfile.reset(new ICCProfile(*fProfile.get()));
+            copy.fProfile = std::make_unique<ICCProfile>(*fProfile);
         }
         return copy;
     }

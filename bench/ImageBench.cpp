@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkImage.h"
-#include "SkSurface.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkSurface.h"
 
 class Image2RasterBench : public Benchmark {
 public:
@@ -60,6 +60,6 @@ private:
     sk_sp<SkImage>   fImage;
     sk_sp<SkSurface> fRasterSurface;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 DEF_BENCH( return new Image2RasterBench; )

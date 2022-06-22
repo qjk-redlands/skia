@@ -6,15 +6,16 @@
 """Shared utilities for the build recipe module."""
 
 
-BUILD_PRODUCTS_ISOLATE_WHITELIST = [
+# This lists the products we want to isolate as outputs for future steps.
+DEFAULT_BUILD_PRODUCTS = [
   'dm',
   'dm.exe',
   'dm.app',
+  'fm',
+  'fm.exe',
   'nanobench.app',
   'get_images_from_skps',
   'get_images_from_skps.exe',
-  'hello-opencl',
-  'hello-opencl.exe',
   'nanobench',
   'nanobench.exe',
   'skpbench',
@@ -23,17 +24,30 @@ BUILD_PRODUCTS_ISOLATE_WHITELIST = [
   '*.dll',
   '*.dylib',
   'skia_launcher',
-  'skiaserve',
   'skottie_tool',
   'lib/*.so',
   'run_testlab',
-  'skqp-universal-debug.apk',
-  'whitelist_devices.json',
 ]
 
+def py_to_gn(val):
+  """Convert val to a string that can be used as GN args."""
+  if isinstance(val, bool):
+    return 'true' if val else 'false'
+  elif '%s' % val == val:
+    # TODO(dogben): Handle quoting "$\
+    return '"%s"' % val
+  elif isinstance(val, (list, tuple)):
+    return '[%s]' % (','.join(py_to_gn(x) for x in val))
+  elif isinstance(val, dict):
+    gn = ' '.join(
+        '%s=%s' % (k, py_to_gn(v)) for (k, v) in sorted(val.items()))
+    return gn
+  else:  # pragma: nocover
+    raise Exception('Converting %s to gn is not implemented.' % type(val))
 
-def copy_whitelisted_build_products(api, src, dst):
-  """Copy whitelisted build products from src to dst."""
+
+def copy_listed_files(api, src, dst, product_list):
+  """Copy listed files src to dst."""
   api.python.inline(
       name='copy build products',
       program='''import errno
@@ -44,7 +58,7 @@ import sys
 
 src = sys.argv[1]
 dst = sys.argv[2]
-build_products_whitelist = %s
+build_products = %s
 
 try:
   os.makedirs(dst)
@@ -52,14 +66,14 @@ except OSError as e:
   if e.errno != errno.EEXIST:
     raise
 
-for pattern in build_products_whitelist:
+for pattern in build_products:
   path = os.path.join(src, pattern)
   for f in glob.glob(path):
     dst_path = os.path.join(dst, os.path.relpath(f, src))
     if not os.path.isdir(os.path.dirname(dst_path)):
       os.makedirs(os.path.dirname(dst_path))
-    print 'Copying build product %%s to %%s' %% (f, dst_path)
+    print('Copying build product %%s to %%s' %% (f, dst_path))
     shutil.move(f, dst_path)
-''' % str(BUILD_PRODUCTS_ISOLATE_WHITELIST),
+''' % str(product_list),
       args=[src, dst],
       infra_step=True)

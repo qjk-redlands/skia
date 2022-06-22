@@ -8,10 +8,9 @@
 #ifndef SkContourMeasure_DEFINED
 #define SkContourMeasure_DEFINED
 
-#include "../private/SkNoncopyable.h"
-#include "../private/SkTDArray.h"
-#include "SkPath.h"
-#include "SkRefCnt.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/SkTDArray.h"
 
 struct SkConic;
 
@@ -89,13 +88,16 @@ private:
     friend class SkContourMeasureIter;
 };
 
-class SK_API SkContourMeasureIter : SkNoncopyable {
+class SK_API SkContourMeasureIter {
 public:
     SkContourMeasureIter();
     /**
      *  Initialize the Iter with a path.
      *  The parts of the path that are needed are copied, so the client is free to modify/delete
      *  the path after this call.
+     *
+     *  resScale controls the precision of the measure. values > 1 increase the
+     *  precision (and possibly slow down the computation).
      */
     SkContourMeasureIter(const SkPath& path, bool forceClosed, SkScalar resScale = 1);
     ~SkContourMeasureIter();
@@ -121,26 +123,9 @@ public:
     sk_sp<SkContourMeasure> next();
 
 private:
-    SkPath::RawIter fIter;
-    SkPath          fPath;
-    SkScalar        fTolerance;
-    bool            fForceClosed;
+    class Impl;
 
-    // temporary
-    SkTDArray<SkContourMeasure::Segment>  fSegments;
-    SkTDArray<SkPoint>  fPts; // Points used to define the segments
-
-    SkContourMeasure* buildSegments();
-
-    SkScalar compute_line_seg(SkPoint p0, SkPoint p1, SkScalar distance, unsigned ptIndex);
-    SkScalar compute_quad_segs(const SkPoint pts[3], SkScalar distance,
-                               int mint, int maxt, unsigned ptIndex);
-    SkScalar compute_conic_segs(const SkConic& conic, SkScalar distance,
-                                                         int mint, const SkPoint& minPt,
-                                                         int maxt, const SkPoint& maxPt,
-                                unsigned ptIndex);
-    SkScalar compute_cubic_segs(const SkPoint pts[4], SkScalar distance,
-                                int mint, int maxt, unsigned ptIndex);
+    std::unique_ptr<Impl> fImpl;
 };
 
 #endif

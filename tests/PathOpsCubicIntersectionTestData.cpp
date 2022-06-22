@@ -5,9 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "PathOpsCubicIntersectionTestData.h"
+#include "tests/PathOpsCubicIntersectionTestData.h"
 
 #include <limits>
+
+namespace PathOpsCubicIntersectionTestData {
 
 static const double D = FLT_EPSILON / 2;
 static const double G = FLT_EPSILON / 3;
@@ -273,3 +275,5 @@ const CubicPts negEpsilonLines[] = {
 };
 
 const size_t negEpsilonLines_count = SK_ARRAY_COUNT(negEpsilonLines);
+
+}  // namespace PathOpsCubicIntersectionTestData

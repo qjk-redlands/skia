@@ -2,14 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+PYTHON_VERSION_COMPATIBILITY = "PY3"
+
 DEPS = [
-  'builder_name_schema',
-  'depot_tools/bot_update',
-  'depot_tools/cipd',
-  'depot_tools/gclient',
-  'depot_tools/git',
+  'docker',
   'env',
-  'infra',
   'recipe_engine/context',
   'recipe_engine/file',
   'recipe_engine/json',
@@ -18,7 +15,6 @@ DEPS = [
   'recipe_engine/python',
   'recipe_engine/raw_io',
   'recipe_engine/step',
-  'recipe_engine/tempfile',
   'run',
   'vars',
 ]

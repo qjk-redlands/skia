@@ -9,14 +9,12 @@
 #define GLWindowContext_DEFINED
 
 
-#include "gl/GrGLInterface.h"
+#include "include/gpu/gl/GrGLInterface.h"
 
-#include "SkRefCnt.h"
-#include "SkSurface.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurface.h"
 
-#include "WindowContext.h"
-
-class GrContext;
+#include "tools/sk_app/WindowContext.h"
 
 namespace sk_app {
 

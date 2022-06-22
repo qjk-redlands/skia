@@ -5,11 +5,18 @@
  * found in the LICENSE file.
  */
 
-#include "SkCanvas.h"
-#include "SkFont.h"
-#include "SkTypeface.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "tools/ToolUtils.h"
 
 /* This test tries to define the effect of using hairline strokes on text.
  * Provides non-hairline images for reference and consistency checks.
@@ -92,12 +99,12 @@ static void drawTestCase(SkCanvas* canvas,
     // This demonstrates that we can not measure the text if
     // there's a device transform. The canvas total matrix will
     // end up being a device transform.
-    bool drawRef = !(canvas->getTotalMatrix().getType() &
+    bool drawRef = !(canvas->getLocalToDeviceAs3x3().getType() &
                      ~(SkMatrix::kIdentity_Mask | SkMatrix::kTranslate_Mask));
 
     SkRect bounds;
     if (drawRef) {
-        SkScalar advance = font.measureText(kText, sizeof(kText) - 1, kUTF8_SkTextEncoding,
+        SkScalar advance = font.measureText(kText, sizeof(kText) - 1, SkTextEncoding::kUTF8,
                                             &bounds, &paint);
 
         paint.setStrokeWidth(0.0f);
@@ -116,12 +123,13 @@ static void drawTestCase(SkCanvas* canvas,
     paint.setColor(SK_ColorBLACK);
     paint.setStrokeWidth(strokeWidth);
     paint.setStyle(strokeStyle);
-    canvas->drawSimpleText(kText, sizeof(kText) - 1, kUTF8_SkTextEncoding, 0.0f, 0.0f, font, paint);
+    canvas->drawSimpleText(kText, sizeof(kText) - 1, SkTextEncoding::kUTF8,
+                           0.0f, 0.0f, font, paint);
 
     if (drawRef) {
         const size_t len = sizeof(kText) - 1;
         SkGlyphID glyphs[len];
-        const int count = font.textToGlyphs(kText, len, kUTF8_SkTextEncoding, glyphs, len);
+        const int count = font.textToGlyphs(kText, len, SkTextEncoding::kUTF8, glyphs, len);
         SkScalar widths[len]; // len is conservative. we really only need 'count'
         font.getWidthsBounds(glyphs, count, widths, nullptr, &paint);
 
@@ -130,7 +138,7 @@ static void drawTestCase(SkCanvas* canvas,
 
         // Magenta lines are the positions for the characters.
         paint.setColor(SK_ColorMAGENTA);
-        SkScalar w = bounds.x();
+        SkScalar w = 0;
         for (size_t i = 0; i < sizeof(kText) - 1; ++i) {
             canvas->drawLine(w, 0.0f, w, 5.0f, paint);
             w += widths[i];

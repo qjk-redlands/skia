@@ -8,11 +8,11 @@
 #ifndef SkDOM_DEFINED
 #define SkDOM_DEFINED
 
-#include "SkArenaAlloc.h"
-#include "SkNoncopyable.h"
-#include "SkScalar.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkNoncopyable.h"
+#include "include/private/SkTemplates.h"
+#include "src/core/SkArenaAlloc.h"
 
 struct SkDOMNode;
 struct SkDOMAttr;
@@ -85,11 +85,11 @@ public:
     };
 
 private:
-    SkArenaAlloc                 fAlloc;
+    SkArenaAllocWithReset        fAlloc;
     Node*                        fRoot;
     std::unique_ptr<SkDOMParser> fParser;
 
-    typedef SkNoncopyable INHERITED;
+    using INHERITED = SkNoncopyable;
 };
 
 #endif

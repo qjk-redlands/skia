@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "JsonWriteBuffer.h"
+#include "tools/debugger/JsonWriteBuffer.h"
 
-#include "DrawCommand.h"
+#include "tools/debugger/DrawCommand.h"
 
 void JsonWriteBuffer::append(const char* type) {
     SkString fullName = SkStringPrintf("%02d_%s", fCount++, type);
@@ -135,6 +135,20 @@ void JsonWriteBuffer::writePointArray(const SkPoint* point, uint32_t count) {
     fWriter->beginArray();
     for (uint32_t i = 0; i < count; ++i) {
         DrawCommand::MakeJsonPoint(*fWriter, point[i]);
+    }
+    fWriter->endArray();
+}
+
+void JsonWriteBuffer::write(const SkM44& matrix) {
+    this->append("matrix");
+    fWriter->beginArray();
+    for (int r = 0; r < 4; ++r) {
+        fWriter->beginArray(nullptr, false);
+        SkV4 v = matrix.row(r);
+        for (int c = 0; c < 4; ++c) {
+            fWriter->appendFloat(v[c]);
+        }
+        fWriter->endArray();
     }
     fWriter->endArray();
 }

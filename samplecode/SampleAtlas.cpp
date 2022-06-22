@@ -5,36 +5,38 @@
  * found in the LICENSE file.
  */
 
-#include "AnimTimer.h"
-#include "Sample.h"
-#include "SkCanvas.h"
-#include "SkDrawable.h"
-#include "SkPath.h"
-#include "SkRSXform.h"
-#include "SkRandom.h"
-#include "SkSurface.h"
-#include "SkTextUtils.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkDrawable.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRSXform.h"
+#include "include/core/SkSurface.h"
+#include "include/utils/SkRandom.h"
+#include "include/utils/SkTextUtils.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkPaintPriv.h"
 
 typedef void (*DrawAtlasProc)(SkCanvas*, SkImage*, const SkRSXform[], const SkRect[],
-                              const SkColor[], int, const SkRect*, const SkPaint*);
+                              const SkColor[], int, const SkRect*, const SkSamplingOptions&,
+                              const SkPaint*);
 
 static void draw_atlas(SkCanvas* canvas, SkImage* atlas, const SkRSXform xform[],
                        const SkRect tex[], const SkColor colors[], int count, const SkRect* cull,
-                       const SkPaint* paint) {
-    canvas->drawAtlas(atlas, xform, tex, colors, count, SkBlendMode::kModulate, cull, paint);
+                       const SkSamplingOptions& sampling, const SkPaint* paint) {
+    canvas->drawAtlas(atlas, xform, tex, colors, count, SkBlendMode::kModulate,
+                      sampling, cull, paint);
 }
 
 static void draw_atlas_sim(SkCanvas* canvas, SkImage* atlas, const SkRSXform xform[],
                            const SkRect tex[], const SkColor colors[], int count, const SkRect* cull,
-                           const SkPaint* paint) {
+                           const SkSamplingOptions& sampling, const SkPaint* paint) {
     for (int i = 0; i < count; ++i) {
         SkMatrix matrix;
         matrix.setRSXform(xform[i]);
 
         canvas->save();
         canvas->concat(matrix);
-        canvas->drawImageRect(atlas, tex[i], tex[i].makeOffset(-tex[i].x(), -tex[i].y()), paint,
-                              SkCanvas::kFast_SrcRectConstraint);
+        canvas->drawImageRect(atlas, tex[i], tex[i].makeOffset(-tex[i].x(), -tex[i].y()),
+                              sampling, paint, SkCanvas::kFast_SrcRectConstraint);
         canvas->restore();
     }
 }
@@ -57,7 +59,7 @@ static sk_sp<SkImage> make_atlas(int atlasSize, int cellSize) {
             paint.setColor(rand.nextU());
             paint.setAlpha(0xFF);
             int index = i % strlen(s);
-            SkTextUtils::Draw(canvas, &s[index], 1, kUTF8_SkTextEncoding,
+            SkTextUtils::Draw(canvas, &s[index], 1, SkTextEncoding::kUTF8,
                               x + half, y + half + half/2, font, paint,
                               SkTextUtils::kCenter_Align);
             i += 1;
@@ -184,11 +186,11 @@ protected:
             }
         }
         SkPaint paint;
-        paint.setFilterQuality(kLow_SkFilterQuality);
+        SkSamplingOptions sampling(SkFilterMode::kLinear);
 
         const SkRect cull = this->getBounds();
         const SkColor* colorsPtr = fUseColors ? colors : nullptr;
-        fProc(canvas, fAtlas.get(), xform, fTex, colorsPtr, N, &cull, &paint);
+        fProc(canvas, fAtlas.get(), xform, fTex, colorsPtr, N, &cull, sampling, &paint);
     }
 
     SkRect onGetBounds() override {
@@ -199,7 +201,7 @@ protected:
     }
 
 private:
-    typedef SkDrawable INHERITED;
+    using INHERITED = SkDrawable;
 };
 
 class DrawAtlasView : public Sample {
@@ -211,19 +213,14 @@ public:
     DrawAtlasView(const char name[], DrawAtlasProc proc) : fName(name), fProc(proc) { }
 
 protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, fName);
-            return true;
-        }
-        SkUnichar uni;
-        if (Sample::CharQ(*evt, &uni)) {
+    SkString name() override { return SkString(fName); }
+
+    bool onChar(SkUnichar uni) override {
             switch (uni) {
                 case 'C': fDrawable->toggleUseColors(); return true;
                 default: break;
             }
-        }
-        return this->INHERITED::onQuery(evt);
+            return false;
     }
 
     void onOnceBeforeDraw() override {
@@ -234,18 +231,18 @@ protected:
         canvas->drawDrawable(fDrawable.get());
     }
 
-    bool onAnimate(const AnimTimer&) override { return true; }
+    bool onAnimate(double /*nanos*/) override { return true; }
 #if 0
     // TODO: switch over to use this for our animation
-    bool onAnimate(const AnimTimer& timer) override {
-        SkScalar angle = SkDoubleToScalar(fmod(timer.secs() * 360 / 24, 360));
+    bool onAnimate(double nanos) override {
+        SkScalar angle = SkDoubleToScalar(fmod(1e-9 * nanos * 360 / 24, 360));
         fAnimatingDrawable->setSweep(angle);
         return true;
     }
 #endif
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////

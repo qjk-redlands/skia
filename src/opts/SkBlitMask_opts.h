@@ -8,7 +8,7 @@
 #ifndef SkBlitMask_opts_DEFINED
 #define SkBlitMask_opts_DEFINED
 
-#include "Sk4px.h"
+#include "src/core/Sk4px.h"
 
 namespace SK_OPTS_NS {
 
@@ -226,6 +226,6 @@ namespace SK_OPTS_NS {
     }
 }
 
-}  // SK_OPTS_NS
+}  // namespace SK_OPTS_NS
 
 #endif//SkBlitMask_opts_DEFINED

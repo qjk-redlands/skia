@@ -7,9 +7,9 @@
 #ifndef DisplayParams_DEFINED
 #define DisplayParams_DEFINED
 
-#include "GrContextOptions.h"
-#include "SkImageInfo.h"
-#include "SkSurfaceProps.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkSurfaceProps.h"
+#include "include/gpu/GrContextOptions.h"
 
 namespace sk_app {
 
@@ -18,8 +18,10 @@ struct DisplayParams {
         : fColorType(kN32_SkColorType)
         , fColorSpace(nullptr)
         , fMSAASampleCount(1)
-        , fSurfaceProps(SkSurfaceProps::kLegacyFontHost_InitType)
+        , fSurfaceProps(0, kRGB_H_SkPixelGeometry)
         , fDisableVsync(false)
+        , fDelayDrawableAcquisition(false)
+        , fEnableBinaryArchive(false)
     {}
 
     SkColorType         fColorType;
@@ -28,6 +30,8 @@ struct DisplayParams {
     GrContextOptions    fGrContextOptions;
     SkSurfaceProps      fSurfaceProps;
     bool                fDisableVsync;
+    bool                fDelayDrawableAcquisition;
+    bool                fEnableBinaryArchive;
 };
 
 }   // namespace sk_app

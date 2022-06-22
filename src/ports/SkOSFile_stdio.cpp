@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkOSFile.h"
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
+#include "src/core/SkOSFile.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -20,11 +20,11 @@
 #include <direct.h>
 #include <io.h>
 #include <vector>
-#include "SkUTF.h"
+#include "src/utils/SkUTF.h"
 #endif
 
 #ifdef SK_BUILD_FOR_IOS
-#include "SkOSFile_ios.h"
+#include "src/ports/SkOSFile_ios.h"
 #endif
 
 #ifdef _WIN32
@@ -54,7 +54,8 @@ static FILE* fopen_win(const char* utf8path, const char* perm) {
     }
     std::vector<uint16_t> wchars(n + 1);
     uint16_t* out = wchars.data();
-    for (const char* ptr = utf8path; ptr < end;) {
+    ptr = utf8path;
+    while (ptr < end) {
         out += SkUTF::ToUTF16(SkUTF::NextUTF8(&ptr, end), out);
     }
     SkASSERT(out == &wchars[n]);
@@ -183,6 +184,9 @@ bool sk_mkdir(const char* path) {
     retval = _mkdir(path);
 #else
     retval = mkdir(path, 0777);
+    if (retval) {
+      perror("mkdir() failed with error: ");
+    }
 #endif
     return 0 == retval;
 }

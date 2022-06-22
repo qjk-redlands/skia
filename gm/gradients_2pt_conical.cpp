@@ -5,8 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkGradientShader.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
 
 namespace skiagm {
 
@@ -314,7 +327,6 @@ public:
         : fGradCaseType(gradCaseType)
         , fDither(dither)
         , fMode(mode) {
-        this->setBGColor(0xFFDDDDDD);
         fName.printf("gradients_2pt_conical_%s%s", gGradCases[gradCaseType].fName,
                      fDither ? "" : "_nodither");
         switch (mode) {
@@ -329,14 +341,14 @@ public:
         }
     }
 
-protected:
-    SkString onShortName() {
-        return fName;
-    }
+private:
+    void onOnceBeforeDraw() override { this->setBGColor(0xFFDDDDDD); }
 
-    virtual SkISize onISize() { return SkISize::Make(840, 815); }
+    SkString onShortName() override { return fName; }
 
-    virtual void onDraw(SkCanvas* canvas) {
+    SkISize onISize() override { return {840, 815}; }
+
+    void onDraw(SkCanvas* canvas) override {
 
         SkPoint pts[2] = {
             { 0, 0 },
@@ -372,8 +384,6 @@ protected:
     }
 
 private:
-    typedef GM INHERITED;
-
     GradCaseType fGradCaseType;
     SkString fName;
     bool fDither;
@@ -397,4 +407,4 @@ DEF_GM( return new ConicalGradientsGM(kInside_GradCaseType, false); )
 DEF_GM( return new ConicalGradientsGM(kOutside_GradCaseType, false); )
 DEF_GM( return new ConicalGradientsGM(kEdge_GradCaseType, false); )
 
-}
+}  // namespace skiagm

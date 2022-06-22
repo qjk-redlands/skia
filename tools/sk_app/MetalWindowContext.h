@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2019 Google Inc.
  *
@@ -8,15 +7,15 @@
 #ifndef MetalWindowContext_DEFINED
 #define MetalWindowContext_DEFINED
 
-#include "SkRefCnt.h"
-#include "SkSurface.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurface.h"
+#include "include/ports/SkCFObject.h"
+#include "include/private/GrMtlTypesPriv.h"
 
-#include "WindowContext.h"
+#include "tools/sk_app/WindowContext.h"
 
 #import <Metal/Metal.h>
-#import <MetalKit/MetalKit.h>
-
-class GrContext;
+#import <QuartzCore/CAMetalLayer.h>
 
 namespace sk_app {
 
@@ -26,12 +25,15 @@ public:
 
     bool isValid() override { return fValid; }
 
-    void resize(int w, int h) override;
     void swapBuffers() override;
 
     void setDisplayParams(const DisplayParams& params) override;
 
+    void activate(bool isActive) override;
+
 protected:
+    static NSURL* CacheURL();
+
     MetalWindowContext(const DisplayParams&);
     // This should be called by subclass constructor. It is also called when window/display
     // parameters change. This will in turn call onInitializeContext().
@@ -39,18 +41,20 @@ protected:
     virtual bool onInitializeContext() = 0;
 
     // This should be called by subclass destructor. It is also called when window/display
-    // parameters change prior to initializing a new GL context. This will in turn call
+    // parameters change prior to initializing a new Metal context. This will in turn call
     // onDestroyContext().
     void destroyContext();
     virtual void onDestroyContext() = 0;
 
-
     bool                        fValid;
-    id<MTLDevice>               fDevice;
-    id<MTLCommandQueue>         fQueue;
-    dispatch_semaphore_t        fInFlightSemaphore;
-    MTKView*                    fMTKView;
-    sk_sp<SkSurface>            fSurface;
+    sk_cfp<id<MTLDevice>>       fDevice;
+    sk_cfp<id<MTLCommandQueue>> fQueue;
+    CAMetalLayer*               fMetalLayer;
+    GrMTLHandle                 fDrawableHandle;
+#if GR_METAL_SDK_VERSION >= 230
+    // wrapping this in sk_cfp throws up an availability warning, so we'll track lifetime manually
+    id<MTLBinaryArchive>        fPipelineArchive SK_API_AVAILABLE(macos(11.0), ios(14.0));
+#endif
 };
 
 }   // namespace sk_app

@@ -4,11 +4,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from subprocess import check_output, CalledProcessError
+
+from __future__ import print_function
+from subprocess import call, check_output, CalledProcessError
 import os
 import re
 import sys
 import tempfile
+
 
 HEADER = '''<!DOCTYPE html>
 <html lang="en">
@@ -38,6 +41,7 @@ BUCKET = 'skia-skqp'
 
 NAME_FMT = 'skqp-universal-%s.apk'
 
+
 def get_existing_files():
     cmd = ['gsutil', 'ls', 'gs://' + BUCKET]
     try:
@@ -53,6 +57,7 @@ def get_existing_files():
             result.add(m.group(1))
     return result
 
+
 def find(v, extant):
     l = min(16, len(v))
     while l > 8:
@@ -61,19 +66,37 @@ def find(v, extant):
         l -= 1
     return None
 
+
 def nowrap(s):
     return (s.replace(' ', u'\u00A0'.encode('utf-8'))
              .replace('-', u'\u2011'.encode('utf-8')))
 
-def table(o, from_commit, to_commit):
+
+def rev_parse(arg):
+    if isinstance(arg, tuple):
+        remote_url, branch = arg
+        for remote in check_output(['git', 'remote']).strip().split('\n'):
+            remote = remote.strip()
+            url = check_output(['git', 'remote', 'get-url', remote]).strip()
+            if url == remote_url:
+                arg = remote + '/' + branch
+                break
+    return check_output(['git', 'rev-parse', arg]).strip()
+
+
+def table(o, remote, branch, excludes):
     env_copy = os.environ.copy()
     env_copy['TZ'] = ''
     extant = get_existing_files()
-    o.write('<h2>%s %s</h2>\n' % (to_commit, ' '.join(from_commit)))
+
+    commits = [rev_parse((remote, branch))]
+    for exclude in excludes:
+        commits.append('^' + rev_parse(exclude))
+
+    o.write('<h2>Remote: %s<br>Branch: %s</h2>\n' % (remote, branch))
     o.write('<table>\n<tr><th>APK</th><th>Date</th><th>Commit</th></tr>\n')
     git_cmd = ['git', 'log', '--format=%H;%cd;%<(100,trunc)%s',
-               '--date=format-local:%Y-%m-%d %H:%M:%S %Z'
-               ] + from_commit + [to_commit]
+               '--date=format-local:%Y-%m-%d %H:%M:%S %Z'] + commits
     commits = check_output(git_cmd, env=env_copy)
     for line in commits.split('\n'):
         line = line.strip()
@@ -86,25 +109,32 @@ def table(o, from_commit, to_commit):
             url = 'https://storage.googleapis.com/%s/%s' % (BUCKET, apk_name)
         else:
             apk_name, url =  '', ''
-        commit_url = 'https://skia.googlesource.com/skia/+/' + commit
+        commit_url = '%s/+/%s' % (remote, commit)
         o.write('<tr>\n<td><a href="%s">%s</a></td>\n'
                 '<td>%s</td>\n<td><a href="%s">%s</a></td>\n</tr>\n' %
                 (url, nowrap(apk_name), nowrap(date), commit_url, subj))
     o.write('</table>\n')
 
+
 def main():
+    origin    = 'https://skia.googlesource.com/skia'
+    aosp_skqp = 'https://android.googlesource.com/platform/external/skqp'
+
     assert '/' in [os.sep, os.altsep] and '..' == os.pardir
     os.chdir(os.path.join(os.path.dirname(__file__), '../..'))
     d = tempfile.mkdtemp()
     path = os.path.join(d, 'apklist.html')
     with open(path, 'w') as o:
         o.write(HEADER)
-        table(o, ['^origin/master', '^3e34285f2a0'], 'origin/skqp/dev')
-        table(o, ['^origin/master'], 'origin/skqp/release')
+        table(o, origin,    'skqp/dev',     [(origin, 'main'), '3e34285f2a0'])
+        table(o, origin,    'skqp/release', [(origin, 'main'), '09ab171c5c0'])
+        table(o, aosp_skqp, 'pie-cts-dev',  ['f084c17322'])
         o.write(FOOTER)
-    print path
+    print(path)
+    call([sys.executable, 'bin/sysopen', path])
     gscmd = 'gsutil -h "Content-Type:text/html" cp "%s" gs://skia-skqp/apklist'
-    print gscmd % path
+    print(gscmd % path)
+
 
 if __name__ == '__main__':
     main()

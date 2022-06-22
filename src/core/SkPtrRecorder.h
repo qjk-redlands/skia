@@ -9,9 +9,9 @@
 #ifndef SkPtrSet_DEFINED
 #define SkPtrSet_DEFINED
 
-#include "SkRefCnt.h"
-#include "SkFlattenable.h"
-#include "SkTDArray.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/SkTDArray.h"
 
 /**
  *  Maintains a set of ptrs, assigning each a unique ID [1...N]. Duplicate ptrs
@@ -96,7 +96,7 @@ private:
 
     static bool Less(const Pair& a, const Pair& b);
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 /**
@@ -117,7 +117,7 @@ public:
     }
 
 private:
-    typedef SkPtrSet INHERITED;
+    using INHERITED = SkPtrSet;
 };
 
 /**
@@ -127,12 +127,12 @@ private:
  */
 class SkRefCntSet : public SkTPtrSet<SkRefCnt*> {
 public:
-    virtual ~SkRefCntSet();
+    ~SkRefCntSet() override;
 
 protected:
     // overrides
-    virtual void incPtr(void*);
-    virtual void decPtr(void*);
+    void incPtr(void*) override;
+    void decPtr(void*) override;
 };
 
 class SkFactorySet : public SkTPtrSet<SkFlattenable::Factory> {};
@@ -165,7 +165,7 @@ private:
     SkFactorySet           fFactorySet;
     SkTDArray<const char*> fNames;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 #endif

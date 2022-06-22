@@ -7,13 +7,13 @@
 
 #include <memory>
 
-#include "Model.h"
+#include "tools/mdbviz/Model.h"
 
-#include "DebugCanvas.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkPicture.h"
-#include "SkStream.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkStream.h"
+#include "tools/debugger/DebugCanvas.h"
 
 Model::Model() : fCurOp(0) {
     SkImageInfo ii = SkImageInfo::MakeN32Premul(1024, 1024);
@@ -21,7 +21,7 @@ Model::Model() : fCurOp(0) {
 }
 
 Model::~Model() {
-    this->resetOpList();
+    this->resetOpsTask();
 }
 
 Model::ErrorCode Model::load(const char* filename) {
@@ -42,7 +42,7 @@ Model::ErrorCode Model::load(const char* filename) {
         temp->setPicture(pic.get());
         pic->playback(temp.get());
         temp->setPicture(nullptr);
-        this->resetOpList();
+        this->resetOpsTask();
         temp->detachCommands(&fOps);
     }
 
@@ -105,7 +105,7 @@ void Model::drawTo(int index) {
     canvas.restoreToCount(saveCount);
 }
 
-void Model::resetOpList() {
+void Model::resetOpsTask() {
     for (int i = 0; i < fOps.count(); ++i) {
         delete fOps[i];
     }

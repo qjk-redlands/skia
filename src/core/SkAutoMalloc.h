@@ -8,10 +8,10 @@
 #ifndef SkAutoMalloc_DEFINED
 #define SkAutoMalloc_DEFINED
 
-#include "SkMacros.h"
-#include "SkMalloc.h"
-#include "SkNoncopyable.h"
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkMacros.h"
+#include "include/private/SkMalloc.h"
+#include "include/private/SkNoncopyable.h"
 
 #include <memory>
 
@@ -78,7 +78,6 @@ private:
     std::unique_ptr<void, WrapFree> fPtr;
     size_t fSize;  // can be larger than the requested size (see kReuse)
 };
-#define SkAutoMalloc(...) SK_REQUIRE_LOCAL_VAR(SkAutoMalloc)
 
 /**
  *  Manage an allocated block of memory. If the requested size is <= kSizeRequested (or slightly

@@ -8,18 +8,19 @@
 #ifndef GMSlide_DEFINED
 #define GMSlide_DEFINED
 
-#include "Slide.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "tools/viewer/Slide.h"
 
 class GMSlide : public Slide {
 public:
-    GMSlide(skiagm::GM* gm);
+    GMSlide(std::unique_ptr<skiagm::GM> gm);
     ~GMSlide() override;
 
     SkISize getDimensions() const override { return fGM->getISize(); }
 
+    void gpuTeardown() override;
     void draw(SkCanvas* canvas) override;
-    bool animate(const AnimTimer&) override;
+    bool animate(double nanos) override;
 
     bool onChar(SkUnichar c) override;
 
@@ -27,7 +28,7 @@ public:
     void onSetControls(const SkMetaData&) override;
 
 private:
-    skiagm::GM* fGM;
+    std::unique_ptr<skiagm::GM> fGM;
 };
 
 

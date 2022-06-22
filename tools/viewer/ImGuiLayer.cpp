@@ -5,15 +5,15 @@
 * found in the LICENSE file.
 */
 
-#include "ImGuiLayer.h"
+#include "tools/viewer/ImGuiLayer.h"
 
-#include "SkCanvas.h"
-#include "SkImage.h"
-#include "SkPixmap.h"
-#include "SkSurface.h"
-#include "SkSwizzle.h"
-#include "SkTime.h"
-#include "SkVertices.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkSwizzle.h"
+#include "include/core/SkTime.h"
+#include "include/core/SkVertices.h"
 
 #include "imgui.h"
 
@@ -22,67 +22,100 @@
 
 using namespace sk_app;
 
+static void build_ImFontAtlas(ImFontAtlas& atlas, SkPaint& fontPaint) {
+    int w, h;
+    unsigned char* pixels;
+    atlas.GetTexDataAsAlpha8(&pixels, &w, &h);
+    SkImageInfo info = SkImageInfo::MakeA8(w, h);
+    SkPixmap pmap(info, pixels, info.minRowBytes());
+    SkMatrix localMatrix = SkMatrix::Scale(1.0f / w, 1.0f / h);
+    auto fontImage = SkImage::MakeFromRaster(pmap, nullptr, nullptr);
+    auto fontShader = fontImage->makeShader(SkSamplingOptions(SkFilterMode::kLinear), localMatrix);
+    fontPaint.setShader(fontShader);
+    fontPaint.setColor(SK_ColorWHITE);
+    atlas.TexID = &fontPaint;
+}
+
 ImGuiLayer::ImGuiLayer() {
     // ImGui initialization:
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
 
     // Keymap...
-    io.KeyMap[ImGuiKey_Tab] = (int)Window::Key::kTab;
-    io.KeyMap[ImGuiKey_LeftArrow] = (int)Window::Key::kLeft;
-    io.KeyMap[ImGuiKey_RightArrow] = (int)Window::Key::kRight;
-    io.KeyMap[ImGuiKey_UpArrow] = (int)Window::Key::kUp;
-    io.KeyMap[ImGuiKey_DownArrow] = (int)Window::Key::kDown;
-    io.KeyMap[ImGuiKey_PageUp] = (int)Window::Key::kPageUp;
-    io.KeyMap[ImGuiKey_PageDown] = (int)Window::Key::kPageDown;
-    io.KeyMap[ImGuiKey_Home] = (int)Window::Key::kHome;
-    io.KeyMap[ImGuiKey_End] = (int)Window::Key::kEnd;
-    io.KeyMap[ImGuiKey_Delete] = (int)Window::Key::kDelete;
-    io.KeyMap[ImGuiKey_Backspace] = (int)Window::Key::kBack;
-    io.KeyMap[ImGuiKey_Enter] = (int)Window::Key::kOK;
-    io.KeyMap[ImGuiKey_Escape] = (int)Window::Key::kEscape;
-    io.KeyMap[ImGuiKey_A] = (int)Window::Key::kA;
-    io.KeyMap[ImGuiKey_C] = (int)Window::Key::kC;
-    io.KeyMap[ImGuiKey_V] = (int)Window::Key::kV;
-    io.KeyMap[ImGuiKey_X] = (int)Window::Key::kX;
-    io.KeyMap[ImGuiKey_Y] = (int)Window::Key::kY;
-    io.KeyMap[ImGuiKey_Z] = (int)Window::Key::kZ;
+    io.KeyMap[ImGuiKey_Tab]        = (int)skui::Key::kTab;
+    io.KeyMap[ImGuiKey_LeftArrow]  = (int)skui::Key::kLeft;
+    io.KeyMap[ImGuiKey_RightArrow] = (int)skui::Key::kRight;
+    io.KeyMap[ImGuiKey_UpArrow]    = (int)skui::Key::kUp;
+    io.KeyMap[ImGuiKey_DownArrow]  = (int)skui::Key::kDown;
+    io.KeyMap[ImGuiKey_PageUp]     = (int)skui::Key::kPageUp;
+    io.KeyMap[ImGuiKey_PageDown]   = (int)skui::Key::kPageDown;
+    io.KeyMap[ImGuiKey_Home]       = (int)skui::Key::kHome;
+    io.KeyMap[ImGuiKey_End]        = (int)skui::Key::kEnd;
+    io.KeyMap[ImGuiKey_Delete]     = (int)skui::Key::kDelete;
+    io.KeyMap[ImGuiKey_Backspace]  = (int)skui::Key::kBack;
+    io.KeyMap[ImGuiKey_Enter]      = (int)skui::Key::kOK;
+    io.KeyMap[ImGuiKey_Escape]     = (int)skui::Key::kEscape;
+    io.KeyMap[ImGuiKey_A]          = (int)skui::Key::kA;
+    io.KeyMap[ImGuiKey_C]          = (int)skui::Key::kC;
+    io.KeyMap[ImGuiKey_V]          = (int)skui::Key::kV;
+    io.KeyMap[ImGuiKey_X]          = (int)skui::Key::kX;
+    io.KeyMap[ImGuiKey_Y]          = (int)skui::Key::kY;
+    io.KeyMap[ImGuiKey_Z]          = (int)skui::Key::kZ;
 
-    int w, h;
-    unsigned char* pixels;
-    io.Fonts->GetTexDataAsAlpha8(&pixels, &w, &h);
-    SkImageInfo info = SkImageInfo::MakeA8(w, h);
-    SkPixmap pmap(info, pixels, info.minRowBytes());
-    SkMatrix localMatrix = SkMatrix::MakeScale(1.0f / w, 1.0f / h);
-    auto fontImage = SkImage::MakeFromRaster(pmap, nullptr, nullptr);
-    auto fontShader = fontImage->makeShader(&localMatrix);
-    fFontPaint.setShader(fontShader);
-    fFontPaint.setColor(SK_ColorWHITE);
-    fFontPaint.setFilterQuality(kLow_SkFilterQuality);
-    io.Fonts->TexID = &fFontPaint;
+    build_ImFontAtlas(*io.Fonts, fFontPaint);
 }
 
 ImGuiLayer::~ImGuiLayer() {
     ImGui::DestroyContext();
 }
 
-void ImGuiLayer::onAttach(Window* window) {
-    fWindow = window;
+void ImGuiLayer::setScaleFactor(float scaleFactor) {
+    ImGui::GetStyle().ScaleAllSizes(scaleFactor);
+
+    ImFontAtlas& atlas = *ImGui::GetIO().Fonts;
+    atlas.Clear();
+    ImFontConfig cfg;
+    cfg.SizePixels = 13 * scaleFactor;
+    atlas.AddFontDefault(&cfg);
+    build_ImFontAtlas(atlas, fFontPaint);
 }
 
-bool ImGuiLayer::onMouse(int x, int y, Window::InputState state, uint32_t modifiers) {
+#if defined(SK_BUILD_FOR_UNIX)
+static const char* get_clipboard_text(void* user_data) {
+    Window* w = (Window*)user_data;
+    return w->getClipboardText();
+}
+
+static void set_clipboard_text(void* user_data, const char* text) {
+    Window* w = (Window*)user_data;
+    w->setClipboardText(text);
+}
+#endif
+
+void ImGuiLayer::onAttach(Window* window) {
+    fWindow = window;
+
+#if defined(SK_BUILD_FOR_UNIX)
+    ImGuiIO& io = ImGui::GetIO();
+    io.ClipboardUserData = fWindow;
+    io.GetClipboardTextFn = get_clipboard_text;
+    io.SetClipboardTextFn = set_clipboard_text;
+#endif
+}
+
+bool ImGuiLayer::onMouse(int x, int y, skui::InputState state, skui::ModifierKey modifiers) {
     ImGuiIO& io = ImGui::GetIO();
     io.MousePos.x = static_cast<float>(x);
     io.MousePos.y = static_cast<float>(y);
-    if (Window::kDown_InputState == state) {
+    if (skui::InputState::kDown == state) {
         io.MouseDown[0] = true;
-    } else if (Window::kUp_InputState == state) {
+    } else if (skui::InputState::kUp == state) {
         io.MouseDown[0] = false;
     }
     return io.WantCaptureMouse;
 }
 
-bool ImGuiLayer::onMouseWheel(float delta, uint32_t modifiers) {
+bool ImGuiLayer::onMouseWheel(float delta, skui::ModifierKey modifiers) {
     ImGuiIO& io = ImGui::GetIO();
     io.MouseWheel += delta;
     return true;
@@ -106,9 +139,10 @@ void ImGuiLayer::onPrePaint() {
     io.DisplaySize.x = static_cast<float>(fWindow->width());
     io.DisplaySize.y = static_cast<float>(fWindow->height());
 
-    io.KeyAlt = io.KeysDown[static_cast<int>(Window::Key::kOption)];
-    io.KeyCtrl = io.KeysDown[static_cast<int>(Window::Key::kCtrl)];
-    io.KeyShift = io.KeysDown[static_cast<int>(Window::Key::kShift)];
+    io.KeyAlt   = io.KeysDown[static_cast<int>(skui::Key::kOption)];
+    io.KeyCtrl  = io.KeysDown[static_cast<int>(skui::Key::kCtrl)];
+    io.KeyShift = io.KeysDown[static_cast<int>(skui::Key::kShift)];
+    io.KeySuper = io.KeysDown[static_cast<int>(skui::Key::kSuper)];
 
     ImGui::NewFrame();
 }
@@ -184,13 +218,13 @@ void ImGuiLayer::onPaint(SkSurface* surface) {
     fSkiaWidgetFuncs.reset();
 }
 
-bool ImGuiLayer::onKey(sk_app::Window::Key key, sk_app::Window::InputState state, uint32_t modifiers) {
+bool ImGuiLayer::onKey(skui::Key key, skui::InputState state, skui::ModifierKey modifiers) {
     ImGuiIO& io = ImGui::GetIO();
-    io.KeysDown[static_cast<int>(key)] = (Window::kDown_InputState == state);
+    io.KeysDown[static_cast<int>(key)] = (skui::InputState::kDown == state);
     return io.WantCaptureKeyboard;
 }
 
-bool ImGuiLayer::onChar(SkUnichar c, uint32_t modifiers) {
+bool ImGuiLayer::onChar(SkUnichar c, skui::ModifierKey modifiers) {
     ImGuiIO& io = ImGui::GetIO();
     if (io.WantTextInput) {
         if (c > 0 && c < 0x10000) {

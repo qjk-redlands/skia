@@ -8,142 +8,180 @@
 #ifndef GrProgramDesc_DEFINED
 #define GrProgramDesc_DEFINED
 
-#include "GrColor.h"
-#include "GrTypesPriv.h"
-#include "SkOpts.h"
-#include "SkTArray.h"
-#include "SkTo.h"
-#include "glsl/GrGLSLFragmentShaderBuilder.h"
+#include "include/core/SkString.h"
+#include "include/private/GrTypesPriv.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTo.h"
 
-class GrShaderCaps;
-class GrPipeline;
-class GrPrimitiveProcessor;
+#include <limits.h>
 
-/** This class describes a program to generate. It also serves as a program cache key */
+class GrCaps;
+class GrProgramInfo;
+class GrRenderTarget;
+
+class GrProcessorKeyBuilder {
+public:
+    GrProcessorKeyBuilder(SkTArray<uint32_t, true>* data) : fData(data) {}
+
+    virtual ~GrProcessorKeyBuilder() {
+        // Ensure that flush was called before we went out of scope
+        SkASSERT(fBitsUsed == 0);
+    }
+
+    virtual void addBits(uint32_t numBits, uint32_t val, const char* label) {
+        SkASSERT(numBits > 0 && numBits <= 32);
+        SkASSERT(numBits == 32 || (val < (1u << numBits)));
+
+        fCurValue |= (val << fBitsUsed);
+        fBitsUsed += numBits;
+
+        if (fBitsUsed >= 32) {
+            // Overflow, start a new working value
+            fData->push_back(fCurValue);
+            uint32_t excess = fBitsUsed - 32;
+            fCurValue = excess ? (val >> (numBits - excess)) : 0;
+            fBitsUsed = excess;
+        }
+
+        SkASSERT(fCurValue < (1u << fBitsUsed));
+    }
+
+    void addBytes(uint32_t numBytes, const void* data, const char* label) {
+        const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
+        for (; numBytes --> 0; bytes++) {
+            this->addBits(8, *bytes, label);
+        }
+    }
+
+    void addBool(bool b, const char* label) {
+        this->addBits(1, b, label);
+    }
+
+    void add32(uint32_t v, const char* label = "unknown") {
+        this->addBits(32, v, label);
+    }
+
+    virtual void appendComment(const char* comment) {}
+
+    // Introduces a word-boundary in the key. Must be called before using the key with any cache,
+    // but can also be called to create a break between generic data and backend-specific data.
+    void flush() {
+        if (fBitsUsed) {
+            fData->push_back(fCurValue);
+            fCurValue = 0;
+            fBitsUsed = 0;
+        }
+    }
+
+private:
+    SkTArray<uint32_t, true>* fData;
+    uint32_t fCurValue = 0;
+    uint32_t fBitsUsed = 0;  // ... in current value
+};
+
+class GrProcessorStringKeyBuilder : public GrProcessorKeyBuilder {
+public:
+    GrProcessorStringKeyBuilder(SkTArray<uint32_t, true>* data) : INHERITED(data) {}
+
+    void addBits(uint32_t numBits, uint32_t val, const char* label) override {
+        INHERITED::addBits(numBits, val, label);
+        fDescription.appendf("%s: %u\n", label, val);
+    }
+
+    void appendComment(const char* comment) override {
+        fDescription.appendf("%s\n", comment);
+    }
+
+    SkString description() const { return fDescription; }
+
+private:
+    using INHERITED = GrProcessorKeyBuilder;
+    SkString fDescription;
+};
+
+/** This class is used to generate a generic program cache key. The Dawn, Metal and Vulkan
+ *  backends derive backend-specific versions which add additional information.
+ */
 class GrProgramDesc {
 public:
-    // Creates an uninitialized key that must be populated by GrGpu::buildProgramDesc()
-    GrProgramDesc() {}
+    GrProgramDesc(const GrProgramDesc& other) = default;
+    GrProgramDesc& operator=(const GrProgramDesc &other) = default;
 
-    /**
-    * Builds a program descriptor. Before the descriptor can be used, the client must call finalize
-    * on the returned GrProgramDesc.
-    *
-    * @param GrPrimitiveProcessor The geometry
-    * @param hasPointSize Controls whether the shader will output a point size.
-    * @param GrPipeline  The optimized drawstate.  The descriptor will represent a program
-    *                        which this optstate can use to draw with.  The optstate contains
-    *                        general draw information, as well as the specific color, geometry,
-    *                        and coverage stages which will be used to generate the GL Program for
-    *                        this optstate.
-    * @param GrGpu          Ptr to the GrGpu object the program will be used with.
-    * @param GrProgramDesc  The built and finalized descriptor
-    **/
-    static bool Build(GrProgramDesc*, const GrRenderTarget*, const GrPrimitiveProcessor&,
-                      bool hasPointSize, const GrPipeline&, GrGpu*);
+    bool isValid() const { return !fKey.empty(); }
+    void reset() { *this = GrProgramDesc{}; }
 
     // Returns this as a uint32_t array to be used as a key in the program cache.
     const uint32_t* asKey() const {
-        return reinterpret_cast<const uint32_t*>(fKey.begin());
+        return fKey.data();
     }
 
     // Gets the number of bytes in asKey(). It will be a 4-byte aligned value.
     uint32_t keyLength() const {
-        SkASSERT(0 == (fKey.count() % 4));
-        return fKey.count();
-    }
-
-    GrProgramDesc& operator= (const GrProgramDesc& other) {
-        uint32_t keyLength = other.keyLength();
-        fKey.reset(SkToInt(keyLength));
-        memcpy(fKey.begin(), other.fKey.begin(), keyLength);
-        return *this;
+        return fKey.size() * sizeof(uint32_t);
     }
 
     bool operator== (const GrProgramDesc& that) const {
-        if (this->keyLength() != that.keyLength()) {
-            return false;
-        }
-
-        SkASSERT(SkIsAlign4(this->keyLength()));
-        int l = this->keyLength() >> 2;
-        const uint32_t* aKey = this->asKey();
-        const uint32_t* bKey = that.asKey();
-        for (int i = 0; i < l; ++i) {
-            if (aKey[i] != bKey[i]) {
-                return false;
-            }
-        }
-        return true;
+        return this->fKey == that.fKey;
     }
 
     bool operator!= (const GrProgramDesc& other) const {
         return !(*this == other);
     }
 
-    void setSurfaceOriginKey(int key) {
-        KeyHeader* header = this->atOffset<KeyHeader, kHeaderOffset>();
-        header->fSurfaceOriginKey = key;
-    }
+    uint32_t initialKeyLength() const { return fInitialKeyLength; }
 
-    struct KeyHeader {
-        bool hasSurfaceOriginKey() const {
-            return SkToBool(fSurfaceOriginKey);
-        }
-        GrProcessor::CustomFeatures processorFeatures() const {
-            return (GrProcessor::CustomFeatures)fProcessorFeatures;
-        }
-
-        // Set to uniquely idenitify any swizzling of the shader's output color(s).
-        uint16_t fOutputSwizzle;
-        uint8_t fColorFragmentProcessorCnt; // Can be packed into 4 bits if required.
-        uint8_t fCoverageFragmentProcessorCnt;
-        // Set to uniquely identify the rt's origin, or 0 if the shader does not require this info.
-        uint8_t fSurfaceOriginKey : 2;
-        uint8_t fProcessorFeatures : 1;
-        bool fSnapVerticesToPixelCenters : 1;
-        bool fHasPointSize : 1;
-        bool fClampBlendInput : 1;
-        uint8_t fPad : 2;
-    };
-    GR_STATIC_ASSERT(sizeof(KeyHeader) == 6);
-
-    // This should really only be used internally, base classes should return their own headers
-    const KeyHeader& header() const { return *this->atOffset<KeyHeader, kHeaderOffset>(); }
+    // TODO(skia:11372): Incorporate this into caps interface (part of makeDesc, or a parallel
+    // function), so other backends can include their information in the description.
+    static SkString Describe(const GrProgramInfo&, const GrCaps&);
 
 protected:
-    template<typename T, size_t OFFSET> T* atOffset() {
-        return reinterpret_cast<T*>(reinterpret_cast<intptr_t>(fKey.begin()) + OFFSET);
-    }
+    friend class GrDawnCaps;
+    friend class GrD3DCaps;
+    friend class GrGLCaps;
+    friend class GrMockCaps;
+    friend class GrMtlCaps;
+    friend class GrVkCaps;
 
-    template<typename T, size_t OFFSET> const T* atOffset() const {
-        return reinterpret_cast<const T*>(reinterpret_cast<intptr_t>(fKey.begin()) + OFFSET);
-    }
+    friend class GrGLGpu; // for ProgramCache to access BuildFromData
+    friend class GrMtlResourceProvider; // for PipelineStateCache to access BuildFromData
 
-    // The key, stored in fKey, is composed of two parts:
-    // 1. Header struct defined above.
-    // 2. A Backend specific payload which includes the per-processor keys.
-    enum KeyOffsets {
-        kHeaderOffset = 0,
-        kHeaderSize = SkAlign4(sizeof(KeyHeader)),
-        // Part 4.
-        // This is the offset into the backenend specific part of the key, which includes
-        // per-processor keys.
-        kProcessorKeysOffset = kHeaderOffset + kHeaderSize,
-    };
+    // Creates an uninitialized key that must be populated by Build
+    GrProgramDesc() {}
+
+    /**
+     * Builds a program descriptor.
+     *
+     * @param desc          The built descriptor
+     * @param programInfo   Program information need to build the key
+     * @param caps          the caps
+     **/
+    static void Build(GrProgramDesc*, const GrProgramInfo&, const GrCaps&);
+
+    // This is strictly an OpenGL call since the other backends have additional data in their keys.
+    static bool BuildFromData(GrProgramDesc* desc, const void* keyData, size_t keyLength) {
+        if (!SkTFitsIn<int>(keyLength) || !SkIsAlign4(keyLength)) {
+            return false;
+        }
+        desc->fKey.reset(keyLength / 4);
+        memcpy(desc->fKey.begin(), keyData, keyLength);
+        return true;
+    }
 
     enum {
+        kHeaderSize            = 1,    // "header" in ::Build
         kMaxPreallocProcessors = 8,
         kIntsPerProcessor      = 4,    // This is an overestimate of the average effect key size.
-        kPreAllocSize = kHeaderOffset + kHeaderSize +
-                        kMaxPreallocProcessors * sizeof(uint32_t) * kIntsPerProcessor,
+        kPreAllocSize = kHeaderSize +
+                        kMaxPreallocProcessors * kIntsPerProcessor,
     };
 
-    SkSTArray<kPreAllocSize, uint8_t, true>& key() { return fKey; }
-    const SkSTArray<kPreAllocSize, uint8_t, true>& key() const { return fKey; }
+    using KeyType = SkSTArray<kPreAllocSize, uint32_t, true>;
+
+    KeyType* key() { return &fKey; }
 
 private:
-    SkSTArray<kPreAllocSize, uint8_t, true> fKey;
+    SkSTArray<kPreAllocSize, uint32_t, true> fKey;
+    uint32_t fInitialKeyLength = 0;
 };
 
 #endif

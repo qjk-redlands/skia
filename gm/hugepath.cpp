@@ -5,10 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkSurface.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurface.h"
 
 DEF_SIMPLE_GM(path_huge_crbug_800804, canvas, 50, 600) {
     SkPaint paint;
@@ -51,7 +54,7 @@ DEF_SIMPLE_GM(path_huge_aa, canvas, 200, 200) {
         canvas->save();
         canvas->clipRect(SkRect::MakeXYWH(4, 4, 64, 64));
         can->drawPath(path, paint);
-        surf->draw(canvas, 64 - w, 0, nullptr);
+        surf->draw(canvas, 64 - w, 0);
         canvas->restore();
 
         canvas->translate(80, 0);
@@ -60,7 +63,7 @@ DEF_SIMPLE_GM(path_huge_aa, canvas, 200, 200) {
         can->clear(0);
         paint.setAntiAlias(true);
         can->drawPath(path, paint);
-        surf->draw(canvas, 64 - w, 0, nullptr);
+        surf->draw(canvas, 64 - w, 0);
         canvas->restore();
     };
 

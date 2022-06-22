@@ -5,35 +5,35 @@
  * found in the LICENSE file.
  */
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 #if defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 26
 #define GL_GLEXT_PROTOTYPES
 #define EGL_EGLEXT_PROTOTYPES
 
-#include "GrAHardwareBufferUtils.h"
+#include "src/gpu/GrAHardwareBufferUtils.h"
 
 #include <android/hardware_buffer.h>
-
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "gl/GrGLDefines.h"
-#include "gl/GrGLTypes.h"
-
-#ifdef SK_VULKAN
-#include "vk/GrVkCaps.h"
-#include "vk/GrVkGpu.h"
-#endif
-
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES/gl.h>
 #include <GLES/glext.h>
 
+#include "include/gpu/GrDirectContext.h"
+#include "include/gpu/gl/GrGLTypes.h"
+#include "src/gpu/GrDirectContextPriv.h"
+#include "src/gpu/gl/GrGLDefines.h"
+#include "src/gpu/gl/GrGLUtil.h"
+
+#ifdef SK_VULKAN
+#include "src/gpu/vk/GrVkCaps.h"
+#include "src/gpu/vk/GrVkGpu.h"
+#endif
+
 #define PROT_CONTENT_EXT_STR "EGL_EXT_protected_content"
 #define EGL_PROTECTED_CONTENT_EXT 0x32C0
 
-#define VK_CALL(X) gpu->vkInterface()->fFunctions.f##X;
+#define VK_CALL(X) gpu->vkInterface()->fFunctions.f##X
 
 namespace GrAHardwareBufferUtils {
 
@@ -51,6 +51,10 @@ SkColorType GetSkColorTypeFromBufferFormat(uint32_t bufferFormat) {
             return kRGB_888x_SkColorType;
         case AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM:
             return kRGBA_1010102_SkColorType;
+#if __ANDROID_API__ >= 33
+        case AHARDWAREBUFFER_FORMAT_R8_UNORM:
+            return kAlpha_8_SkColorType;
+#endif
         default:
             // Given that we only use this texture as a source, colorType will not impact how Skia
             // uses the texture.  The only potential affect this is anticipated to have is that for
@@ -60,9 +64,9 @@ SkColorType GetSkColorTypeFromBufferFormat(uint32_t bufferFormat) {
     }
 }
 
-GrBackendFormat GetBackendFormat(GrContext* context, AHardwareBuffer* hardwareBuffer,
+GrBackendFormat GetBackendFormat(GrDirectContext* dContext, AHardwareBuffer* hardwareBuffer,
                                  uint32_t bufferFormat, bool requireKnownFormat) {
-    GrBackendApi backend = context->backend();
+    GrBackendApi backend = dContext->backend();
 
     if (backend == GrBackendApi::kOpenGL) {
         switch (bufferFormat) {
@@ -78,6 +82,10 @@ GrBackendFormat GetBackendFormat(GrContext* context, AHardwareBuffer* hardwareBu
                 return GrBackendFormat::MakeGL(GR_GL_RGB10_A2, GR_GL_TEXTURE_EXTERNAL);
             case AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM:
                 return GrBackendFormat::MakeGL(GR_GL_RGB8, GR_GL_TEXTURE_EXTERNAL);
+#if __ANDROID_API__ >= 33
+            case AHARDWAREBUFFER_FORMAT_R8_UNORM:
+                return GrBackendFormat::MakeGL(GR_GL_R8, GR_GL_TEXTURE_EXTERNAL);
+#endif
             default:
                 if (requireKnownFormat) {
                     return GrBackendFormat();
@@ -100,11 +108,15 @@ GrBackendFormat GetBackendFormat(GrContext* context, AHardwareBuffer* hardwareBu
                 return GrBackendFormat::MakeVk(VK_FORMAT_R8G8B8A8_UNORM);
             case AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM:
                 return GrBackendFormat::MakeVk(VK_FORMAT_R8G8B8_UNORM);
+#if __ANDROID_API__ >= 33
+            case AHARDWAREBUFFER_FORMAT_R8_UNORM:
+                return GrBackendFormat::MakeVk(VK_FORMAT_R8_UNORM);
+#endif
             default: {
                 if (requireKnownFormat) {
                     return GrBackendFormat();
                 } else {
-                    GrVkGpu* gpu = static_cast<GrVkGpu*>(context->priv().getGpu());
+                    GrVkGpu* gpu = static_cast<GrVkGpu*>(dContext->priv().getGpu());
                     SkASSERT(gpu);
                     VkDevice device = gpu->device();
 
@@ -138,7 +150,7 @@ GrBackendFormat GetBackendFormat(GrContext* context, AHardwareBuffer* hardwareBu
                     ycbcrConversion.fYChromaOffset = hwbFormatProps.suggestedYChromaOffset;
                     ycbcrConversion.fForceExplicitReconstruction = VK_FALSE;
                     ycbcrConversion.fExternalFormat = hwbFormatProps.externalFormat;
-                    ycbcrConversion.fExternalFormatFeatures = hwbFormatProps.formatFeatures;
+                    ycbcrConversion.fFormatFeatures = hwbFormatProps.formatFeatures;
                     if (VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT &
                         hwbFormatProps.formatFeatures) {
                         ycbcrConversion.fChromaFilter = VK_FILTER_LINEAR;
@@ -157,33 +169,59 @@ GrBackendFormat GetBackendFormat(GrContext* context, AHardwareBuffer* hardwareBu
     return GrBackendFormat();
 }
 
-class GLCleanupHelper {
+class GLTextureHelper {
 public:
-    GLCleanupHelper(GrGLuint texID, EGLImageKHR image, EGLDisplay display)
+    GLTextureHelper(GrGLuint texID, EGLImageKHR image, EGLDisplay display, GrGLuint texTarget)
         : fTexID(texID)
         , fImage(image)
-        , fDisplay(display) { }
-    ~GLCleanupHelper() {
+        , fDisplay(display)
+        , fTexTarget(texTarget) { }
+    ~GLTextureHelper() {
         glDeleteTextures(1, &fTexID);
         // eglDestroyImageKHR will remove a ref from the AHardwareBuffer
         eglDestroyImageKHR(fDisplay, fImage);
     }
+    void rebind(GrDirectContext*);
+
 private:
     GrGLuint    fTexID;
     EGLImageKHR fImage;
     EGLDisplay  fDisplay;
+    GrGLuint    fTexTarget;
 };
 
+void GLTextureHelper::rebind(GrDirectContext* dContext) {
+    glBindTexture(fTexTarget, fTexID);
+    GLenum status = GL_NO_ERROR;
+    if ((status = glGetError()) != GL_NO_ERROR) {
+        SkDebugf("glBindTexture(%#x, %d) failed (%#x)", (int) fTexTarget,
+            (int) fTexID, (int) status);
+        return;
+    }
+    glEGLImageTargetTexture2DOES(fTexTarget, fImage);
+    if ((status = glGetError()) != GL_NO_ERROR) {
+        SkDebugf("glEGLImageTargetTexture2DOES failed (%#x)", (int) status);
+        return;
+    }
+    dContext->resetContext(kTextureBinding_GrGLBackendState);
+}
+
 void delete_gl_texture(void* context) {
-    GLCleanupHelper* cleanupHelper = static_cast<GLCleanupHelper*>(context);
+    GLTextureHelper* cleanupHelper = static_cast<GLTextureHelper*>(context);
     delete cleanupHelper;
 }
 
+void update_gl_texture(void* context, GrDirectContext* dContext) {
+    GLTextureHelper* cleanupHelper = static_cast<GLTextureHelper*>(context);
+    cleanupHelper->rebind(dContext);
+}
+
 static GrBackendTexture make_gl_backend_texture(
-        GrContext* context, AHardwareBuffer* hardwareBuffer,
+        GrDirectContext* dContext, AHardwareBuffer* hardwareBuffer,
         int width, int height,
         DeleteImageProc* deleteProc,
-        DeleteImageCtx* deleteCtx,
+        UpdateImageProc* updateProc,
+        TexImageCtx* imageCtx,
         bool isProtectedContent,
         const GrBackendFormat& backendFormat,
         bool isRenderable) {
@@ -227,18 +265,19 @@ static GrBackendTexture make_gl_backend_texture(
         eglDestroyImageKHR(display, image);
         return GrBackendTexture();
     }
-    context->resetContext(kTextureBinding_GrGLBackendState);
+    dContext->resetContext(kTextureBinding_GrGLBackendState);
 
     GrGLTextureInfo textureInfo;
     textureInfo.fID = texID;
     SkASSERT(backendFormat.isValid());
     textureInfo.fTarget = target;
-    textureInfo.fFormat = *backendFormat.getGLFormat();
+    textureInfo.fFormat = GrGLFormatToEnum(backendFormat.asGLFormat());
 
     *deleteProc = delete_gl_texture;
-    *deleteCtx = new GLCleanupHelper(texID, image, display);
+    *updateProc = update_gl_texture;
+    *imageCtx = new GLTextureHelper(texID, image, display, target);
 
-    return GrBackendTexture(width, height, GrMipMapped::kNo, textureInfo);
+    return GrBackendTexture(width, height, GrMipmapped::kNo, textureInfo);
 }
 
 #ifdef SK_VULKAN
@@ -267,16 +306,24 @@ void delete_vk_image(void* context) {
     delete cleanupHelper;
 }
 
+void update_vk_image(void* context, GrDirectContext* dContext) {
+    // no op
+}
+
 static GrBackendTexture make_vk_backend_texture(
-        GrContext* context, AHardwareBuffer* hardwareBuffer,
+        GrDirectContext* dContext, AHardwareBuffer* hardwareBuffer,
         int width, int height,
         DeleteImageProc* deleteProc,
-        DeleteImageCtx* deleteCtx,
+        UpdateImageProc* updateProc,
+        TexImageCtx* imageCtx,
         bool isProtectedContent,
         const GrBackendFormat& backendFormat,
-        bool isRenderable) {
-    SkASSERT(context->backend() == GrBackendApi::kVulkan);
-    GrVkGpu* gpu = static_cast<GrVkGpu*>(context->priv().getGpu());
+        bool isRenderable,
+        bool fromAndroidWindow) {
+    SkASSERT(dContext->backend() == GrBackendApi::kVulkan);
+    GrVkGpu* gpu = static_cast<GrVkGpu*>(dContext->priv().getGpu());
+
+    SkASSERT(!isProtectedContent || gpu->protectedContext());
 
     VkPhysicalDevice physicalDevice = gpu->physicalDevice();
     VkDevice device = gpu->device();
@@ -287,8 +334,8 @@ static GrBackendTexture make_vk_backend_texture(
         return GrBackendTexture();
     }
 
-    SkASSERT(backendFormat.getVkFormat());
-    VkFormat format = *backendFormat.getVkFormat();
+    VkFormat format;
+    SkAssertResult(backendFormat.asVkFormat(&format));
 
     VkResult err;
 
@@ -351,10 +398,12 @@ static GrBackendTexture make_vk_backend_texture(
     // to use linear. Add better linear support throughout Ganesh.
     VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
 
+    VkImageCreateFlags flags = isProtectedContent ? VK_IMAGE_CREATE_PROTECTED_BIT : 0;
+
     const VkImageCreateInfo imageCreateInfo = {
         VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,         // sType
         &externalMemoryImageInfo,                    // pNext
-        0,                                           // VkImageCreateFlags
+        flags,                                       // VkImageCreateFlags
         VK_IMAGE_TYPE_2D,                            // VkImageType
         format,                                      // VkFormat
         { (uint32_t)width, (uint32_t)height, 1 },    // VkExtent3D
@@ -380,7 +429,6 @@ static GrBackendTexture make_vk_backend_texture(
     phyDevMemProps.pNext = nullptr;
 
     uint32_t typeIndex = 0;
-    uint32_t heapIndex = 0;
     bool foundHeap = false;
     VK_CALL(GetPhysicalDeviceMemoryProperties2(physicalDevice, &phyDevMemProps));
     uint32_t memTypeCnt = phyDevMemProps.memoryProperties.memoryTypeCount;
@@ -391,7 +439,6 @@ static GrBackendTexture make_vk_backend_texture(
                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             if (supportedFlags == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
                 typeIndex = i;
-                heapIndex = pdmp.memoryTypes[i].heapIndex;
                 foundHeap = true;
             }
         }
@@ -441,10 +488,15 @@ static GrBackendTexture make_vk_backend_texture(
         return GrBackendTexture();
     }
 
-    GrVkImageInfo imageInfo;
+    GrVkAlloc alloc;
+    alloc.fMemory = memory;
+    alloc.fOffset = 0;
+    alloc.fSize = hwbProps.allocationSize;
+    alloc.fFlags = 0;
 
+    GrVkImageInfo imageInfo;
     imageInfo.fImage = image;
-    imageInfo.fAlloc = GrVkAlloc(memory, 0, hwbProps.allocationSize, 0);
+    imageInfo.fAlloc = alloc;
     imageInfo.fImageTiling = tiling;
     imageInfo.fImageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.fFormat = format;
@@ -453,10 +505,16 @@ static GrBackendTexture make_vk_backend_texture(
     // support that extension. Or if we know the source of the AHardwareBuffer is not from a
     // "foreign" device we can leave them as external.
     imageInfo.fCurrentQueueFamily = VK_QUEUE_FAMILY_EXTERNAL;
+    imageInfo.fProtected = isProtectedContent ? GrProtected::kYes : GrProtected::kNo;
     imageInfo.fYcbcrConversionInfo = *ycbcrConversion;
+    imageInfo.fSharingMode = imageCreateInfo.sharingMode;
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    imageInfo.fPartOfSwapchainOrAndroidWindow = fromAndroidWindow;
+#endif
 
     *deleteProc = delete_vk_image;
-    *deleteCtx = new VulkanCleanupHelper(gpu, image, memory);
+    *updateProc = update_vk_image;
+    *imageCtx = new VulkanCleanupHelper(gpu, image, memory);
 
     return GrBackendTexture(width, height, imageInfo);
 }
@@ -476,40 +534,45 @@ static bool can_import_protected_content_eglimpl() {
     return equal || atStart || atEnd || inMiddle;
 }
 
-static bool can_import_protected_content(GrContext* context) {
-    if (GrBackendApi::kOpenGL == context->backend()) {
+static bool can_import_protected_content(GrDirectContext* dContext) {
+    if (GrBackendApi::kOpenGL == dContext->backend()) {
         // Only compute whether the extension is present once the first time this
         // function is called.
         static bool hasIt = can_import_protected_content_eglimpl();
         return hasIt;
+    } else if (GrBackendApi::kVulkan == dContext->backend()) {
+#ifdef SK_VULKAN
+        return static_cast<GrVkGpu*>(dContext->priv().getGpu())->protectedContext();
+#endif
     }
     return false;
 }
 
-GrBackendTexture MakeBackendTexture(GrContext* context, AHardwareBuffer* hardwareBuffer,
+GrBackendTexture MakeBackendTexture(GrDirectContext* dContext, AHardwareBuffer* hardwareBuffer,
                                     int width, int height,
                                     DeleteImageProc* deleteProc,
-                                    DeleteImageCtx* deleteCtx,
+                                    UpdateImageProc* updateProc,
+                                    TexImageCtx* imageCtx,
                                     bool isProtectedContent,
                                     const GrBackendFormat& backendFormat,
-                                    bool isRenderable) {
-    if (context->abandoned()) {
+                                    bool isRenderable,
+                                    bool fromAndroidWindow) {
+    SkASSERT(dContext);
+    if (!dContext || dContext->abandoned()) {
         return GrBackendTexture();
     }
-    bool createProtectedImage = isProtectedContent && can_import_protected_content(context);
+    bool createProtectedImage = isProtectedContent && can_import_protected_content(dContext);
 
-    if (GrBackendApi::kOpenGL == context->backend()) {
-        return make_gl_backend_texture(context, hardwareBuffer, width, height, deleteProc,
-                                       deleteCtx, createProtectedImage, backendFormat,
+    if (GrBackendApi::kOpenGL == dContext->backend()) {
+        return make_gl_backend_texture(dContext, hardwareBuffer, width, height, deleteProc,
+                                       updateProc, imageCtx, createProtectedImage, backendFormat,
                                        isRenderable);
     } else {
-        SkASSERT(GrBackendApi::kVulkan == context->backend());
+        SkASSERT(GrBackendApi::kVulkan == dContext->backend());
 #ifdef SK_VULKAN
-        // Currently we don't support protected images on vulkan
-        SkASSERT(!createProtectedImage);
-        return make_vk_backend_texture(context, hardwareBuffer, width, height, deleteProc,
-                                       deleteCtx, createProtectedImage, backendFormat,
-                                       isRenderable);
+        return make_vk_backend_texture(dContext, hardwareBuffer, width, height, deleteProc,
+                                       updateProc, imageCtx, createProtectedImage, backendFormat,
+                                       isRenderable, fromAndroidWindow);
 #else
         return GrBackendTexture();
 #endif

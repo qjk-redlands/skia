@@ -5,8 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkImageGenerator.h"
+#include "include/core/SkImageGenerator.h"
 
-std::unique_ptr<SkImageGenerator> SkImageGenerator::MakeFromEncodedImpl(sk_sp<SkData>) {
+std::unique_ptr<SkImageGenerator> SkImageGenerator::MakeFromEncodedImpl(
+        sk_sp<SkData>, skstd::optional<SkAlphaType>) {
     return nullptr;
 }

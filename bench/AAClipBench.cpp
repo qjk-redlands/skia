@@ -5,14 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkAAClip.h"
-#include "SkCanvas.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkRegion.h"
-#include "SkString.h"
-#include "SkClipOpPriv.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkAAClip.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // This bench tests out AA/BW clipping via canvas' clipPath and clipRect calls
@@ -33,18 +32,16 @@ public:
                      doPath ? "path" : "rect",
                      doAA ? "AA" : "BW");
 
-        fClipRect.set(10.5f, 10.5f,
-                      50.5f, 50.5f);
+        fClipRect.setLTRB(10.5f, 10.5f, 50.5f, 50.5f);
         fClipPath.addRoundRect(fClipRect, SkIntToScalar(10), SkIntToScalar(10));
-        fDrawRect.set(SkIntToScalar(0), SkIntToScalar(0),
-                      SkIntToScalar(100), SkIntToScalar(100));
+        fDrawRect.setWH(100, 100);
 
         SkASSERT(fClipPath.isConvex());
     }
 
 protected:
-    virtual const char* onGetName() { return fName.c_str(); }
-    virtual void onDraw(int loops, SkCanvas* canvas) {
+    const char* onGetName() override { return fName.c_str(); }
+    void onDraw(int loops, SkCanvas* canvas) override {
 
         SkPaint paint;
         this->setupPaint(&paint);
@@ -60,9 +57,9 @@ protected:
             canvas->save();
 #if 1
             if (fDoPath) {
-                canvas->clipPath(fClipPath, kReplace_SkClipOp, fDoAA);
+                canvas->clipPath(fClipPath, SkClipOp::kIntersect, fDoAA);
             } else {
-                canvas->clipRect(fClipRect, kReplace_SkClipOp, fDoAA);
+                canvas->clipRect(fClipRect, SkClipOp::kIntersect, fDoAA);
             }
 
             canvas->drawRect(fDrawRect, paint);
@@ -80,7 +77,7 @@ protected:
         }
     }
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,7 +110,7 @@ public:
     }
 
 protected:
-    virtual const char* onGetName() { return fName.c_str(); }
+    const char* onGetName() override { return fName.c_str(); }
 
 
     void recurse(SkCanvas* canvas,
@@ -130,9 +127,7 @@ protected:
             path.addRoundRect(temp, SkIntToScalar(3), SkIntToScalar(3));
             SkASSERT(path.isConvex());
 
-            canvas->clipPath(path,
-                             0 == depth ? kReplace_SkClipOp : kIntersect_SkClipOp,
-                             fDoAA);
+            canvas->clipPath(path, SkClipOp::kIntersect, fDoAA);
 
             if (kNestingDepth == depth) {
                 // we only draw the draw rect at the lowest nesting level
@@ -158,7 +153,7 @@ protected:
             canvas->restore();
     }
 
-    virtual void onDraw(int loops, SkCanvas* canvas) {
+    void onDraw(int loops, SkCanvas* canvas) override {
 
         for (int i = 0; i < loops; ++i) {
             SkPoint offset = SkPoint::Make(0, 0);
@@ -167,7 +162,7 @@ protected:
     }
 
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -175,7 +170,7 @@ class AAClipBuilderBench : public Benchmark {
     SkString fName;
     SkPath   fPath;
     SkRect   fRect;
-    SkRegion fRegion;
+    SkIRect  fBounds;
     bool     fDoPath;
     bool     fDoAA;
 
@@ -186,30 +181,33 @@ public:
 
         fName.printf("aaclip_build_%s_%s", doPath ? "path" : "rect",
                      doAA ? "AA" : "BW");
-
-        fRegion.setRect(0, 0, 640, 480);
-        fRect.set(fRegion.getBounds());
+        fBounds = {0, 0, 640, 480};
+        fRect.set(fBounds);
         fRect.inset(SK_Scalar1/4, SK_Scalar1/4);
         fPath.addRoundRect(fRect, SkIntToScalar(20), SkIntToScalar(20));
     }
 
 protected:
-    virtual const char* onGetName() { return fName.c_str(); }
-    virtual void onDraw(int loops, SkCanvas*) {
+    const char* onGetName() override { return fName.c_str(); }
+    void onDraw(int loops, SkCanvas*) override {
         SkPaint paint;
         this->setupPaint(&paint);
 
         for (int i = 0; i < loops; ++i) {
             SkAAClip clip;
             if (fDoPath) {
-                clip.setPath(fPath, &fRegion, fDoAA);
+                clip.setPath(fPath, fBounds, fDoAA);
             } else {
-                clip.setRect(fRect, fDoAA);
+                if (fDoAA) {
+                    clip.setPath(SkPath::Rect(fRect), fBounds, fDoAA);
+                } else {
+                    clip.setRect(fBounds);
+                }
             }
         }
     }
 private:
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -221,7 +219,7 @@ public:
         path.addCircle(0, 0, SkIntToScalar(200));
         path.addCircle(0, 0, SkIntToScalar(180));
         // evenodd means we've constructed basically a stroked circle
-        path.setFillType(SkPath::kEvenOdd_FillType);
+        path.setFillType(SkPathFillType::kEvenOdd);
 
         SkIRect bounds;
         path.getBounds().roundOut(&bounds);
@@ -229,8 +227,8 @@ public:
     }
 
 protected:
-    virtual const char* onGetName() { return "aaclip_setregion"; }
-    virtual void onDraw(int loops, SkCanvas*) {
+    const char* onGetName() override { return "aaclip_setregion"; }
+    void onDraw(int loops, SkCanvas*) override {
         for (int i = 0; i < loops; ++i) {
             SkAAClip clip;
             clip.setRegion(fRegion);
@@ -239,7 +237,7 @@ protected:
 
 private:
     SkRegion fRegion;
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

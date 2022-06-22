@@ -8,16 +8,16 @@
 #ifndef SkSpecialSurface_DEFINED
 #define SkSpecialSurface_DEFINED
 
-#include "SkImageInfo.h"
-#include "SkRefCnt.h"
-#include "SkSurfaceProps.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurfaceProps.h"
 
 #if SK_SUPPORT_GPU
-#include "GrTypesPriv.h"
+#include "include/private/GrTypesPriv.h"
 #endif
 
 class GrBackendFormat;
-class GrContext;
+class GrRecordingContext;
 class SkBitmap;
 class SkCanvas;
 class SkSpecialImage;
@@ -61,18 +61,15 @@ public:
      *  be created, nullptr will be returned.
      */
     static sk_sp<SkSpecialSurface> MakeRenderTarget(GrRecordingContext*,
-                                                    const GrBackendFormat& format,
-                                                    int width, int height,
-                                                    GrPixelConfig config,
-                                                    sk_sp<SkColorSpace> colorSpace,
-                                                    const SkSurfaceProps* = nullptr);
+                                                    const SkImageInfo&,
+                                                    const SkSurfaceProps&);
 #endif
 
     /**
      * Use and existing SkBitmap as the backing store.
      */
     static sk_sp<SkSpecialSurface> MakeFromBitmap(const SkIRect& subset, SkBitmap& bm,
-                                                  const SkSurfaceProps* = nullptr);
+                                                  const SkSurfaceProps&);
 
     /**
      *  Return a new CPU-backed surface, with the memory for the pixels automatically
@@ -82,10 +79,10 @@ public:
      *  supported configuration, nullptr will be returned.
      */
     static sk_sp<SkSpecialSurface> MakeRaster(const SkImageInfo&,
-                                              const SkSurfaceProps* = nullptr);
+                                              const SkSurfaceProps&);
 
 protected:
-    SkSpecialSurface(const SkIRect& subset, const SkSurfaceProps*);
+    SkSpecialSurface(const SkIRect& subset, const SkSurfaceProps&);
 
     // For testing only
     friend class TestingSpecialSurfaceAccess;
@@ -95,7 +92,7 @@ private:
     const SkSurfaceProps fProps;
     const SkIRect        fSubset;
 
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 #endif

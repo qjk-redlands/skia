@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkColor.h"
-#include "SkNullCanvas.h"
-#include "SkPaint.h"
-#include "SkPicture.h"
-#include "SkPictureRecorder.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkString.h"
+#include "include/utils/SkNullCanvas.h"
 
 class PictureNesting : public Benchmark {
 public:
@@ -102,7 +102,7 @@ private:
     SkString fName;
     SkPaint  fPaint;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 class PictureNestingRecording : public PictureNesting {
@@ -129,7 +129,7 @@ protected:
     }
 
 private:
-    typedef PictureNesting INHERITED;
+    using INHERITED = PictureNesting;
 };
 
 class PictureNestingPlayback : public PictureNesting {
@@ -159,7 +159,7 @@ protected:
 private:
     sk_sp<SkPicture> fPicture;
 
-    typedef PictureNesting INHERITED;
+    using INHERITED = PictureNesting;
 };
 
 DEF_BENCH( return new PictureNestingRecording(8, 0); )

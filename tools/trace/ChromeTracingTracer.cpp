@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "ChromeTracingTracer.h"
-#include "SkJSONWriter.h"
-#include "SkOSFile.h"
-#include "SkOSPath.h"
-#include "SkStream.h"
-#include "SkThreadID.h"
-#include "SkTraceEvent.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkThreadID.h"
+#include "src/core/SkOSFile.h"
+#include "src/core/SkTraceEvent.h"
+#include "src/utils/SkJSONWriter.h"
+#include "src/utils/SkOSPath.h"
+#include "tools/trace/ChromeTracingTracer.h"
 
 #include <chrono>
 
@@ -65,7 +65,7 @@ void ChromeTracingTracer::createBlock() {
 SkEventTracer::Handle ChromeTracingTracer::appendEvent(const void* data, size_t size) {
     SkASSERT(size > 0 && size <= kBlockSize);
 
-    SkAutoMutexAcquire lock(fMutex);
+    SkAutoSpinlock lock(fMutex);
     if (fCurBlockUsed + size > kBlockSize) {
         fBlocks.push_back(std::move(fCurBlock));
         this->createBlock();
@@ -143,8 +143,8 @@ void ChromeTracingTracer::updateTraceEventDuration(const uint8_t*        categor
                                                    const char*           name,
                                                    SkEventTracer::Handle handle) {
     // We could probably get away with not locking here, but let's be totally safe.
-    SkAutoMutexAcquire lock(fMutex);
-    TraceEvent*        traceEvent = reinterpret_cast<TraceEvent*>(handle);
+    SkAutoSpinlock lock(fMutex);
+    TraceEvent*    traceEvent = reinterpret_cast<TraceEvent*>(handle);
     traceEvent->fClockEnd         = std::chrono::steady_clock::now().time_since_epoch().count();
 }
 
@@ -220,10 +220,10 @@ static void trace_event_to_json(SkJSONWriter*                 writer,
     // (standard time unit for tracing JSON files).
     uint64_t relativeTimestamp =
             static_cast<int64_t>(traceEvent->fClockBegin - serializationState->fClockOffset);
-    writer->appendDoubleDigits("ts", static_cast<double>(relativeTimestamp) * 1E-3, 3);
+    writer->appendDouble("ts", static_cast<double>(relativeTimestamp) * 1E-3);
     if (0 != traceEvent->fClockEnd) {
         double dur = static_cast<double>(traceEvent->fClockEnd - traceEvent->fClockBegin) * 1E-3;
-        writer->appendDoubleDigits("dur", dur, 3);
+        writer->appendDouble("dur", dur);
     }
 
     writer->appendS64("tid", serializationState->getShortThreadID(traceEvent->fThreadID));
@@ -270,7 +270,7 @@ static void trace_event_to_json(SkJSONWriter*                 writer,
 }
 
 void ChromeTracingTracer::flush() {
-    SkAutoMutexAcquire lock(fMutex);
+    SkAutoSpinlock lock(fMutex);
 
     SkString dirname = SkOSPath::Dirname(fFilename.c_str());
     if (!dirname.isEmpty() && !sk_exists(dirname.c_str(), kWrite_SkFILE_Flag)) {

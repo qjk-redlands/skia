@@ -5,17 +5,27 @@
  * found in the LICENSE file.
  */
 
-#include "SkOverdrawCanvas.h"
-#include "SkOverdrawColorFilter.h"
-#include "ToolUtils.h"
-#include "gm.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkFontTypes.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkOverdrawCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkOverdrawColorFilter.h"
 
 #define WIDTH 500
 #define HEIGHT 500
 
-
-static const uint32_t kOverdrawColors[6] = {
-        0x00000000, 0x5f00005f, 0x2f2f0000, 0x2f002f00, 0x3f00003f, 0x7f00007f,
+static const SkColor kOverdrawColors[6] = {
+    0x00000000, 0x5fff0000, 0x2f0000ff, 0x2f00ff00, 0x3fff0000, 0x7fff0000,
 };
 
 
@@ -41,8 +51,8 @@ DEF_SIMPLE_GM_BG(overdraw_canvas,       canvas, WIDTH, HEIGHT, SK_ColorWHITE) {
 
     // Draw overdraw colors to the canvas.  The color filter will convert counts to colors.
     SkPaint paint;
-    paint.setColorFilter(SkOverdrawColorFilter::Make(kOverdrawColors));
-    canvas->drawImage(counts.get(), 0.0f, 0.0f, &paint);
+    paint.setColorFilter(SkOverdrawColorFilter::MakeWithSkColors(kOverdrawColors));
+    canvas->drawImage(counts.get(), 0.0f, 0.0f, SkSamplingOptions(), &paint);
     canvas->drawString("This is some text:", 180, 300, SkFont(), SkPaint());
 }
 

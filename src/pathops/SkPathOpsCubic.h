@@ -8,9 +8,9 @@
 #ifndef SkPathOpsCubic_DEFINED
 #define SkPathOpsCubic_DEFINED
 
-#include "SkArenaAlloc.h"
-#include "SkPath.h"
-#include "SkPathOpsTCurve.h"
+#include "include/core/SkPath.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/pathops/SkPathOpsTCurve.h"
 
 struct SkDCubicPair;
 
@@ -160,7 +160,7 @@ inline int other_two(int one, int two) {
 }
 
 struct SkDCubicPair {
-    const SkDCubic first() const {
+    SkDCubic first() const {
 #ifdef SK_DEBUG
         SkDCubic result;
         result.debugSet(&pts[0]);
@@ -169,7 +169,7 @@ struct SkDCubicPair {
         return (const SkDCubic&) pts[0];
 #endif
     }
-    const SkDCubic second() const {
+    SkDCubic second() const {
 #ifdef SK_DEBUG
         SkDCubic result;
         result.debugSet(&pts[3]);

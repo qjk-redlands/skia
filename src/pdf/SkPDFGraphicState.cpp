@@ -5,15 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "SkPDFGraphicState.h"
+#include "src/pdf/SkPDFGraphicState.h"
 
-#include "SkData.h"
-#include "SkPDFDocument.h"
-#include "SkPDFDocumentPriv.h"
-#include "SkPDFFormXObject.h"
-#include "SkPDFUtils.h"
-#include "SkPaint.h"
-#include "SkTo.h"
+#include "include/core/SkData.h"
+#include "include/core/SkPaint.h"
+#include "include/docs/SkPDFDocument.h"
+#include "include/private/SkTo.h"
+#include "src/pdf/SkPDFDocumentPriv.h"
+#include "src/pdf/SkPDFFormXObject.h"
+#include "src/pdf/SkPDFUtils.h"
 
 static const char* as_pdf_blend_mode_name(SkBlendMode mode) {
     const char* name = SkPDFUtils::BlendModeName(mode);
@@ -56,8 +56,10 @@ static uint8_t pdf_blend_mode(SkBlendMode mode) {
 SkPDFIndirectReference SkPDFGraphicState::GetGraphicStateForPaint(SkPDFDocument* doc,
                                                                   const SkPaint& p) {
     SkASSERT(doc);
+    const SkBlendMode mode = p.getBlendMode_or(SkBlendMode::kSrcOver);
+
     if (SkPaint::kFill_Style == p.getStyle()) {
-        SkPDFFillGraphicState fillKey = {p.getColor4f().fA, pdf_blend_mode(p.getBlendMode())};
+        SkPDFFillGraphicState fillKey = {p.getColor4f().fA, pdf_blend_mode(mode)};
         auto& fillMap = doc->fFillGSMap;
         if (SkPDFIndirectReference* statePtr = fillMap.find(fillKey)) {
             return *statePtr;
@@ -76,7 +78,7 @@ SkPDFIndirectReference SkPDFGraphicState::GetGraphicStateForPaint(SkPDFDocument*
             p.getColor4f().fA,
             SkToU8(p.getStrokeCap()),
             SkToU8(p.getStrokeJoin()),
-            pdf_blend_mode(p.getBlendMode())
+            pdf_blend_mode(mode)
         };
         auto& sMap = doc->fStrokeGSMap;
         if (SkPDFIndirectReference* statePtr = sMap.find(strokeKey)) {

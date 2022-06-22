@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkEventTracer.h"
-#include "SkOnce.h"
+#include "include/private/SkOnce.h"
+#include "include/utils/SkEventTracer.h"
 #include <atomic>
 
 #include <stdlib.h>
@@ -34,8 +34,8 @@ class SkDefaultEventTracer : public SkEventTracer {
     }
     const char* getCategoryGroupName(
       const uint8_t* categoryEnabledFlag) override {
-        static const char* dummy = "dummy";
-        return dummy;
+        static const char* stub = "stub";
+        return stub;
     }
 };
 

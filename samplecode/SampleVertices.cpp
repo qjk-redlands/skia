@@ -4,24 +4,24 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "SkGraphics.h"
-#include "SkPath.h"
-#include "SkRandom.h"
-#include "SkRegion.h"
-#include "SkShader.h"
-#include "SkUTF.h"
-#include "SkColorPriv.h"
-#include "SkColorFilter.h"
-#include "SkTime.h"
-#include "SkTypeface.h"
-#include "SkVertices.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkColorPriv.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkRegion.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkTime.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkVertices.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/utils/SkRandom.h"
+#include "samplecode/Sample.h"
+#include "src/utils/SkUTF.h"
 
-#include "SkOSFile.h"
-#include "SkStream.h"
+#include "include/core/SkStream.h"
+#include "src/core/SkOSFile.h"
 
 static sk_sp<SkShader> make_shader0(SkIPoint* size) {
     SkBitmap    bm;
@@ -34,7 +34,8 @@ static sk_sp<SkShader> make_shader0(SkIPoint* size) {
     pixels[0] = pixels[2] = color0;
     pixels[1] = pixels[3] = color1;
 
-    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat);
+    return bm.makeShader(SkTileMode::kRepeat, SkTileMode::kRepeat,
+                         SkSamplingOptions(SkFilterMode::kLinear));
 }
 
 static sk_sp<SkShader> make_shader1(const SkIPoint& size) {
@@ -66,20 +67,13 @@ public:
     }
 
 protected:
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "Vertices");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("Vertices"); }
 
     SkScalar fScale;
 
     void onDrawContent(SkCanvas* canvas) override {
         SkPaint paint;
         paint.setDither(true);
-        paint.setFilterQuality(kLow_SkFilterQuality);
 
         for (size_t i = 0; i < SK_ARRAY_COUNT(fRecs); i++) {
             auto verts = SkVertices::MakeCopy(fRecs[i].fMode, fRecs[i].fCount,
@@ -105,8 +99,8 @@ protected:
         }
     }
 
-    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, unsigned) override {
-        return new Click(this);
+    Sample::Click* onFindClickHandler(SkScalar x, SkScalar y, skui::ModifierKey) override {
+        return new Click();
     }
 
     bool onClick(Click* click) override {
@@ -210,7 +204,7 @@ private:
 
     Rec fRecs[3];
 
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////

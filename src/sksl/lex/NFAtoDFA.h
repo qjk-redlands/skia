@@ -4,11 +4,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+#ifndef NFAtoDFA_DEFINED
+#define NFAtoDFA_DEFINED
 
-#include "DFA.h"
-#include "DFAState.h"
-#include "NFA.h"
-#include "NFAState.h"
+#include "src/sksl/lex/DFA.h"
+#include "src/sksl/lex/DFAState.h"
+#include "src/sksl/lex/NFA.h"
+#include "src/sksl/lex/NFAState.h"
 
 #include <algorithm>
 #include <climits>
@@ -29,8 +31,8 @@
  */
 class NFAtoDFA {
 public:
-    static constexpr char START_CHAR = 9;
-    static constexpr char END_CHAR = 126;
+    inline static constexpr char START_CHAR = 9;
+    inline static constexpr char END_CHAR = 126;
 
     NFAtoDFA(NFA* nfa)
     : fNFA(*nfa) {}
@@ -78,8 +80,8 @@ private:
                 this->add(next, states);
             }
         } else {
-            for (int state : *states) {
-                if (nfaState == state) {
+            for (int entry : *states) {
+                if (nfaState == entry) {
                     return;
                 }
             }
@@ -163,3 +165,4 @@ private:
     std::vector<int> fCharMappings;
     std::vector<int> fAccepts;
 };
+#endif  // NFAtoDFA_DEFINED

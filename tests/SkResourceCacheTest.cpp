@@ -5,18 +5,17 @@
  * found in the LICENSE file.
  */
 
-#include "Test.h"
-#include "SkBitmapCache.h"
-#include "SkBitmapProvider.h"
-#include "SkCanvas.h"
-#include "SkDiscardableMemoryPool.h"
-#include "SkGraphics.h"
-#include "SkMakeUnique.h"
-#include "SkMipMap.h"
-#include "SkPicture.h"
-#include "SkPictureRecorder.h"
-#include "SkResourceCache.h"
-#include "SkSurface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkGraphics.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkSurface.h"
+#include "src/core/SkBitmapCache.h"
+#include "src/core/SkMipmap.h"
+#include "src/core/SkResourceCache.h"
+#include "src/image/SkImage_Base.h"
+#include "src/lazy/SkDiscardableMemoryPool.h"
+#include "tests/Test.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -44,18 +43,17 @@ static void test_mipmapcache(skiatest::Reporter* reporter, SkResourceCache* cach
     SkBitmap src;
     src.allocN32Pixels(5, 5);
     src.setImmutable();
-    sk_sp<SkImage> img = SkImage::MakeFromBitmap(src);
-    SkBitmapProvider provider(img.get());
-    const auto desc = provider.makeCacheDesc();
+    sk_sp<SkImage> img = src.asImage();
+    const auto desc = SkBitmapCacheDesc::Make(img.get());
 
-    const SkMipMap* mipmap = SkMipMapCache::FindAndRef(desc, cache);
+    const SkMipmap* mipmap = SkMipmapCache::FindAndRef(desc, cache);
     REPORTER_ASSERT(reporter, nullptr == mipmap);
 
-    mipmap = SkMipMapCache::AddAndRef(provider, cache);
+    mipmap = SkMipmapCache::AddAndRef(as_IB(img.get()), cache);
     REPORTER_ASSERT(reporter, mipmap);
 
     {
-        const SkMipMap* mm = SkMipMapCache::FindAndRef(desc, cache);
+        const SkMipmap* mm = SkMipmapCache::FindAndRef(desc, cache);
         REPORTER_ASSERT(reporter, mm);
         REPORTER_ASSERT(reporter, mm == mipmap);
         mm->unref();
@@ -69,7 +67,7 @@ static void test_mipmapcache(skiatest::Reporter* reporter, SkResourceCache* cach
     check_data(reporter, mipmap, 1, kInCache, kNotLocked);
 
     // find us again
-    mipmap = SkMipMapCache::FindAndRef(desc, cache);
+    mipmap = SkMipmapCache::FindAndRef(desc, cache);
     check_data(reporter, mipmap, 2, kInCache, kLocked);
 
     cache->purgeAll();
@@ -87,34 +85,36 @@ static void test_mipmap_notify(skiatest::Reporter* reporter, SkResourceCache* ca
     for (int i = 0; i < N; ++i) {
         src[i].allocN32Pixels(5, 5);
         src[i].setImmutable();
-        img[i] = SkImage::MakeFromBitmap(src[i]);
-        SkBitmapProvider provider(img[i].get());
-        SkMipMapCache::AddAndRef(provider, cache)->unref();
-        desc[i] = provider.makeCacheDesc();
+        img[i] = src[i].asImage();
+        SkMipmapCache::AddAndRef(as_IB(img[i].get()), cache)->unref();
+        desc[i] = SkBitmapCacheDesc::Make(img[i].get());
     }
 
     for (int i = 0; i < N; ++i) {
-        const SkMipMap* mipmap = SkMipMapCache::FindAndRef(desc[i], cache);
+        const SkMipmap* mipmap = SkMipmapCache::FindAndRef(desc[i], cache);
         // We're always using a local cache, so we know we won't be purged by other threads
         REPORTER_ASSERT(reporter, mipmap);
         SkSafeUnref(mipmap);
 
         img[i].reset(); // delete the image, which *should not* remove us from the cache
-        mipmap = SkMipMapCache::FindAndRef(desc[i], cache);
+        mipmap = SkMipmapCache::FindAndRef(desc[i], cache);
         REPORTER_ASSERT(reporter, mipmap);
         SkSafeUnref(mipmap);
 
         src[i].reset(); // delete the underlying pixelref, which *should* remove us from the cache
-        mipmap = SkMipMapCache::FindAndRef(desc[i], cache);
+        mipmap = SkMipmapCache::FindAndRef(desc[i], cache);
         REPORTER_ASSERT(reporter, !mipmap);
     }
 }
 
-#include "SkDiscardableMemoryPool.h"
+#include "src/lazy/SkDiscardableMemoryPool.h"
 
 static SkDiscardableMemoryPool* gPool = nullptr;
+static int gFactoryCalls = 0;
+
 static SkDiscardableMemory* pool_factory(size_t bytes) {
     SkASSERT(gPool);
+    gFactoryCalls++;
     return gPool->create(bytes);
 }
 
@@ -137,6 +137,7 @@ DEF_TEST(BitmapCache_discarded_bitmap, reporter) {
         SkResourceCache cache(factory);
         testBitmapCache_discarded_bitmap(reporter, &cache, factory);
     }
+    REPORTER_ASSERT(reporter, gFactoryCalls > 0);
 }
 
 static void test_discarded_image(skiatest::Reporter* reporter, const SkMatrix& transform,
@@ -152,14 +153,11 @@ static void test_discarded_image(skiatest::Reporter* reporter, const SkMatrix& t
 
         sk_sp<SkImage> image(buildImage());
 
-        // always use high quality to ensure caching when scaled
-        SkPaint paint;
-        paint.setFilterQuality(kHigh_SkFilterQuality);
-
         // draw the image (with a transform, to tickle different code paths) to ensure
         // any associated resources get cached
         canvas->concat(transform);
-        canvas->drawImage(image, 0, 0, &paint);
+        // always use high quality to ensure caching when scaled
+        canvas->drawImage(image, 0, 0, SkSamplingOptions({1.0f/3, 1.0f/3}));
 
         const auto desc = SkBitmapCacheDesc::Make(image.get());
 
@@ -184,8 +182,8 @@ DEF_TEST(BitmapCache_discarded_image, reporter) {
     // To exercise the latter, we draw scaled bitmap images using HQ filters.
 
     const SkMatrix xforms[] = {
-        SkMatrix::MakeScale(1, 1),
-        SkMatrix::MakeScale(1.7f, 0.5f),
+        SkMatrix::Scale(1, 1),
+        SkMatrix::Scale(1.7f, 0.5f),
     };
 
     for (size_t i = 0; i < SK_ARRAY_COUNT(xforms); ++i) {
@@ -248,8 +246,8 @@ static void test_duplicate_add(SkResourceCache* cache, skiatest::Reporter* repor
 
     int flags0 = 0, flags1 = 0;
 
-    auto rec0 = skstd::make_unique<TestRec>(sharedID, data, &flags0);
-    auto rec1 = skstd::make_unique<TestRec>(sharedID, data, &flags1);
+    auto rec0 = std::make_unique<TestRec>(sharedID, data, &flags0);
+    auto rec1 = std::make_unique<TestRec>(sharedID, data, &flags1);
     SkASSERT(rec0->getKey() == rec1->getKey());
 
     TestRec* r0 = rec0.get();   // save the bare-pointer since we will release rec0

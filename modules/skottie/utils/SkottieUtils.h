@@ -8,62 +8,16 @@
 #ifndef SkottieUtils_DEFINED
 #define SkottieUtils_DEFINED
 
-#include "SkColor.h"
-#include "Skottie.h"
-#include "SkottieProperty.h"
-#include "SkString.h"
-#include "SkTHash.h"
+#include "modules/skottie/include/ExternalLayer.h"
+#include "modules/skottie/include/Skottie.h"
+#include "modules/skottie/include/SkottieProperty.h"
 
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-class SkAnimCodecPlayer;
-class SkData;
-class SkImage;
-
 namespace skottie_utils {
-
-class MultiFrameImageAsset final : public skottie::ImageAsset {
-public:
-    /**
-    * By default, images are decoded on-the-fly, at rasterization time.
-    * Large images may cause jank as decoding is expensive (and can thrash internal caches).
-    *
-    * Pass |predecode| true to force-decode all images upfront, at the cost of potentially more RAM
-    * and slower animation build times.
-    */
-    static sk_sp<MultiFrameImageAsset> Make(sk_sp<SkData>, bool predecode = false);
-
-    bool isMultiFrame() override;
-
-    sk_sp<SkImage> getFrame(float t) override;
-
-private:
-    explicit MultiFrameImageAsset(std::unique_ptr<SkAnimCodecPlayer>, bool predecode);
-
-    std::unique_ptr<SkAnimCodecPlayer> fPlayer;
-    bool                               fPreDecode;
-
-    using INHERITED = skottie::ImageAsset;
-};
-
-class FileResourceProvider final : public skottie::ResourceProvider {
-public:
-    static sk_sp<FileResourceProvider> Make(SkString base_dir);
-
-    sk_sp<SkData> load(const char resource_path[], const char resource_name[]) const override;
-
-    sk_sp<skottie::ImageAsset> loadImageAsset(const char[], const char []) const override;
-
-private:
-    explicit FileResourceProvider(SkString);
-
-    const SkString fDir;
-
-    using INHERITED = skottie::ResourceProvider;
-};
 
 /**
  * CustomPropertyManager implements a property management scheme where color/opacity/transform
@@ -79,7 +33,14 @@ private:
  */
 class CustomPropertyManager final {
 public:
-    CustomPropertyManager();
+    enum class Mode {
+        kCollapseProperties,   // keys ignore the ancestor chain and are
+                               // grouped based on the local node name
+        kNamespacedProperties, // keys include the ancestor node names (no grouping)
+    };
+
+    explicit CustomPropertyManager(Mode = Mode::kNamespacedProperties,
+                                   const char* prefix = nullptr);
     ~CustomPropertyManager();
 
     using PropKey = std::string;
@@ -95,6 +56,10 @@ public:
     std::vector<PropKey> getTransformProps() const;
     skottie::TransformPropertyValue getTransform(const PropKey&) const;
     bool setTransform(const PropKey&, const skottie::TransformPropertyValue&);
+
+    std::vector<PropKey> getTextProps() const;
+    skottie::TextPropertyValue getText(const PropKey&) const;
+    bool setText(const PropKey&, const skottie::TextPropertyValue&);
 
     struct MarkerInfo {
         std::string name;
@@ -112,16 +77,7 @@ private:
     class PropertyInterceptor;
     class MarkerInterceptor;
 
-    static std::string acceptKey(const char* name) {
-        static constexpr char kPrefix = '$';
-
-        return (name[0] == kPrefix && name[1] != '\0')
-            ? std::string(name + 1)
-            : std::string();
-    }
-
-    sk_sp<PropertyInterceptor> fPropertyInterceptor;
-    sk_sp<MarkerInterceptor>   fMarkerInterceptor;
+    std::string acceptKey(const char*, const char*) const;
 
     template <typename T>
     using PropGroup = std::vector<std::unique_ptr<T>>;
@@ -138,11 +94,38 @@ private:
     template <typename V, typename T>
     bool set(const PropKey&, const V&, const PropMap<T>& container);
 
+    const Mode                                fMode;
+    const SkString                            fPrefix;
+
+    sk_sp<PropertyInterceptor>                fPropertyInterceptor;
+    sk_sp<MarkerInterceptor>                  fMarkerInterceptor;
+
     PropMap<skottie::ColorPropertyHandle>     fColorMap;
     PropMap<skottie::OpacityPropertyHandle>   fOpacityMap;
     PropMap<skottie::TransformPropertyHandle> fTransformMap;
+    PropMap<skottie::TextPropertyHandle>      fTextMap;
     std::vector<MarkerInfo>                   fMarkers;
+    std::string                               fCurrentNode;
 };
+
+/**
+ * A sample PrecompInterceptor implementation.
+ *
+ * Attempts to substitute all precomp layers matching the given pattern (name prefix)
+ * with external Lottie animations.
+ */
+class ExternalAnimationPrecompInterceptor final : public skottie::PrecompInterceptor {
+public:
+    ExternalAnimationPrecompInterceptor(sk_sp<skresources::ResourceProvider>, const char prefix[]);
+    ~ExternalAnimationPrecompInterceptor() override;
+
+private:
+    sk_sp<skottie::ExternalLayer> onLoadPrecomp(const char[], const char[], const SkSize&) override;
+
+    const sk_sp<skresources::ResourceProvider> fResourceProvider;
+    const SkString                             fPrefix;
+};
+
 
 } // namespace skottie_utils
 

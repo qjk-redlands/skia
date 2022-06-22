@@ -4,15 +4,20 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 #if defined(SK_BUILD_FOR_WIN)
 
-#include "SkDWrite.h"
-#include "SkHRESULT.h"
-#include "SkOnce.h"
-#include "SkString.h"
+#include "include/core/SkString.h"
+#include "include/private/SkOnce.h"
+#include "src/utils/win/SkDWrite.h"
+#include "src/utils/win/SkHRESULT.h"
 
 #include <dwrite.h>
+
+#if defined(__clang__)
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wcast-function-type"
+#endif
 
 static IDWriteFactory* gDWriteFactory = nullptr;
 
@@ -26,7 +31,7 @@ static void create_dwrite_factory(IDWriteFactory** factory) {
     typedef decltype(DWriteCreateFactory)* DWriteCreateFactoryProc;
 #ifdef RTC_WINDOWS_DESKTOP
     DWriteCreateFactoryProc dWriteCreateFactoryProc = reinterpret_cast<DWriteCreateFactoryProc>(
-            GetProcAddress(LoadLibraryW(L"dwrite.dll"), "DWriteCreateFactory"));
+        GetProcAddress(LoadLibraryW(L"dwrite.dll"), "DWriteCreateFactory"));
 
     if (!dWriteCreateFactoryProc) {
         HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
@@ -49,6 +54,7 @@ static void create_dwrite_factory(IDWriteFactory** factory) {
     atexit(release_dwrite_factory);
 #endif
 }
+
 
 IDWriteFactory* sk_get_dwrite_factory() {
     static SkOnce once;
@@ -122,7 +128,8 @@ HRESULT sk_get_locale_string(IDWriteLocalizedStrings* names, const WCHAR* prefer
 HRESULT SkGetGetUserDefaultLocaleNameProc(SkGetUserDefaultLocaleNameProc* proc) {
 #ifdef RTC_WINDOWS_DESKTOP
     *proc = reinterpret_cast<SkGetUserDefaultLocaleNameProc>(
-            GetProcAddress(LoadLibraryW(L"Kernel32.dll"), "GetUserDefaultLocaleName"));
+        GetProcAddress(LoadLibraryW(L"Kernel32.dll"), "GetUserDefaultLocaleName")
+    );
 #else  // RTC_WINDOWS_UNIVERSAL
     *proc = reinterpret_cast<SkGetUserDefaultLocaleNameProc>(
             GetProcAddress(LoadPackagedLibrary(L"Kernel32.dll", 0), "GetUserDefaultLocaleName"));
@@ -137,5 +144,9 @@ HRESULT SkGetGetUserDefaultLocaleNameProc(SkGetUserDefaultLocaleNameProc* proc) 
     }
     return S_OK;
 }
+
+#if defined(__clang__)
+    #pragma clang diagnostic pop
+#endif
 
 #endif//defined(SK_BUILD_FOR_WIN)

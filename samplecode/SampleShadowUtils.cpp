@@ -5,19 +5,17 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "AnimTimer.h"
-#include "Sample.h"
-#include "SkBlurMask.h"
-#include "SkBlurMaskFilter.h"
-#include "SkCamera.h"
-#include "SkCanvas.h"
-#include "SkColorFilter.h"
-#include "SkPath.h"
-#include "SkPathOps.h"
-#include "SkPoint3.h"
-#include "SkShadowUtils.h"
-#include "SkUTF.h"
-#include "ToolUtils.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColorFilter.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPoint3.h"
+#include "include/pathops/SkPathOps.h"
+#include "include/utils/SkCamera.h"
+#include "include/utils/SkShadowUtils.h"
+#include "samplecode/Sample.h"
+#include "src/core/SkBlurMask.h"
+#include "src/utils/SkUTF.h"
+#include "tools/ToolUtils.h"
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -73,14 +71,9 @@ protected:
         fConcavePaths.back().cubicTo(0, -25, 40, -50, 50, 0);
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "ShadowUtils");
-            return true;
-        }
+    SkString name() override { return SkString("ShadowUtils"); }
 
-        SkUnichar uni;
-        if (Sample::CharQ(*evt, &uni)) {
+    bool onChar(SkUnichar uni) override {
             bool handled = false;
             switch (uni) {
                 case 'W':
@@ -117,8 +110,7 @@ protected:
             if (handled) {
                 return true;
             }
-        }
-        return this->INHERITED::onQuery(evt);
+            return false;
     }
 
     void drawBG(SkCanvas* canvas) {
@@ -179,13 +171,11 @@ protected:
         SkScalar dy = 0;
         SkTDArray<SkMatrix> matrices;
         matrices.push()->reset();
-        SkMatrix* m = matrices.push();
-        m->setRotate(33.f, 25.f, 25.f);
-        m->postScale(1.2f, 0.8f, 25.f, 25.f);
-        SkPaint paint;
-        paint.setColor(SK_ColorGREEN);
-        paint.setAntiAlias(true);
-        SkPoint3 zPlaneParams = SkPoint3::Make(0, 0, SkTMax(1.0f, kHeight + fZDelta));
+        matrices.push()->setRotate(33.f, 25.f, 25.f).postScale(1.2f, 0.8f, 25.f, 25.f);
+        SkPaint greenPaint;
+        greenPaint.setColor(SK_ColorGREEN);
+        greenPaint.setAntiAlias(true);
+        SkPoint3 zPlaneParams = SkPoint3::Make(0, 0, std::max(1.0f, kHeight + fZDelta));
 
         // convex paths
         for (auto& m : matrices) {
@@ -205,13 +195,13 @@ protected:
 
                     canvas->save();
                     canvas->concat(m);
-                    this->drawShadowedPath(canvas, path, zPlaneParams, paint, kAmbientAlpha,
+                    this->drawShadowedPath(canvas, path, zPlaneParams, greenPaint, kAmbientAlpha,
                                            lightPos, kLightR, kSpotAlpha, flags);
                     canvas->restore();
 
                     canvas->translate(dx, 0);
                     x += dx;
-                    dy = SkTMax(dy, postMBounds.height() + kPad + kHeight);
+                    dy = std::max(dy, postMBounds.height() + kPad + kHeight);
                 }
             }
         }
@@ -231,13 +221,13 @@ protected:
 
                 canvas->save();
                 canvas->concat(m);
-                this->drawShadowedPath(canvas, path, zPlaneParams, paint, kAmbientAlpha, lightPos,
-                                       kLightR, kSpotAlpha, kNone_ShadowFlag);
+                this->drawShadowedPath(canvas, path, zPlaneParams, greenPaint, kAmbientAlpha,
+                                       lightPos, kLightR, kSpotAlpha, kNone_ShadowFlag);
                 canvas->restore();
 
                 canvas->translate(dx, 0);
                 x += dx;
-                dy = SkTMax(dy, postMBounds.height() + kPad + kHeight);
+                dy = std::max(dy, postMBounds.height() + kPad + kHeight);
             }
         }
 
@@ -246,16 +236,16 @@ protected:
         if (invCanvasM.invert(&invCanvasM)) {
             canvas->save();
             canvas->concat(invCanvasM);
-            SkPaint paint;
-            paint.setColor(SK_ColorBLACK);
-            paint.setAntiAlias(true);
-            canvas->drawCircle(lightPos.fX, lightPos.fY, kLightR / 10.f, paint);
+            SkPaint blackPaint;
+            blackPaint.setColor(SK_ColorBLACK);
+            blackPaint.setAntiAlias(true);
+            canvas->drawCircle(lightPos.fX, lightPos.fY, kLightR / 10.f, blackPaint);
             canvas->restore();
         }
     }
 
 private:
-    typedef Sample INHERITED;
+    using INHERITED = Sample;
 };
 
 //////////////////////////////////////////////////////////////////////////////

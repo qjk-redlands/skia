@@ -6,98 +6,60 @@
  */
 
 
-#include "GrRenderTarget.h"
+#include "src/gpu/GrRenderTarget.h"
 
-#include "GrContext.h"
-#include "GrContextPriv.h"
-#include "GrRenderTargetContext.h"
-#include "GrGpu.h"
-#include "GrRenderTargetOpList.h"
-#include "GrRenderTargetPriv.h"
-#include "GrSamplePatternDictionary.h"
-#include "GrStencilAttachment.h"
-#include "GrStencilSettings.h"
-#include "SkRectPriv.h"
+#include "src/core/SkRectPriv.h"
+#include "src/gpu/GrAttachment.h"
+#include "src/gpu/GrBackendUtils.h"
+#include "src/gpu/GrGpu.h"
+#include "src/gpu/GrStencilSettings.h"
 
-GrRenderTarget::GrRenderTarget(GrGpu* gpu, const GrSurfaceDesc& desc,
-                               GrStencilAttachment* stencil)
-        : INHERITED(gpu, desc)
-        , fSampleCnt(desc.fSampleCnt)
-        , fSamplePatternKey(GrSamplePatternDictionary::kInvalidSamplePatternKey)
-        , fStencilAttachment(stencil) {
-    SkASSERT(desc.fFlags & kRenderTarget_GrSurfaceFlag);
-    SkASSERT(!this->hasMixedSamples() || fSampleCnt > 1);
-    fResolveRect = SkRectPriv::MakeILargestInverted();
+GrRenderTarget::GrRenderTarget(GrGpu* gpu,
+                               const SkISize& dimensions,
+                               int sampleCount,
+                               GrProtected isProtected,
+                               sk_sp<GrAttachment> stencil)
+        : INHERITED(gpu, dimensions, isProtected)
+        , fSampleCnt(sampleCount) {
+    if (this->numSamples() > 1) {
+        fMSAAStencilAttachment = std::move(stencil);
+    } else {
+        fStencilAttachment = std::move(stencil);
+    }
 }
 
 GrRenderTarget::~GrRenderTarget() = default;
 
-void GrRenderTarget::flagAsNeedingResolve(const SkIRect* rect) {
-    if (kCanResolve_ResolveType == getResolveType()) {
-        if (rect) {
-            fResolveRect.join(*rect);
-            if (!fResolveRect.intersect(0, 0, this->width(), this->height())) {
-                fResolveRect.setEmpty();
-            }
-        } else {
-            fResolveRect.setLTRB(0, 0, this->width(), this->height());
-        }
-    }
-}
-
-void GrRenderTarget::overrideResolveRect(const SkIRect rect) {
-    fResolveRect = rect;
-    if (fResolveRect.isEmpty()) {
-        fResolveRect = SkRectPriv::MakeILargestInverted();
-    } else {
-        if (!fResolveRect.intersect(0, 0, this->width(), this->height())) {
-            fResolveRect = SkRectPriv::MakeILargestInverted();
-        }
-    }
-}
-
-void GrRenderTarget::flagAsResolved() {
-    fResolveRect = SkRectPriv::MakeILargestInverted();
-}
-
 void GrRenderTarget::onRelease() {
     fStencilAttachment = nullptr;
+    fMSAAStencilAttachment = nullptr;
 
     INHERITED::onRelease();
 }
 
 void GrRenderTarget::onAbandon() {
     fStencilAttachment = nullptr;
+    fMSAAStencilAttachment = nullptr;
 
     INHERITED::onAbandon();
 }
 
-///////////////////////////////////////////////////////////////////////////////
-
-void GrRenderTargetPriv::attachStencilAttachment(sk_sp<GrStencilAttachment> stencil) {
-    if (!stencil && !fRenderTarget->fStencilAttachment) {
+void GrRenderTarget::attachStencilAttachment(sk_sp<GrAttachment> stencil, bool useMSAASurface) {
+    auto stencilAttachment = (useMSAASurface) ? &GrRenderTarget::fMSAAStencilAttachment
+                                              : &GrRenderTarget::fStencilAttachment;
+    if (!stencil && !(this->*stencilAttachment)) {
         // No need to do any work since we currently don't have a stencil attachment and
         // we're not actually adding one.
         return;
     }
-    fRenderTarget->fStencilAttachment = std::move(stencil);
-    if (!fRenderTarget->completeStencilAttachment()) {
-        fRenderTarget->fStencilAttachment = nullptr;
+
+    if (!this->completeStencilAttachment(stencil.get(), useMSAASurface)) {
+        return;
     }
+
+    this->*stencilAttachment = std::move(stencil);
 }
 
-int GrRenderTargetPriv::numStencilBits() const {
-    SkASSERT(this->getStencilAttachment());
-    return this->getStencilAttachment()->bits();
-}
-
-int GrRenderTargetPriv::getSamplePatternKey() const {
-    SkASSERT(fRenderTarget->fSampleCnt > 1);
-    if (GrSamplePatternDictionary::kInvalidSamplePatternKey == fRenderTarget->fSamplePatternKey) {
-        fRenderTarget->fSamplePatternKey =
-                fRenderTarget->getGpu()->findOrAssignSamplePatternKey(fRenderTarget);
-    }
-    SkASSERT(GrSamplePatternDictionary::kInvalidSamplePatternKey
-                     != fRenderTarget->fSamplePatternKey);
-    return fRenderTarget->fSamplePatternKey;
+int GrRenderTarget::numStencilBits(bool useMSAASurface) const {
+    return GrBackendFormatStencilBits(this->getStencilAttachment(useMSAASurface)->backendFormat());
 }

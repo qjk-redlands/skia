@@ -5,10 +5,11 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkString.h"
-#include "ToolUtils.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkString.h"
+#include "tools/ToolUtils.h"
 
 class PremulAndUnpremulAlphaOpsBench : public Benchmark {
     enum {
@@ -57,7 +58,7 @@ private:
     SkColorType fColorType;
     SkString fName;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 

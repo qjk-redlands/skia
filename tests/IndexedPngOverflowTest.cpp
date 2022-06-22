@@ -5,12 +5,12 @@
  * found in the LICENSE file.
  */
 
-#include "CodecPriv.h"
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkImageInfo.h"
-#include "SkSurface.h"
-#include "Test.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkSurface.h"
+#include "tests/CodecPriv.h"
+#include "tests/Test.h"
 
 // A 20x1 image with 8 bits per pixel and a palette size of 2. Pixel values are 255, 254... Run
 // this test with ASAN to make sure we don't try to access before/after any palette-sized buffers.
@@ -29,12 +29,9 @@ unsigned char gPng[] = {
 };
 
 DEF_TEST(IndexedPngOverflow, reporter) {
-    SkBitmap image;
-    bool success = decode_memory(gPng, sizeof(gPng), &image);
+    SkBitmap bm;
+    bool success = decode_memory(gPng, sizeof(gPng), &bm);
     REPORTER_ASSERT(reporter, success);
 
-    auto surface(SkSurface::MakeRaster(SkImageInfo::MakeN32Premul(20, 1)));
-    SkCanvas* canvas = surface->getCanvas();
-    SkRect destRect = SkRect::MakeXYWH(0, 0, 20, 1);
-    canvas->drawBitmapRect(image, destRect, nullptr);
+    SkSurface::MakeRasterN32Premul(20, 1)->getCanvas()->drawImage(bm.asImage(), 0, 0);
 }

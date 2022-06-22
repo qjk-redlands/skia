@@ -5,48 +5,60 @@
  * found in the LICENSE file.
  */
 
-#include "SkPictureImageFilter.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPicture.h"
+#include "include/effects/SkImageFilters.h"
+#include "src/core/SkImageFilter_Base.h"
+#include "src/core/SkPicturePriv.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkSpecialImage.h"
+#include "src/core/SkSpecialSurface.h"
+#include "src/core/SkValidationUtils.h"
+#include "src/core/SkWriteBuffer.h"
 
-#include "SkCanvas.h"
-#include "SkImageSource.h"
-#include "SkPicturePriv.h"
-#include "SkReadBuffer.h"
-#include "SkSpecialImage.h"
-#include "SkSpecialSurface.h"
-#include "SkWriteBuffer.h"
-#include "SkValidationUtils.h"
+namespace {
 
-sk_sp<SkImageFilter> SkPictureImageFilter::Make(sk_sp<SkPicture> picture) {
-    return sk_sp<SkImageFilter>(new SkPictureImageFilter(std::move(picture)));
-}
+class SkPictureImageFilter final : public SkImageFilter_Base {
+public:
+    SkPictureImageFilter(sk_sp<SkPicture> picture, const SkRect& cropRect)
+            : INHERITED(nullptr, 0, nullptr)
+            , fPicture(std::move(picture))
+            , fCropRect(cropRect) {}
 
-sk_sp<SkImageFilter> SkPictureImageFilter::Make(sk_sp<SkPicture> picture,
-                                                const SkRect& cropRect) {
-    return sk_sp<SkImageFilter>(new SkPictureImageFilter(std::move(picture), cropRect));
-}
+protected:
+    /*  Constructs an SkPictureImageFilter object from an SkReadBuffer.
+     *  Note: If the SkPictureImageFilter object construction requires bitmap
+     *  decoding, the decoder must be set on the SkReadBuffer parameter by calling
+     *  SkReadBuffer::setBitmapDecoder() before calling this constructor.
+     *  @param SkReadBuffer Serialized picture data.
+     */
+    void flatten(SkWriteBuffer&) const override;
+    sk_sp<SkSpecialImage> onFilterImage(const Context&, SkIPoint* offset) const override;
 
-SkPictureImageFilter::SkPictureImageFilter(sk_sp<SkPicture> picture)
-    : INHERITED(nullptr, 0, nullptr)
-    , fPicture(std::move(picture))
-    , fCropRect(fPicture ? fPicture->cullRect() : SkRect::MakeEmpty()) {
-}
+    SkRect computeFastBounds(const SkRect& src) const override;
+    SkIRect onFilterNodeBounds(const SkIRect&, const SkMatrix& ctm,
+                               MapDirection, const SkIRect* inputRect) const override;
 
-SkPictureImageFilter::SkPictureImageFilter(sk_sp<SkPicture> picture, const SkRect& cropRect)
-    : INHERITED(nullptr, 0, nullptr)
-    , fPicture(std::move(picture))
-    , fCropRect(cropRect) {
-}
+private:
+    friend void ::SkRegisterPictureImageFilterFlattenable();
+    SK_FLATTENABLE_HOOKS(SkPictureImageFilter)
 
-enum PictureResolution {
-    kDeviceSpace_PictureResolution,
-    kLocalSpace_PictureResolution
+    sk_sp<SkPicture>    fPicture;
+    SkRect              fCropRect;
+
+    using INHERITED = SkImageFilter_Base;
 };
-static sk_sp<SkImageFilter> make_localspace_filter(sk_sp<SkPicture> pic, const SkRect& cropRect,
-                                                   SkFilterQuality fq) {
-    SkISize dim = { SkScalarRoundToInt(cropRect.width()), SkScalarRoundToInt(cropRect.height()) };
-    auto img = SkImage::MakeFromPicture(std::move(pic), dim, nullptr, nullptr,
-                                        SkImage::BitDepth::kU8, SkColorSpace::MakeSRGB());
-    return SkImageSource::Make(img, cropRect, cropRect, fq);
+
+} // end namespace
+
+sk_sp<SkImageFilter> SkImageFilters::Picture(sk_sp<SkPicture> pic, const SkRect& targetRect) {
+    return sk_sp<SkImageFilter>(new SkPictureImageFilter(std::move(pic), targetRect));
+}
+
+void SkRegisterPictureImageFilterFlattenable() {
+    SK_REGISTER_FLATTENABLE(SkPictureImageFilter);
+    // TODO (michaelludwig) - Remove after grace period for SKPs to stop using old name
+    SkFlattenable::Register("SkPictureImageFilterImpl", SkPictureImageFilter::CreateProc);
 }
 
 sk_sp<SkFlattenable> SkPictureImageFilter::CreateProc(SkReadBuffer& buffer) {
@@ -58,15 +70,7 @@ sk_sp<SkFlattenable> SkPictureImageFilter::CreateProc(SkReadBuffer& buffer) {
     }
     buffer.readRect(&cropRect);
 
-    if (buffer.isVersionLT(SkReadBuffer::kRemovePictureImageFilterLocalSpace)) {
-        PictureResolution pictureResolution = buffer.checkRange<PictureResolution>(
-            kDeviceSpace_PictureResolution, kLocalSpace_PictureResolution);
-        if (kLocalSpace_PictureResolution == pictureResolution) {
-            return make_localspace_filter(std::move(picture), cropRect,
-                                          buffer.checkFilterQuality());
-        }
-    }
-    return sk_sp<SkImageFilter>(new SkPictureImageFilter(picture, cropRect));
+    return SkImageFilters::Picture(std::move(picture), cropRect);
 }
 
 void SkPictureImageFilter::flatten(SkWriteBuffer& buffer) const {
@@ -78,8 +82,9 @@ void SkPictureImageFilter::flatten(SkWriteBuffer& buffer) const {
     buffer.writeRect(fCropRect);
 }
 
-sk_sp<SkSpecialImage> SkPictureImageFilter::onFilterImage(SkSpecialImage* source,
-                                                          const Context& ctx,
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+sk_sp<SkSpecialImage> SkPictureImageFilter::onFilterImage(const Context& ctx,
                                                           SkIPoint* offset) const {
     if (!fPicture) {
         return nullptr;
@@ -95,10 +100,10 @@ sk_sp<SkSpecialImage> SkPictureImageFilter::onFilterImage(SkSpecialImage* source
     SkASSERT(!bounds.isEmpty());
 
     // Given the standard usage of the picture image filter (i.e., to render content at a fixed
-    // resolution that, most likely, differs from the screen's) disable LCD text.
-    SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
-    sk_sp<SkSpecialSurface> surf(source->makeSurface(ctx.outputProperties(), bounds.size(),
-                                                     kPremul_SkAlphaType, &props));
+    // resolution that, most likely, differs from the screen's) disable LCD text by removing any
+    // knowledge of the pixel geometry.
+    SkSurfaceProps props = ctx.surfaceProps().cloneWithPixelGeometry(kUnknown_SkPixelGeometry);
+    sk_sp<SkSpecialSurface> surf(ctx.makeSurface(bounds.size(), &props));
     if (!surf) {
         return nullptr;
     }
@@ -116,4 +121,20 @@ sk_sp<SkSpecialImage> SkPictureImageFilter::onFilterImage(SkSpecialImage* source
     offset->fX = bounds.fLeft;
     offset->fY = bounds.fTop;
     return surf->makeImageSnapshot();
+}
+
+SkRect SkPictureImageFilter::computeFastBounds(const SkRect& src) const {
+    return fCropRect;
+}
+
+SkIRect SkPictureImageFilter::onFilterNodeBounds(const SkIRect& src, const SkMatrix& ctm,
+                                                 MapDirection direction,
+                                                 const SkIRect* inputRect) const {
+    if (kReverse_MapDirection == direction) {
+        return INHERITED::onFilterNodeBounds(src, ctm, direction, inputRect);
+    }
+
+    SkRect dstRect = fCropRect;
+    ctm.mapRect(&dstRect);
+    return dstRect.roundOut();
 }

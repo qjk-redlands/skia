@@ -8,9 +8,9 @@
 #ifndef GLTestContext_DEFINED
 #define GLTestContext_DEFINED
 
-#include "MockTestContext.h"
+#include "tools/gpu/mock/MockTestContext.h"
 
-#include "GrContext.h"
+#include "include/gpu/GrDirectContext.h"
 
 namespace {
 
@@ -19,24 +19,23 @@ public:
     MockTestContext() {}
     ~MockTestContext() override {}
 
-    virtual GrBackendApi backend() override { return GrBackendApi::kMock; }
+    GrBackendApi backend() override { return GrBackendApi::kMock; }
 
     void testAbandon() override {}
-    void submit() override {}
     void finish() override {}
 
-    sk_sp<GrContext> makeGrContext(const GrContextOptions& options) override {
-        return GrContext::MakeMock(nullptr, options);
+    sk_sp<GrDirectContext> makeContext(const GrContextOptions& options) override {
+        return GrDirectContext::MakeMock(nullptr, options);
     }
 
 protected:
     void teardown() override {}
+    void onPlatformMakeNotCurrent() const override {}
     void onPlatformMakeCurrent() const override {}
     std::function<void()> onPlatformGetAutoContextRestore() const override { return nullptr; }
-    void onPlatformSwapBuffers() const override {}
 
 private:
-    typedef sk_gpu_test::TestContext INHERITED;
+    using INHERITED = sk_gpu_test::TestContext;
 };
 
 } // anonymous namespace

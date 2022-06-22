@@ -8,11 +8,16 @@
 #ifndef SkOpts_DEFINED
 #define SkOpts_DEFINED
 
-#include "SkRasterPipeline.h"
-#include "SkTypes.h"
-#include "SkXfermodePriv.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkOpts_spi.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkXfermodePriv.h"
 
 struct SkBitmapProcState;
+namespace skvm {
+struct InterpreterInstruction;
+class TraceHook;
+}
 
 namespace SkOpts {
     // Call to replace pointers to portable functions with pointers to CPU-specific functions.
@@ -45,19 +50,24 @@ namespace SkOpts {
                            grayA_to_rgbA;   // i.e. expand to color channels and premultiply
 
     extern void (*memset16)(uint16_t[], uint16_t, int);
-    extern void SK_API (*memset32)(uint32_t[], uint32_t, int);
+    extern void SK_SPI(*memset32)(uint32_t[], uint32_t, int);
     extern void (*memset64)(uint64_t[], uint64_t, int);
 
-    // The fastest high quality 32-bit hash we can provide on this platform.
-    extern uint32_t (*hash_fn)(const void*, size_t, uint32_t seed);
+    extern void (*rect_memset16)(uint16_t[], uint16_t, int, size_t, int);
+    extern void (*rect_memset32)(uint32_t[], uint32_t, int, size_t, int);
+    extern void (*rect_memset64)(uint64_t[], uint64_t, int, size_t, int);
+
+    extern float (*cubic_solver)(float, float, float, float);
+
     static inline uint32_t hash(const void* data, size_t bytes, uint32_t seed=0) {
         return hash_fn(data, bytes, seed);
     }
 
     // SkBitmapProcState optimized Shader, Sample, or Matrix procs.
-    // This is the only one that can use anything past SSE2/NEON.
     extern void (*S32_alpha_D32_filter_DX)(const SkBitmapProcState&,
                                            const uint32_t* xy, int count, SkPMColor*);
+    extern void (*S32_alpha_D32_filter_DXDY)(const SkBitmapProcState&,
+                                             const uint32_t* xy, int count, SkPMColor*);
 
 #define M(st) +1
     // We can't necessarily express the type of SkJumper stage functions here,
@@ -69,6 +79,26 @@ namespace SkOpts {
     extern void (*start_pipeline_highp)(size_t,size_t,size_t,size_t, void**);
     extern void (*start_pipeline_lowp )(size_t,size_t,size_t,size_t, void**);
 #undef M
+
+    extern void (*interpret_skvm)(const skvm::InterpreterInstruction insts[], int ninsts,
+                                  int nregs, int loop, const int strides[],
+                                  skvm::TraceHook* traceHooks[], int nTraceHooks,
+                                  int nargs, int n, void* args[]);
+}  // namespace SkOpts
+
+/** Similar to memset(), but it assigns a 16, 32, or 64-bit value into the buffer.
+    @param buffer   The memory to have value copied into it
+    @param value    The value to be copied into buffer
+    @param count    The number of times value should be copied into the buffer.
+*/
+static inline void sk_memset16(uint16_t buffer[], uint16_t value, int count) {
+    SkOpts::memset16(buffer, value, count);
+}
+static inline void sk_memset32(uint32_t buffer[], uint32_t value, int count) {
+    SkOpts::memset32(buffer, value, count);
+}
+static inline void sk_memset64(uint64_t buffer[], uint64_t value, int count) {
+    SkOpts::memset64(buffer, value, count);
 }
 
 #endif//SkOpts_DEFINED

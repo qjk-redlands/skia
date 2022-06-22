@@ -10,24 +10,25 @@
 #ifndef SkDraw_DEFINED
 #define SkDraw_DEFINED
 
-#include "SkCanvas.h"
-#include "SkGlyphRunPainter.h"
-#include "SkMask.h"
-#include "SkPaint.h"
-#include "SkPixmap.h"
-#include "SkStrokeRec.h"
-#include "SkVertices.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkStrokeRec.h"
+#include "src/core/SkGlyphRunPainter.h"
+#include "src/core/SkMask.h"
 
 class SkBitmap;
 class SkClipStack;
 class SkBaseDevice;
 class SkBlitter;
 class SkMatrix;
+class SkMatrixProvider;
 class SkPath;
 class SkRegion;
 class SkRasterClip;
 struct SkRect;
 class SkRRect;
+class SkVertices;
 
 class SkDraw : public SkGlyphRunListPainter::BitmapDevicePainter {
 public:
@@ -58,16 +59,14 @@ public:
 
     /* If dstOrNull is null, computes a dst by mapping the bitmap's bounds through the matrix. */
     void    drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect* dstOrNull,
-                       const SkPaint&) const;
+                       const SkSamplingOptions&, const SkPaint&) const override;
     void    drawSprite(const SkBitmap&, int x, int y, const SkPaint&) const;
     void    drawGlyphRunList(const SkGlyphRunList& glyphRunList,
+                             const SkPaint& paint,
                              SkGlyphRunListPainter* glyphPainter) const;
-    void    drawVertices(SkVertices::VertexMode mode, int vertexCount,
-                         const SkPoint vertices[], const SkPoint textures[],
-                         const SkColor colors[], const SkVertices::BoneIndices boneIndices[],
-                         const SkVertices::BoneWeights boneWeights[], SkBlendMode bmode,
-                         const uint16_t indices[], int ptCount,
-                         const SkPaint& paint, const SkVertices::Bone bones[], int boneCount) const;
+    void    drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&) const;
+    void  drawAtlas(const SkRSXform[], const SkRect[], const SkColor[], int count,
+                    sk_sp<SkBlender>, const SkPaint&);
 
     /**
      *  Overwrite the target with the path's coverage (i.e. its mask).
@@ -82,11 +81,12 @@ public:
         this->drawPath(src, paint, nullptr, false, !isHairline, customBlitter);
     }
 
-    void paintPaths(SkSpan<const SkPathPos> pathsAndPositions,
+    void paintPaths(SkDrawableGlyphBuffer* drawables,
                     SkScalar scale,
+                    SkPoint origin,
                     const SkPaint& paint) const override;
 
-    void paintMasks(SkSpan<const SkMask> masks, const SkPaint& paint) const override;
+    void paintMasks(SkDrawableGlyphBuffer* drawables, const SkPaint& paint) const override;
 
     static bool ComputeMaskBounds(const SkRect& devPathBounds, const SkIRect* clipBounds,
                                   const SkMaskFilter* filter, const SkMatrix* filterMatrix,
@@ -101,8 +101,6 @@ public:
                            const SkMaskFilter*, const SkMatrix* filterMatrix,
                            SkMask* mask, SkMask::CreateMode mode,
                            SkStrokeRec::InitStyle style);
-
-    void drawDevMask(const SkMask& mask, const SkPaint&) const;
 
     enum RectType {
         kHair_RectType,
@@ -119,15 +117,17 @@ public:
      *  Iff RectType == kStroke_RectType, then strokeSize is set to the device
      *  width and height of the stroke.
      */
-    static RectType ComputeRectType(const SkPaint&, const SkMatrix&,
+    static RectType ComputeRectType(const SkRect&, const SkPaint&, const SkMatrix&,
                                     SkPoint* strokeSize);
 
-    static bool ShouldDrawTextAsPaths(const SkFont&, const SkPaint&, const SkMatrix&,
-                                      SkScalar sizeLimit = 1024);
-
-    static SkScalar ComputeResScaleForStroking(const SkMatrix& );
 private:
-    void drawBitmapAsMask(const SkBitmap&, const SkPaint&) const;
+    void drawFixedVertices(const SkVertices* vertices,
+                           sk_sp<SkBlender> blender,
+                           const SkPaint& paint,
+                           const SkMatrix& ctmInverse,
+                           const SkPoint* dev2,
+                           const SkPoint3* dev3,
+                           SkArenaAlloc* outerAlloc) const;
 
     void drawPath(const SkPath&,
                   const SkPaint&,
@@ -154,12 +154,9 @@ private:
     bool SK_WARN_UNUSED_RESULT computeConservativeLocalClipBounds(SkRect* bounds) const;
 
 public:
-    SkPixmap        fDst;
-    const SkMatrix* fMatrix{nullptr};        // required
-    const SkRasterClip* fRC{nullptr};        // required
-
-    // optional, will be same dimensions as fDst if present
-    const SkPixmap* fCoverage{nullptr};
+    SkPixmap                fDst;
+    const SkMatrixProvider* fMatrixProvider{nullptr};  // required
+    const SkRasterClip*     fRC{nullptr};              // required
 
 #ifdef SK_DEBUG
     void validate() const;

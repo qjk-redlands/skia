@@ -8,15 +8,16 @@
 #ifndef TestTypeface_DEFINED
 #define TestTypeface_DEFINED
 
-#include "SkFixed.h"
-#include "SkFontArguments.h"
-#include "SkFontMetrics.h"
-#include "SkFontStyle.h"
-#include "SkPaint.h"
-#include "SkRefCnt.h"
-#include "SkScalar.h"
-#include "SkTypeface.h"
-#include "SkTypes.h"
+#include "include/core/SkFontArguments.h"
+#include "include/core/SkFontMetrics.h"
+#include "include/core/SkFontStyle.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkFixed.h"
 
 #include <memory>
 
@@ -46,7 +47,7 @@ struct SkTestFontData {
 class SkTestFont : public SkRefCnt {
 public:
     SkTestFont(const SkTestFontData&);
-    virtual ~SkTestFont();
+    ~SkTestFont() override;
     SkGlyphID glyphForUnichar(SkUnichar charCode) const;
     void      init(const SkScalar* pts, const unsigned char* verbs);
 
@@ -56,9 +57,9 @@ private:
     const SkFixed*       fWidths;
     const SkFontMetrics& fMetrics;
     const char*          fName;
-    SkPath**             fPaths;
+    SkPath*              fPaths;
     friend class TestTypeface;
-    typedef SkRefCnt INHERITED;
+    using INHERITED = SkRefCnt;
 };
 
 class TestTypeface : public SkTypeface {
@@ -66,13 +67,13 @@ public:
     TestTypeface(sk_sp<SkTestFont>, const SkFontStyle& style);
     void getAdvance(SkGlyph* glyph);
     void getFontMetrics(SkFontMetrics* metrics);
-    void getPath(SkGlyphID glyph, SkPath* path);
+    SkPath getPath(SkGlyphID glyph);
 
 protected:
-    SkScalerContext* onCreateScalerContext(const SkScalerContextEffects&,
-                                           const SkDescriptor* desc) const override;
-    void             onFilterRec(SkScalerContextRec* rec) const override;
-    void             getGlyphToUnicodeMap(SkUnichar* glyphToUnicode) const override;
+    std::unique_ptr<SkScalerContext> onCreateScalerContext(const SkScalerContextEffects&,
+                                                           const SkDescriptor* desc) const override;
+    void onFilterRec(SkScalerContextRec* rec) const override;
+    void getGlyphToUnicodeMap(SkUnichar* glyphToUnicode) const override;
     std::unique_ptr<SkAdvancedTypefaceMetrics> onGetAdvancedMetrics() const override;
 
     std::unique_ptr<SkStreamAsset> onOpenStream(int* ttcIndex) const override { return nullptr; }
@@ -87,10 +88,15 @@ protected:
 
     int onCountGlyphs() const override { return (int)fTestFont->fCharCodesCount; }
 
+    void getPostScriptGlyphNames(SkString*) const override {}
+
     int onGetUPEM() const override { return 2048; }
 
-    void                          onGetFamilyName(SkString* familyName) const override;
+    void onGetFamilyName(SkString* familyName) const override;
+    bool onGetPostScriptName(SkString*) const override;
     SkTypeface::LocalizedStrings* onCreateFamilyNameIterator() const override;
+
+    bool onGlyphMaskNeedsCurrentColor() const override { return false; }
 
     int onGetVariationDesignPosition(SkFontArguments::VariationPosition::Coordinate coordinates[],
                                      int coordinateCount) const override {

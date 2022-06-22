@@ -9,8 +9,8 @@
 #ifndef GrGLTypes_DEFINED
 #define GrGLTypes_DEFINED
 
-#include "GrGLConfig.h"
-#include "SkRefCnt.h"
+#include "include/core/SkRefCnt.h"
+#include "include/gpu/gl/GrGLConfig.h"
 
 /**
  * Classifies GL contexts by which standard they implement (currently as OpenGL vs. OpenGL ES).
@@ -52,6 +52,48 @@ static const int kGrGLStandardCnt = 4;
 ///////////////////////////////////////////////////////////////////////////////
 
 /**
+ * The supported GL formats represented as an enum. Actual support by GrContext depends on GL
+ * context version and extensions.
+ */
+enum class GrGLFormat {
+    kUnknown,
+
+    kRGBA8,
+    kR8,
+    kALPHA8,
+    kLUMINANCE8,
+    kLUMINANCE8_ALPHA8,
+    kBGRA8,
+    kRGB565,
+    kRGBA16F,
+    kR16F,
+    kRGB8,
+    kRG8,
+    kRGB10_A2,
+    kRGBA4,
+    kSRGB8_ALPHA8,
+    kCOMPRESSED_ETC1_RGB8,
+    kCOMPRESSED_RGB8_ETC2,
+    kCOMPRESSED_RGB8_BC1,
+    kCOMPRESSED_RGBA8_BC1,
+    kR16,
+    kRG16,
+    kRGBA16,
+    kRG16F,
+    kLUMINANCE16F,
+
+    kLastColorFormat = kLUMINANCE16F,
+
+    // Depth/Stencil formats
+    kSTENCIL_INDEX8,
+    kSTENCIL_INDEX16,
+    kDEPTH24_STENCIL8,
+
+    kLast = kDEPTH24_STENCIL8
+};
+
+///////////////////////////////////////////////////////////////////////////////
+/**
  * Declares typedefs for all the GL functions used in GrGLInterface
  */
 
@@ -91,7 +133,8 @@ struct GrGLDrawArraysIndirectCommand {
     GrGLuint fBaseInstance;  // Requires EXT_base_instance on ES.
 };
 
-GR_STATIC_ASSERT(16 == sizeof(GrGLDrawArraysIndirectCommand));
+// static_asserts must have messages in this file because its included in C++14 client code.
+static_assert(16 == sizeof(GrGLDrawArraysIndirectCommand), "");
 
 struct GrGLDrawElementsIndirectCommand {
     GrGLuint fCount;
@@ -101,7 +144,7 @@ struct GrGLDrawElementsIndirectCommand {
     GrGLuint fBaseInstance;  // Requires EXT_base_instance on ES.
 };
 
-GR_STATIC_ASSERT(20 == sizeof(GrGLDrawElementsIndirectCommand));
+static_assert(20 == sizeof(GrGLDrawElementsIndirectCommand), "");
 
 /**
  * KHR_debug
@@ -149,6 +192,15 @@ struct GrGLFramebufferInfo {
     bool operator==(const GrGLFramebufferInfo& that) const {
         return fFBOID == that.fFBOID && fFormat == that.fFormat;
     }
+};
+
+struct GrGLSurfaceInfo {
+    uint32_t fSampleCount = 1;
+    uint32_t fLevelCount = 0;
+    GrProtected fProtected = GrProtected::kNo;
+
+    GrGLenum fTarget = 0;
+    GrGLenum fFormat = 0;
 };
 
 #endif

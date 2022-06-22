@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkRandom.h"
-#include "random_parse_path.h"
+#include "include/utils/SkRandom.h"
+#include "tools/random_parse_path.h"
 
 const struct Legal {
     char fSymbol;
@@ -67,8 +67,8 @@ static void add_some_white(SkRandom* rand, SkString* atom) {
 
 SkString MakeRandomParsePathPiece(SkRandom* rand) {
     SkString atom;
-    int index = rand->nextRangeU(0, (int) SK_ARRAY_COUNT(gLegal) - 1);
-    const Legal& legal = gLegal[index];
+    int legalIndex = rand->nextRangeU(0, (int) SK_ARRAY_COUNT(gLegal) - 1);
+    const Legal& legal = gLegal[legalIndex];
     gEasy ? atom.append("\n") : add_white(rand, &atom);
     char symbol = legal.fSymbol | (rand->nextBool() ? 0x20 : 0);
     atom.append(&symbol, 1);

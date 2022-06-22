@@ -7,7 +7,7 @@
 #ifndef SkAndroidCodecAdapter_DEFINED
 #define SkAndroidCodecAdapter_DEFINED
 
-#include "SkAndroidCodec.h"
+#include "include/codec/SkAndroidCodec.h"
 
 /**
  *  This class wraps SkCodec to implement the functionality of SkAndroidCodec.
@@ -17,7 +17,7 @@
 class SkAndroidCodecAdapter : public SkAndroidCodec {
 public:
 
-    explicit SkAndroidCodecAdapter(SkCodec*, ExifOrientationBehavior);
+    explicit SkAndroidCodecAdapter(SkCodec*);
 
     ~SkAndroidCodecAdapter() override {}
 
@@ -32,6 +32,6 @@ protected:
 
 private:
 
-    typedef SkAndroidCodec INHERITED;
+    using INHERITED = SkAndroidCodec;
 };
 #endif // SkAndroidCodecAdapter_DEFINED

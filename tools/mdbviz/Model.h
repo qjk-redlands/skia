@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkTDArray.h"
+#include "include/core/SkBitmap.h"
+#include "include/private/SkTDArray.h"
 
 class DrawCommand;
 
@@ -27,7 +27,7 @@ public:
 
     // Replace the list of draw ops by reading the provided skp filename and
     // reset the Skia draw state. It is up to the view portion to update itself
-    // after this call (i.e., rebuild the opList view).
+    // after this call (i.e., rebuild the opsTask view).
     ErrorCode load(const char* filename);
 
     // Update the rendering state to the provided op
@@ -48,7 +48,7 @@ public:
 protected:
     // draw the ops up to (and including) the index-th op
     void drawTo(int index);
-    void resetOpList();
+    void resetOpsTask();
 
 private:
     SkTDArray<DrawCommand*>   fOps;

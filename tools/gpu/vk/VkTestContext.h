@@ -8,19 +8,19 @@
 #ifndef VkTestContext_DEFINED
 #define VkTestContext_DEFINED
 
-#include "TestContext.h"
+#include "tools/gpu/TestContext.h"
 
 #ifdef SK_VULKAN
 
-#include "GrVulkanDefines.h"
-#include "vk/GrVkBackendContext.h"
+#include "include/gpu/vk/GrVkBackendContext.h"
+#include "tools/gpu/vk/GrVulkanDefines.h"
 
 class GrVkExtensions;
 
 namespace sk_gpu_test {
 class VkTestContext : public TestContext {
 public:
-    virtual GrBackendApi backend() override { return GrBackendApi::kVulkan; }
+    GrBackendApi backend() override { return GrBackendApi::kVulkan; }
 
     const GrVkBackendContext& getVkBackendContext() const {
         return fVk;
@@ -54,7 +54,7 @@ protected:
     PFN_vkDestroyDebugReportCallbackEXT fDestroyDebugReportCallbackEXT = nullptr;
 
 private:
-    typedef TestContext INHERITED;
+    using INHERITED = TestContext;
 };
 
 /**

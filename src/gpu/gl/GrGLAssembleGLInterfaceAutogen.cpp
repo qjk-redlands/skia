@@ -9,9 +9,9 @@
  * be overwritten.
  */
 
-#include "gl/GrGLAssembleInterface.h"
-#include "gl/GrGLAssembleHelpers.h"
-#include "gl/GrGLUtil.h"
+#include "include/gpu/gl/GrGLAssembleHelpers.h"
+#include "include/gpu/gl/GrGLAssembleInterface.h"
+#include "src/gpu/gl/GrGLUtil.h"
 
 #define GET_PROC(F) functions->f##F = (GrGL##F##Fn*)get(ctx, "gl" #F)
 #define GET_PROC_SUFFIX(F, S) functions->f##F = (GrGL##F##Fn*)get(ctx, "gl" #F #S)
@@ -154,9 +154,29 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLInterface(void *ctx, GrGLGetProc g
         GET_PROC(GetStringi);
     }
 
-    GET_PROC(BindVertexArray);
-    GET_PROC(DeleteVertexArrays);
-    GET_PROC(GenVertexArrays);
+    if (glVer >= GR_GL_VER(4,2)) {
+        GET_PROC(MemoryBarrier);
+    }
+
+    if (glVer >= GR_GL_VER(3,0)) {
+        GET_PROC(BindVertexArray);
+        GET_PROC(DeleteVertexArrays);
+        GET_PROC(GenVertexArrays);
+    } else if (extensions.has("GL_ARB_vertex_array_object")) {
+        GET_PROC(BindVertexArray);
+        GET_PROC(DeleteVertexArrays);
+        GET_PROC(GenVertexArrays);
+    } else if (extensions.has("GL_APPLE_vertex_array_object")) {
+        GET_PROC_SUFFIX(BindVertexArray, APPLE);
+        GET_PROC_SUFFIX(DeleteVertexArrays, APPLE);
+        GET_PROC_SUFFIX(GenVertexArrays, APPLE);
+    }
+
+    if (glVer >= GR_GL_VER(4,0)) {
+        GET_PROC(PatchParameteri);
+    } else if (extensions.has("GL_ARB_tessellation_shader")) {
+        GET_PROC(PatchParameteri);
+    }
 
     if (glVer >= GR_GL_VER(3,0)) {
         GET_PROC(BindFragDataLocation);
@@ -191,6 +211,14 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLInterface(void *ctx, GrGLGetProc g
     } else if (extensions.has("GL_EXT_draw_instanced")) {
         GET_PROC_SUFFIX(DrawArraysInstanced, EXT);
         GET_PROC_SUFFIX(DrawElementsInstanced, EXT);
+    }
+
+    if (glVer >= GR_GL_VER(4,2)) {
+        GET_PROC(DrawArraysInstancedBaseInstance);
+        GET_PROC(DrawElementsInstancedBaseVertexBaseInstance);
+    } else if (extensions.has("GL_ARB_base_instance")) {
+        GET_PROC(DrawArraysInstancedBaseInstance);
+        GET_PROC(DrawElementsInstancedBaseVertexBaseInstance);
     }
 
     GET_PROC(DrawBuffers);
@@ -334,40 +362,6 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLInterface(void *ctx, GrGLGetProc g
         GET_PROC_SUFFIX(PushGroupMarker, EXT);
     }
 
-    if (glVer >= GR_GL_VER(4,3)) {
-        GET_PROC(GetProgramResourceLocation);
-    } else if (extensions.has("GL_ARB_program_interface_query")) {
-        GET_PROC(GetProgramResourceLocation);
-    }
-
-    if (extensions.has("GL_NV_path_rendering")) {
-        GET_PROC_SUFFIX(MatrixLoadIdentity, EXT);
-        GET_PROC_SUFFIX(MatrixLoadf, EXT);
-    }
-
-    if (extensions.has("GL_NV_path_rendering")) {
-        GET_PROC_SUFFIX(CoverFillPath, NV);
-        GET_PROC_SUFFIX(CoverFillPathInstanced, NV);
-        GET_PROC_SUFFIX(CoverStrokePath, NV);
-        GET_PROC_SUFFIX(CoverStrokePathInstanced, NV);
-        GET_PROC_SUFFIX(DeletePaths, NV);
-        GET_PROC_SUFFIX(GenPaths, NV);
-        GET_PROC_SUFFIX(IsPath, NV);
-        GET_PROC_SUFFIX(PathCommands, NV);
-        GET_PROC_SUFFIX(PathParameterf, NV);
-        GET_PROC_SUFFIX(PathParameteri, NV);
-        GET_PROC_SUFFIX(PathStencilFunc, NV);
-        GET_PROC_SUFFIX(ProgramPathFragmentInputGen, NV);
-        GET_PROC_SUFFIX(StencilFillPath, NV);
-        GET_PROC_SUFFIX(StencilFillPathInstanced, NV);
-        GET_PROC_SUFFIX(StencilStrokePath, NV);
-        GET_PROC_SUFFIX(StencilStrokePathInstanced, NV);
-        GET_PROC_SUFFIX(StencilThenCoverFillPath, NV);
-        GET_PROC_SUFFIX(StencilThenCoverFillPathInstanced, NV);
-        GET_PROC_SUFFIX(StencilThenCoverStrokePath, NV);
-        GET_PROC_SUFFIX(StencilThenCoverStrokePathInstanced, NV);
-    }
-
     if (extensions.has("GL_NV_framebuffer_mixed_samples")) {
         GET_PROC_SUFFIX(CoverageModulation, NV);
     }
@@ -394,14 +388,6 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLInterface(void *ctx, GrGLGetProc g
         GET_PROC_SUFFIX(WindowRectangles, EXT);
     }
 
-    if (extensions.has("EGL_KHR_image")) {
-        GET_EGL_PROC_SUFFIX(CreateImage, KHR);
-        GET_EGL_PROC_SUFFIX(DestroyImage, KHR);
-    } else if (extensions.has("EGL_KHR_image_base")) {
-        GET_EGL_PROC_SUFFIX(CreateImage, KHR);
-        GET_EGL_PROC_SUFFIX(DestroyImage, KHR);
-    }
-
     if (glVer >= GR_GL_VER(3,2)) {
         GET_PROC(ClientWaitSync);
         GET_PROC(DeleteSync);
@@ -425,6 +411,9 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLInterface(void *ctx, GrGLGetProc g
     if (glVer >= GR_GL_VER(4,1)) {
         GET_PROC(GetProgramBinary);
         GET_PROC(ProgramBinary);
+    }
+
+    if (glVer >= GR_GL_VER(4,1)) {
         GET_PROC(ProgramParameteri);
     }
 
@@ -494,6 +483,14 @@ sk_sp<const GrGLInterface> GrGLMakeAssembledGLInterface(void *ctx, GrGLGetProc g
         GET_PROC(GetShaderPrecisionFormat);
     } else if (extensions.has("GL_ARB_ES2_compatibility")) {
         GET_PROC(GetShaderPrecisionFormat);
+    }
+
+    if (extensions.has("GL_NV_fence")) {
+        GET_PROC_SUFFIX(DeleteFences, NV);
+        GET_PROC_SUFFIX(FinishFence, NV);
+        GET_PROC_SUFFIX(GenFences, NV);
+        GET_PROC_SUFFIX(SetFence, NV);
+        GET_PROC_SUFFIX(TestFence, NV);
     }
 
 

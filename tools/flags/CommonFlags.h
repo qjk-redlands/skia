@@ -6,10 +6,11 @@
  */
 #pragma once
 
-#include "../private/SkTArray.h"
-#include "CommandLineFlags.h"
-#include "SkString.h"
+#include "include/core/SkString.h"
+#include "include/private/SkTArray.h"
+#include "tools/flags/CommandLineFlags.h"
 
+namespace CommonFlags {
 /**
  *  Helper to assist in collecting image paths from |dir| specified through a command line
  * flag.
@@ -28,14 +29,26 @@ bool CollectImages(CommandLineFlags::StringArray dir, SkTArray<SkString>* output
  *  Helper to set GrContextOptions from common GPU flags, including
  *     --gpuThreads
  *     --cachePathMasks
- *     --noGS
+ *     --allPathsVolatile
+ *     --(no)gs
+ *     --(no)ts
+ *     --maxTessellationSegments
  *     --pr
+ *     --internalSamples
  *     --disableDriverCorrectnessWorkarounds
- *     --reduceOpListSplitting
+ *     --reduceOpsTaskSplitting
+ *     --dontReduceOpsTaskSplitting
  */
-void SetCtxOptionsFromCommonFlags(struct GrContextOptions*);
+void SetCtxOptions(struct GrContextOptions*);
 
 /**
  *  Enable, disable, or force analytic anti-aliasing using --analyticAA and --forceAnalyticAA.
  */
-void SetAnalyticAAFromCommonFlags();
+void SetAnalyticAA();
+
+/**
+ *  Turn on portable (--nonativeFonts) or GDI font rendering (--gdi).
+ */
+void SetDefaultFontMgr();
+
+}  // namespace CommonFlags

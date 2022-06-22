@@ -8,13 +8,13 @@
 #ifndef SkPDFTypes_DEFINED
 #define SkPDFTypes_DEFINED
 
-#include "SkRefCnt.h"
-#include "SkScalar.h"
-#include "SkTHash.h"
-#include "SkTo.h"
-#include "SkTypes.h"
-#include "SkMakeUnique.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkTHash.h"
+#include "include/private/SkTo.h"
 
+#include <memory>
 #include <new>
 #include <type_traits>
 #include <utility>
@@ -188,7 +188,7 @@ private:
 };
 
 static inline std::unique_ptr<SkPDFDict> SkPDFMakeDict(const char* type = nullptr) {
-    return std::unique_ptr<SkPDFDict>(new SkPDFDict(type));
+    return std::make_unique<SkPDFDict>(type);
 }
 
 #ifdef SK_PDF_LESS_COMPRESSION

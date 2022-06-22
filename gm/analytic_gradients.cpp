@@ -6,8 +6,8 @@
  */
 
 /*
- * This GM presents a variety of gradients meant to test the correctness of the analytic
- * GrUnrolledBinaryGradientColorizer, which can handle arbitrary gradients with 1 to 8 interpolation
+ * This GM presents a variety of gradients meant to test the correctness of the analytic unrolled
+ * binary gradient colorizer, which can handle arbitrary gradients with 1 to 8 interpolation
  * intervals. These intervals can be either hardstops or smooth color transitions.
  *
  * It produces an image similar to that of GM_hardstop_gradients, but is arranged as follows:
@@ -34,9 +34,21 @@
  * compared to overall behavior.
  */
 
-#include "gm.h"
-
-#include "SkGradientShader.h"
+#include "gm/gm.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkShader.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTileMode.h"
+#include "include/core/SkTypes.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/private/SkTemplates.h"
 
 // All positions must be divided by the target interval count, which will produce the expected
 // normalized position array for that interval number (assuming an appropriate color count is
@@ -172,7 +184,7 @@ protected:
     }
 
 private:
-    typedef skiagm::GM INHERITED;
+    using INHERITED = skiagm::GM;
 };
 
 DEF_GM(return new AnalyticGradientShaderGM;)

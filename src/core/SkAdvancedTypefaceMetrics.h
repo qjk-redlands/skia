@@ -8,9 +8,9 @@
 #ifndef SkAdvancedTypefaceMetrics_DEFINED
 #define SkAdvancedTypefaceMetrics_DEFINED
 
-#include "SkBitmaskEnum.h"
-#include "SkRect.h"
-#include "SkString.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkString.h"
+#include "include/private/SkBitmaskEnum.h"
 
 /** \class SkAdvancedTypefaceMetrics
 
@@ -48,7 +48,7 @@ struct SkAdvancedTypefaceMetrics {
     FontType fType = kOther_Font;
 
     enum FontFlags : uint8_t {
-        kMultiMaster_FontFlag    = 0x01,  //!<May be true for Type1, CFF, or TrueType fonts.
+        kVariable_FontFlag       = 0x01,  //!<May be true for Type1, CFF, or TrueType fonts.
         kNotEmbeddable_FontFlag  = 0x02,  //!<May not be embedded.
         kNotSubsettable_FontFlag = 0x04,  //!<May not be subset.
     };
@@ -65,9 +65,9 @@ struct SkAdvancedTypefaceMetrics {
     SkIRect fBBox = {0, 0, 0, 0};  // The bounding box of all glyphs (in font units).
 };
 
-namespace skstd {
+namespace sknonstd {
 template <> struct is_bitmask_enum<SkAdvancedTypefaceMetrics::FontFlags> : std::true_type {};
 template <> struct is_bitmask_enum<SkAdvancedTypefaceMetrics::StyleFlags> : std::true_type {};
-}
+}  // namespace sknonstd
 
 #endif

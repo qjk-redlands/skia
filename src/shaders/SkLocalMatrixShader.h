@@ -8,9 +8,9 @@
 #ifndef SkLocalMatrixShader_DEFINED
 #define SkLocalMatrixShader_DEFINED
 
-#include "SkShaderBase.h"
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
+#include "src/shaders/SkShaderBase.h"
 
 class GrFragmentProcessor;
 class SkArenaAlloc;
@@ -48,12 +48,16 @@ protected:
 
     bool onAppendStages(const SkStageRec&) const override;
 
+    skvm::Color onProgram(skvm::Builder*, skvm::Coord device, skvm::Coord local, skvm::Color paint,
+                          const SkMatrixProvider&, const SkMatrix* localM, const SkColorInfo& dst,
+                          skvm::Uniforms* uniforms, SkArenaAlloc*) const override;
+
 private:
     SK_FLATTENABLE_HOOKS(SkLocalMatrixShader)
 
     sk_sp<SkShader> fProxyShader;
 
-    typedef SkShaderBase INHERITED;
+    using INHERITED = SkShaderBase;
 };
 
 #endif

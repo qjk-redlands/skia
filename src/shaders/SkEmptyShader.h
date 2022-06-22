@@ -8,7 +8,7 @@
 #ifndef SkEmptyShader_DEFINED
 #define SkEmptyShader_DEFINED
 
-#include "SkShaderBase.h"
+#include "src/shaders/SkShaderBase.h"
 
 // TODO: move this to private, as there is a public factory on SkShader
 
@@ -37,10 +37,14 @@ protected:
         return false;
     }
 
+    skvm::Color onProgram(skvm::Builder*, skvm::Coord, skvm::Coord, skvm::Color,
+                          const SkMatrixProvider&, const SkMatrix*, const SkColorInfo&,
+                          skvm::Uniforms*, SkArenaAlloc*) const override;
+
 private:
     SK_FLATTENABLE_HOOKS(SkEmptyShader)
 
-    typedef SkShaderBase INHERITED;
+    using INHERITED = SkShaderBase;
 };
 
 #endif

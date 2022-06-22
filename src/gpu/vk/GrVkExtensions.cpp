@@ -5,13 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "vk/GrVkExtensions.h"
+#include "include/gpu/vk/GrVkExtensions.h"
 
 // Can remove this once we get rid of the extension flags.
-#include "vk/GrVkBackendContext.h"
+#include "include/gpu/vk/GrVkBackendContext.h"
 
-#include "SkTSearch.h"
-#include "SkTSort.h"
+#include "src/core/SkTSearch.h"
+#include "src/core/SkTSort.h"
 
 // finds the index of ext in infos or a negative result if ext is not found.
 static int find_info(const SkTArray<GrVkExtensions::Info>& infos, const char ext[]) {
@@ -30,7 +30,7 @@ namespace { // This cannot be static because it is used as a template parameter.
 inline bool extension_compare(const GrVkExtensions::Info& a, const GrVkExtensions::Info& b) {
     return strcmp(a.fName.c_str(), b.fName.c_str()) < 0;
 }
-}
+}  // namespace
 
 void GrVkExtensions::init(GrVkGetProc getProc,
                           VkInstance instance,
@@ -39,14 +39,12 @@ void GrVkExtensions::init(GrVkGetProc getProc,
                           const char* const* instanceExtensions,
                           uint32_t deviceExtensionCount,
                           const char* const* deviceExtensions) {
-    SkTLessFunctionToFunctorAdaptor<GrVkExtensions::Info, extension_compare> cmp;
-
     for (uint32_t i = 0; i < instanceExtensionCount; ++i) {
         const char* extension = instanceExtensions[i];
         // if not already in the list, add it
         if (find_info(fExtensions, extension) < 0) {
             fExtensions.push_back() = Info(extension);
-            SkTQSort(&fExtensions.front(), &fExtensions.back(), cmp);
+            SkTQSort(fExtensions.begin(), fExtensions.end(), extension_compare);
         }
     }
     for (uint32_t i = 0; i < deviceExtensionCount; ++i) {
@@ -54,7 +52,7 @@ void GrVkExtensions::init(GrVkGetProc getProc,
         // if not already in the list, add it
         if (find_info(fExtensions, extension) < 0) {
             fExtensions.push_back() = Info(extension);
-            SkTQSort(&fExtensions.front(), &fExtensions.back(), cmp);
+            SkTQSort(fExtensions.begin(), fExtensions.end(), extension_compare);
         }
     }
     this->getSpecVersions(getProc, instance, physDev);

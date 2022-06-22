@@ -5,10 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "SkBlurMask.h"
-#include "SkMaskFilter.h"
-#include "SkPath.h"
+#include "gm/gm.h"
+#include "include/core/SkBlurTypes.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathBuilder.h"
+#include "include/core/SkPoint.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkString.h"
+#include "include/core/SkTypes.h"
+#include "src/core/SkBlurMask.h"
 
 namespace skiagm {
 
@@ -39,10 +49,9 @@ protected:
         SkRect insetRect = bigRect;
         insetRect.inset(20, 20);
 
-        SkPath rectori;
-
-        rectori.addRect(bigRect);
-        rectori.addRect(insetRect, SkPath::kCCW_Direction);
+        SkPath rectori = SkPathBuilder().addRect(bigRect)
+                                        .addRect(insetRect, SkPathDirection::kCCW)
+                                        .detach();
 
         // The blur extends 3*kSigma out from the big rect.
         // Offset the close-up windows so we get the entire blur
@@ -103,12 +112,12 @@ protected:
     }
 
 private:
-    static constexpr int kCloseUpSize = 64;
-    static constexpr int kWidth = 5 * kCloseUpSize;
-    static constexpr int kHeight = 2 * (kLastEnum_SkBlurStyle + 1) * kCloseUpSize;
+    inline static constexpr int kCloseUpSize = 64;
+    inline static constexpr int kWidth = 5 * kCloseUpSize;
+    inline static constexpr int kHeight = 2 * (kLastEnum_SkBlurStyle + 1) * kCloseUpSize;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 DEF_GM(return new BigBlursGM;)
-}
+}  // namespace skiagm

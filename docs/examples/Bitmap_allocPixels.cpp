@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=555c0f62f96602a9dcd459badcd005e0
 REG_FIDDLE(Bitmap_allocPixels, 256, 256, false, 3) {
 void draw(SkCanvas* canvas) {
@@ -10,8 +10,8 @@ void draw(SkCanvas* canvas) {
     SkCanvas offscreen(bitmap);
     offscreen.scale(.5f, .5f);
     for (int y : { 0, 64, 128, 192 } ) {
-        offscreen.drawBitmap(source, 0, -y);
-        canvas->drawBitmap(bitmap, 0, y);
+        offscreen.drawImage(source.asImage(), 0, -y);
+        canvas->drawImage(bitmap.asImage(), 0, y);
     }
 }
 }  // END FIDDLE

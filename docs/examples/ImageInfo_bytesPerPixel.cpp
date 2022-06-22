@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=9b6de4a07b2316228e9340e5a3b82134
 REG_FIDDLE(ImageInfo_bytesPerPixel, 256, 256, true, 0) {
 void draw(SkCanvas* canvas) {
@@ -15,7 +15,7 @@ void draw(SkCanvas* canvas) {
                                  } ) {
         SkImageInfo info = SkImageInfo::Make(1, 1, colorType, kOpaque_SkAlphaType);
         SkDebugf("color: k" "%s" "_SkColorType" "%*s" "bytesPerPixel: %d\n",
-                colors[colorType], 13 - strlen(colors[colorType]), " ",
+                colors[colorType], (int)(13 - strlen(colors[colorType])), " ",
                 info.bytesPerPixel());
     }
 }

@@ -21,9 +21,7 @@ if (skia_use_system_libpng) {
     ]
 
     defines = [ "PNG_SET_OPTION_SUPPORTED" ]
-    deps = [
-      "//third_party/zlib",
-    ]
+    deps = [ "//third_party/zlib" ]
     sources = [
       "../externals/libpng/png.c",
       "../externals/libpng/pngerror.c",
@@ -48,12 +46,6 @@ if (skia_use_system_libpng) {
         "../externals/libpng/arm/filter_neon_intrinsics.c",
         "../externals/libpng/arm/palette_neon_intrinsics.c",
       ]
-      if (is_clang && is_win) {
-        # TODO(mtklein): libpng includes arm64_neon.h in clang-cl.exe builds,
-        # where it should only do that in cl.exe builds, continuing to use
-        # arm_neon.h with Clang.  Until that's fixed, NEON code won't build.
-        defines += [ "PNG_ARM_NEON_OPT=0" ]
-      }
     }
 
     if (current_cpu == "x86" || current_cpu == "x64") {

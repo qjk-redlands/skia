@@ -4,12 +4,13 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Benchmark.h"
-#include "SkCanvas.h"
-#include "SkGradientShader.h"
-#include "SkPaint.h"
-#include "SkPatchUtils.h"
-#include "SkString.h"
+#include "bench/Benchmark.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkString.h"
+#include "include/core/SkVertices.h"
+#include "include/effects/SkGradientShader.h"
+#include "src/utils/SkPatchUtils.h"
 
 /**
  * This bench measures the rendering time of the call SkCanvas::drawPatch with different types of
@@ -127,16 +128,16 @@ protected:
         for (int i = 0; i < loops; i++) {
             switch (fVertexMode) {
                 case kNone_VertexMode:
-                    canvas->drawPatch(fCubics, nullptr, nullptr, fPaint);
+                    canvas->drawPatch(fCubics, nullptr, nullptr, SkBlendMode::kModulate, fPaint);
                     break;
                 case kColors_VertexMode:
-                    canvas->drawPatch(fCubics, fColors, nullptr, fPaint);
+                    canvas->drawPatch(fCubics, fColors, nullptr, SkBlendMode::kModulate, fPaint);
                     break;
                 case kTexCoords_VertexMode:
-                    canvas->drawPatch(fCubics, nullptr, fTexCoords, fPaint);
+                    canvas->drawPatch(fCubics, nullptr, fTexCoords, SkBlendMode::kModulate, fPaint);
                     break;
                 case kBoth_VertexMode:
-                    canvas->drawPatch(fCubics, fColors, fTexCoords, fPaint);
+                    canvas->drawPatch(fCubics, fColors, fTexCoords, SkBlendMode::kModulate, fPaint);
                     break;
                 default:
                     break;
@@ -152,7 +153,7 @@ protected:
     SkColor     fColors[4];
     VertexMode  fVertexMode;
 
-    typedef Benchmark INHERITED;
+    using INHERITED = Benchmark;
 };
 
 class SquarePatchBench : public PatchBench {
@@ -178,7 +179,7 @@ public:
         memcpy(fCubics, points, SkPatchUtils::kNumCtrlPts * sizeof(SkPoint));
     }
 private:
-    typedef PatchBench INHERITED;
+    using INHERITED = PatchBench;
 };
 
 class LODDiffPatchBench : public PatchBench {
@@ -204,7 +205,7 @@ public:
         memcpy(fCubics, points, SkPatchUtils::kNumCtrlPts * sizeof(SkPoint));
     }
 private:
-    typedef PatchBench INHERITED;
+    using INHERITED = PatchBench;
 };
 
 class LoopPatchBench : public PatchBench {
@@ -230,7 +231,7 @@ public:
         memcpy(fCubics, points, SkPatchUtils::kNumCtrlPts * sizeof(SkPoint));
     }
 private:
-    typedef PatchBench INHERITED;
+    using INHERITED = PatchBench;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -324,7 +325,7 @@ DEF_BENCH( return new LoopPatchBench(SkVector::Make(3.0f, 3.0f),
                                         PatchBench::kBoth_VertexMode); )
 
 //////////////////////////////////////////////
-#include "SkPatchUtils.h"
+#include "src/utils/SkPatchUtils.h"
 
 class PatchUtilsBench : public Benchmark {
     SkString    fName;

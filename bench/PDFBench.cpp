@@ -5,20 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "Benchmark.h"
+#include "bench/Benchmark.h"
 
-#include "Resources.h"
-#include "SkAutoPixmapStorage.h"
-#include "SkData.h"
-#include "SkExecutor.h"
-#include "SkFloatToDecimal.h"
-#include "SkGradientShader.h"
-#include "SkImage.h"
-#include "SkPDFUnion.h"
-#include "SkPixmap.h"
-#include "SkRandom.h"
-#include "SkStream.h"
-#include "SkTo.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
+#include "include/core/SkExecutor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkPixmap.h"
+#include "include/core/SkStream.h"
+#include "include/effects/SkGradientShader.h"
+#include "include/private/SkTo.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkAutoPixmapStorage.h"
+#include "src/pdf/SkPDFUnion.h"
+#include "src/utils/SkFloatToDecimal.h"
+#include "tools/Resources.h"
 
 namespace {
 struct WStreamWriteTextBenchmark : public Benchmark {
@@ -75,10 +76,10 @@ DEF_BENCH(return new PDFScalarBench("PDFScalar_random", next_any);)
 
 #ifdef SK_SUPPORT_PDF
 
-#include "SkPDFBitmap.h"
-#include "SkPDFDocumentPriv.h"
-#include "SkPDFShader.h"
-#include "SkPDFUtils.h"
+#include "src/pdf/SkPDFBitmap.h"
+#include "src/pdf/SkPDFDocumentPriv.h"
+#include "src/pdf/SkPDFShader.h"
+#include "src/pdf/SkPDFUtils.h"
 
 namespace {
 class PDFImageBench : public Benchmark {
@@ -97,7 +98,7 @@ protected:
             // force decoding, throw away reference to encoded data.
             SkAutoPixmapStorage pixmap;
             pixmap.alloc(SkImageInfo::MakeN32Premul(img->dimensions()));
-            if (img->readPixels(pixmap, 0, 0)) {
+            if (img->readPixels(nullptr, pixmap, 0, 0)) {
                 fImage = SkImage::MakeRasterCopy(pixmap);
             }
         }
@@ -219,7 +220,7 @@ struct PDFShaderBench : public Benchmark {
             SkPDFDocument doc(&nullStream, SkPDF::Metadata());
             doc.beginPage(256, 256);
             (void) SkPDFMakeShader(&doc, fShader.get(), SkMatrix::I(),
-                                   {0, 0, 400, 400}, SK_ColorBLACK);
+                                   {0, 0, 400, 400}, SkColors::kBlack);
         }
     }
 };
@@ -311,7 +312,7 @@ DEF_BENCH(return new WritePDFTextBenchmark;)
 DEF_BENCH(return new PDFClipPathBenchmark;)
 
 #ifdef SK_PDF_ENABLE_SLOW_TESTS
-#include "SkExecutor.h"
+#include "include/core/SkExecutor.h"
 namespace {
 void big_pdf_test(SkDocument* doc, const SkBitmap& background) {
     static const char* kText[] = {

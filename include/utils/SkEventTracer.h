@@ -16,7 +16,7 @@
 // If you're looking for the tracing macros to instrument Skia itself, those
 // live in src/core/SkTraceEvent.h
 
-#include "SkTypes.h"
+#include "include/core/SkTypes.h"
 
 class SK_API SkEventTracer {
 public:
@@ -36,7 +36,7 @@ public:
      */
     static SkEventTracer* GetInstance();
 
-    virtual ~SkEventTracer() { }
+    virtual ~SkEventTracer() = default;
 
     // The pointer returned from GetCategoryGroupEnabled() points to a
     // value with zero or more of the following bits. Used in this class only.
@@ -69,6 +69,11 @@ public:
         updateTraceEventDuration(const uint8_t* categoryEnabledFlag,
                                  const char* name,
                                  SkEventTracer::Handle handle) = 0;
+
+protected:
+    SkEventTracer() = default;
+    SkEventTracer(const SkEventTracer&) = delete;
+    SkEventTracer& operator=(const SkEventTracer&) = delete;
 };
 
 #endif // SkEventTracer_DEFINED

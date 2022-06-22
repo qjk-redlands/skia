@@ -5,10 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "Resources.h"
-#include "SkCodec.h"
-#include "SkImage.h"
+#include "gm/gm.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkString.h"
+#include "tools/Resources.h"
+
+#include <memory>
 
 namespace skiagm {
 
@@ -38,9 +48,7 @@ protected:
 
         // Create matching bitmap.
         std::unique_ptr<SkCodec> codec(SkCodec::MakeFromStream(GetResourceAsStream(path)));
-        SkBitmap bitmap;
-        bitmap.allocPixels(codec->getInfo());
-        codec->getPixels(codec->getInfo(), bitmap.getPixels(), bitmap.rowBytes());
+        auto [codecImage, _] = codec->getImage();
 
         // The GM will be displayed in a 2x2 grid.
         // The top two squares show an sRGB image, then bitmap, drawn to a legacy canvas.
@@ -48,10 +56,10 @@ protected:
         SkBitmap legacyBMCanvas;
         legacyBMCanvas.allocPixels(linearInfo);
         SkCanvas legacyCanvas(legacyBMCanvas);
-        legacyCanvas.drawImage(image, 0.0f, 0.0f, nullptr);
+        legacyCanvas.drawImage(image, 0.0f, 0.0f);
         legacyCanvas.translate(SkScalar(kSize), 0.0f);
-        legacyCanvas.drawBitmap(bitmap, 0.0f, 0.0f, nullptr);
-        canvas->drawBitmap(legacyBMCanvas, 0.0f, 0.0f, nullptr);
+        legacyCanvas.drawImage(codecImage, 0.0f, 0.0f);
+        canvas->drawImage(legacyBMCanvas.asImage(), 0.0f, 0.0f);
         canvas->translate(0.0f, SkScalar(kSize));
 
         // The bottom two squares show an sRGB image, then bitmap, drawn to a srgb canvas.
@@ -59,21 +67,21 @@ protected:
         SkBitmap srgbBMCanvas;
         srgbBMCanvas.allocPixels(srgbInfo);
         SkCanvas srgbCanvas(srgbBMCanvas);
-        srgbCanvas.drawImage(image, 0.0f, 0.0f, nullptr);
+        srgbCanvas.drawImage(image, 0.0f, 0.0f);
         srgbCanvas.translate(SkScalar(kSize), 0.0f);
-        srgbCanvas.drawBitmap(bitmap, 0.0f, 0.0f, nullptr);
-        canvas->drawBitmap(srgbBMCanvas, 0.0f, 0.0f, nullptr);
+        srgbCanvas.drawImage(codecImage, 0.0f, 0.0f);
+        canvas->drawImage(srgbBMCanvas.asImage(), 0.0f, 0.0f);
         return DrawResult::kOk;
     }
 
 private:
-    static constexpr int kSize = 512;
+    inline static constexpr int kSize = 512;
 
-    typedef GM INHERITED;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////
 
 DEF_GM( return new BitmapImageGM; )
 
-}
+}  // namespace skiagm

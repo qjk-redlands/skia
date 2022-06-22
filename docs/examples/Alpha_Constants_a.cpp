@@ -1,6 +1,6 @@
 // Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
-#include "fiddle/examples.h"
+#include "tools/fiddle/examples.h"
 // HASH=bc9c7ea424d10bbcd1e5a88770d4794e
 REG_FIDDLE(Alpha_Constants_a, 256, 128, false, 1) {
 void draw(SkCanvas* canvas) {
@@ -31,8 +31,6 @@ void draw(SkCanvas* canvas) {
             }
         }
     }
-    SkBitmap bitmap;
-    bitmap.installPixels(pixmap);
-    canvas->drawBitmap(bitmap, 0, 0);
+    canvas->drawImage(SkImage::MakeRasterCopy(pixmap), 0, 0);
 }
 }  // END FIDDLE
