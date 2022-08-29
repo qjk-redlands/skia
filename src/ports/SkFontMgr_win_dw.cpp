@@ -1270,10 +1270,11 @@ SK_API sk_sp<SkFontMgr> SkFontMgr_New_DirectWrite(IDWriteFactory* factory,
     const WCHAR* defaultFamilyName = L"";
     int defaultFamilyNameLen = 1;
 
-    #ifndef SK_WINUWP
+    #ifndef RTC_WINDOWS_FAMILY
     NONCLIENTMETRICSW metrics;
     metrics.cbSize = sizeof(metrics);
 
+    #ifndef SK_WINUWP
     if (nullptr == fallback) {
         if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0)) {
             defaultFamilyName = metrics.lfMessageFont.lfFaceName;
@@ -1281,6 +1282,7 @@ SK_API sk_sp<SkFontMgr> SkFontMgr_New_DirectWrite(IDWriteFactory* factory,
         }
     }
     #endif //SK_WINUWP
+    #endif // RTC_WINDOWS_FAMILY
 
     WCHAR localeNameStorage[LOCALE_NAME_MAX_LENGTH];
     const WCHAR* localeName = L"";
