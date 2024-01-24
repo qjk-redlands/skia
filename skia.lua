@@ -21,7 +21,7 @@ includedirs {
   _3RDPARTY_DIR .. "/libjpeg-turbo",
   _3RDPARTY_DIR .. "/libpng",
   _3RDPARTY_DIR .. "/wuffs/release/c",
-  _3RDPARTY_DIR .. "/zlib",
+  _3RDPARTY_DIR .. "/zlib-ng",
 }
 
 files {
